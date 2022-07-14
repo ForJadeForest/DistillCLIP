@@ -35,9 +35,7 @@ class DistillModel(pl.LightningModule):
         teacher_outs = self.teacher(input)
         return student_outs, teacher_outs
 
-    def training_step(self, inputs, batch_idx):
-        student_outs, teacher_outs = self.forward(inputs)
-
+    def cal_loss(self, student_outs, teacher_outs):
         stu_last_rep, stu_attention_maps, stu_representations, stu_embedding = student_outs
         tea_last_rep, tea_attention_maps, tea_representations, tea_embedding = teacher_outs
 
@@ -67,6 +65,12 @@ class DistillModel(pl.LightningModule):
 
         loss = emb_loss + attn_loss + hidden_loss + logits_loss
 
+        return loss, emb_loss, attn_loss, hidden_loss, logits_loss
+
+    def training_step(self, inputs, batch_idx):
+        student_outs, teacher_outs = self.forward(inputs)
+        loss, emb_loss, attn_loss, hidden_loss, logits_loss = self.cal_loss(student_outs, teacher_outs)
+
         # Logging to TensorBoard by default
         self.log("train/loss", loss, on_epoch=True)
         self.log("train/emb_loss", emb_loss, on_step=True)
@@ -77,16 +81,17 @@ class DistillModel(pl.LightningModule):
         # log step 和 epoch
         return loss
 
-    def validation_step(self, batch, batch_idx):
-        x, y = batch
-        x = self.t(x)
-        x = self.encoder(x)
-        x = f.softmax(self.linear(x), dim=1)
-        self.valid_metric.update(torch.argmax(x, dim=1), y)
-        loss = f.cross_entropy(x, y)
-        self.log("valid/loss", loss)
-        self.log("hp_metric", self.valid_metric)
-        self.log('valid/acc', self.valid_metric)
+    def validation_step(self, inputs, batch_idx):
+        student_outs, teacher_outs = self.forward(inputs)
+        loss, emb_loss, attn_loss, hidden_loss, logits_loss = self.cal_loss(student_outs, teacher_outs)
+
+        # Logging to TensorBoard by default
+        self.log("val/loss", loss, on_epoch=True)
+        self.log("val/emb_loss", emb_loss, on_step=True)
+        self.log("val/attn_loss", attn_loss, on_step=True)
+        self.log("val/hidden_loss", hidden_loss, on_step=True)
+        self.log("val/logits_loss", logits_loss, on_step=True)
+
         return loss
 
     def configure_optimizers(self):
