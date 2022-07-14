@@ -5,13 +5,15 @@
 - CLIP训练是对比学习，缺少标签。因此在最后一层的pred_loss决定修改为最后输出representation的KL散度。
 - Vit的模型架构中的embedding层或许有所差异。是否蒸馏Embeeding？
 - [原版训练过程小细节](https://github.com/huawei-noah/Pretrained-Language-Model/blob/master/TinyBERT/general_distill.py#L425)：此处目前没有采用，把attention小于-100的值修改成0
-
 - 蒸馏的attention是没有经过softmax的
+- TinyBert 在计算中间层attention和hidden state的loss时使用了一个矩阵进行线性的映射，会影响效果吗？
 
 
+### On Going
+- 编写通用蒸馏模型
+  - [x] 获取attention分数
+  - [ ] 编写teacher模型
+  - [ ] 指标的书写
 
-### Trouble
-
-- [x] 获取attention分数
-- [ ] 
+  
 
