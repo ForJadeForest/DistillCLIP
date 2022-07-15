@@ -5,10 +5,12 @@ from torch.nn import functional as f
 from pytorch_lightning.utilities import cli as pl_cli
 from torchmetrics import Accuracy
 import torch
-
+from _utils import load
 
 # 导入需要的组件
-# from _common import xxx
+from _common import build_model
+
+
 # from _utils import xxx
 # from _metrics import xxx
 def layer_map(stu_layer_num, step):
@@ -17,14 +19,17 @@ def layer_map(stu_layer_num, step):
 
 @pl_cli.MODEL_REGISTRY
 class DistillModel(pl.LightningModule):
-    def __init__(self, student_encoder, teacher_encoder, t):
+    def __init__(self, student_encoder, teacher_name, t):
         super().__init__()
         self.example_input_array = torch.Tensor(32, 1, 28, 28)
         self.__dict__.update(locals())
         self.save_hyperparameters()
         # 定义模型
         self.student = student_encoder
-        self.teacher = teacher_encoder
+        self.teacher_name = teacher_name
+        state_dict = load(teacher_name, download_root='./')
+        self.teacher = build_model(state_dict)
+
         # 定义指标
 
         self.loss_mse = nn.MSELoss()
@@ -78,7 +83,6 @@ class DistillModel(pl.LightningModule):
         self.log("train/hidden_loss", hidden_loss, on_step=True)
         self.log("train/logits_loss", logits_loss, on_step=True)
 
-        # log step 和 epoch
         return loss
 
     def validation_step(self, inputs, batch_idx):
