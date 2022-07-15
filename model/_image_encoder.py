@@ -1,5 +1,9 @@
 from torch import nn
-from _common import VisionTransformer
+
+try:
+    from ._common import VisionTransformer
+except ModuleNotFoundError:
+    from _common import VisionTransformer
 
 
 class ImageEncoder(nn.Module):

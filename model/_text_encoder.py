@@ -1,7 +1,9 @@
 import torch
 from torch import nn
-from _common import Transformer, LayerNorm
-
+try:
+    from ._common import Transformer, LayerNorm
+except ModuleNotFoundError:
+    from _common import Transformer, LayerNorm
 
 class TextEncoder(nn.Module):
     def __init__(self, transformer_width, transformer_layers, transformer_heads, context_length, vocab_size, embed_dim,
