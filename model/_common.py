@@ -170,6 +170,20 @@ class QuickGELU(nn.Module):
         return x * torch.sigmoid(1.702 * x)
 
 
+class AttentionOutput(nn.Module):
+    def __init__(self, hidden_size, drop_prob):
+        super(AttentionOutput, self).__init__()
+        self.out_linear = nn.Linear(hidden_size, hidden_size)
+        self.LayerNorm = LayerNorm(hidden_size, eps=1e-12)
+        self.dropout = nn.Dropout(drop_prob)
+
+    def forward(self, hidden_states, input_tensor):
+        hidden_states = self.out_linear(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        return hidden_states
+
+
 class MultiheadAttention(nn.Module):
     def __init__(self, hidden_size, num_attention_heads, drop_prob):
         super().__init__()
@@ -186,7 +200,6 @@ class MultiheadAttention(nn.Module):
         self.query = nn.Linear(hidden_size, self.all_head_size)
         self.key = nn.Linear(hidden_size, self.all_head_size)
         self.value = nn.Linear(hidden_size, self.all_head_size)
-
         self.dropout = nn.Dropout(drop_prob)
 
     def transpose_for_scores(self, x):
@@ -234,6 +247,7 @@ class ResidualAttentionBlock(nn.Module):
         super().__init__()
 
         self.attn = MultiheadAttention(d_model, n_head, drop_prob)
+        self.attn_out = AttentionOutput(d_model, drop_prob)
         self.ln_1 = LayerNorm(d_model)
         self.mlp = nn.Sequential(OrderedDict([
             ("c_fc", nn.Linear(d_model, d_model * 4)),
@@ -249,8 +263,8 @@ class ResidualAttentionBlock(nn.Module):
 
     def forward(self, x: torch.Tensor):
         attn_output, attn_output_scores = self.attention(self.ln_1(x))
-        x = x + attn_output
-        x = x + self.mlp(self.ln_2(x))
+        output = self.attn_out(attn_output, x)
+        x = x + self.mlp(self.ln_2(output))
         return x, attn_output_scores
 
 

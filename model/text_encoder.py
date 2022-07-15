@@ -22,6 +22,7 @@ class TextEncoder(nn.Module):
         if is_student:
             self.embedding_projection = nn.Linear(transformer_width, tea_transformer_width)
             self.hidden_projection = nn.Linear(transformer_width, tea_transformer_width)
+        self.initialize_parameters()
 
     def build_attention_mask(self):
         # lazily create causal attention mask, with full attention between the vision tokens
@@ -34,9 +35,7 @@ class TextEncoder(nn.Module):
     def encode_text(self, text, only_last_state=True):
         embedding = self.token_embedding(text)  # [batch_size, n_ctx, d_model]
         x = embedding + self.positional_embedding
-        # x = x.permute(1, 0, 2)  # NLD -> LND
         x, attention_maps, representations = self.transformer(x)
-        # x = x.permute(1, 0, 2)  # LND -> NLD
         x = self.ln_final(x)
 
         # x.shape = [batch_size, n_ctx, transformer.width]
@@ -49,8 +48,30 @@ class TextEncoder(nn.Module):
             for i in range(len(representations)):
                 representations[i] = self.hidden_projection(representations[i])
             embedding = self.embedding_projection(embedding)
+            for i in range(len(attention_maps)):
+                attention_maps[i] = torch.where(attention_maps[i] == float('-inf'), torch.zeros_like(attention_maps[i]),
+                                                attention_maps[i])
 
         return x, attention_maps, representations, embedding
+
+    def initialize_parameters(self):
+        nn.init.normal_(self.token_embedding.weight, std=0.02)
+        nn.init.normal_(self.positional_embedding, std=0.01)
+
+        proj_std = (self.transformer.width ** -0.5) * ((2 * self.transformer.layers) ** -0.5)
+        attn_std = self.transformer.width ** -0.5
+        fc_std = (2 * self.transformer.width) ** -0.5
+        for block in self.transformer.resblocks:
+            nn.init.normal_(block.attn.query.weight, std=attn_std)
+            nn.init.normal_(block.attn.key.weight, std=attn_std)
+            nn.init.normal_(block.attn.value.weight, std=attn_std)
+
+            nn.init.normal_(block.attn_out.out_linear.weight, std=proj_std)
+            nn.init.normal_(block.mlp.c_fc.weight, std=fc_std)
+            nn.init.normal_(block.mlp.c_proj.weight, std=proj_std)
+
+        if self.text_projection is not None:
+            nn.init.normal_(self.text_projection, std=self.transformer.width ** -0.5)
 
     def forward(self, text, only_last_state=True):
         return self.encode_text(text, only_last_state)
