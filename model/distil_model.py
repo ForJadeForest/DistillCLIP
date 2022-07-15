@@ -5,10 +5,14 @@ from torch.nn import functional as f
 from pytorch_lightning.utilities import cli as pl_cli
 from torchmetrics import Accuracy
 import torch
-from _utils import load
+try:
+    from _utils import load, build_model
+    from _common import VisionTransformer
+except ModuleNotFoundError:
+    from ._utils import load, build_model
+    from ._common import VisionTransformer
 
 # 导入需要的组件
-from _common import build_model
 
 
 # from _utils import xxx
@@ -19,7 +23,7 @@ def layer_map(stu_layer_num, step):
 
 @pl_cli.MODEL_REGISTRY
 class DistillModel(pl.LightningModule):
-    def __init__(self, student_encoder, teacher_name, t):
+    def __init__(self, student_encoder, teacher_name, t, download_root):
         super().__init__()
         self.example_input_array = torch.Tensor(32, 1, 28, 28)
         self.__dict__.update(locals())
@@ -27,11 +31,10 @@ class DistillModel(pl.LightningModule):
         # 定义模型
         self.student = student_encoder
         self.teacher_name = teacher_name
-        state_dict = load(teacher_name, download_root='./')
+        state_dict = load(teacher_name, download_root=download_root)
         self.teacher = build_model(state_dict)
 
         # 定义指标
-
         self.loss_mse = nn.MSELoss()
         self.loss_kl = loss_function = nn.KLDivLoss(reduction='batchmean')
 
