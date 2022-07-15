@@ -194,7 +194,7 @@ class MultiheadAttention(nn.Module):
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def forward(self, hidden_states, attention_mask=None, head_mask=None, ):
+    def forward(self, hidden_states, attention_mask=None, head_mask=None):
         mixed_query_layer = self.query(hidden_states)
         mixed_key_layer = self.key(hidden_states)
         mixed_value_layer = self.value(hidden_states)
@@ -245,7 +245,7 @@ class ResidualAttentionBlock(nn.Module):
 
     def attention(self, x: torch.Tensor):
         self.attn_mask = self.attn_mask.to(dtype=x.dtype, device=x.device) if self.attn_mask is not None else None
-        return self.attn(x, x, x, need_weights=True, attn_mask=self.attn_mask, average_attn_weights=False)
+        return self.attn(x, attention_mask=self.attn_mask)
 
     def forward(self, x: torch.Tensor):
         attn_output, attn_output_scores = self.attention(self.ln_1(x))
