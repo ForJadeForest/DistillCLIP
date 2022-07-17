@@ -23,7 +23,7 @@ class TextDataModule(pl.LightningDataModule):
         # Assign train/val datasets for use in dataloaders
         if stage == 'fit' or stage is None:
             self.trainset = self.instancialize(train=True)
-            self.valset = self.instancialize(train=False)
+            self.valset = self.instancialize(train=True)
 
         # Assign test dataset for use in dataloader(s)
         if stage == 'test' or stage is None:
@@ -48,7 +48,7 @@ class TextDataModule(pl.LightningDataModule):
             # importlib.import_module('.xxx_dataset')动态的导入了模块
             # getattr 是获取属性值，获取模块中 XxxDataset 这一类的属性
             self.data_module = getattr(importlib.import_module(
-                dataset_file, package=__package__), name)
+                "." + dataset_file, package=__package__), name)
         except:
             raise ValueError(
                 f'Invalid Dataset File Name or Invalid Class Name data.{dataset_file}.{name}')
