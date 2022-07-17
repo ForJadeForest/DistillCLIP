@@ -10,7 +10,6 @@ from torchvision import transforms
 from tqdm import tqdm
 from clip import tokenize
 
-
 class TextDataset(Dataset):
     def __init__(self, cache_dir='cache', data_dir=r'data/ref', train=True, overwrite=False,
                  img_mean=(0.485, 0.456, 0.406),
@@ -24,7 +23,7 @@ class TextDataset(Dataset):
         self.tokenizer = tokenize
         if self.train:
             self.tokenize_text = self.load(overwrite)
-        if not self.train:
+        else:
             self.img_mean = img_mean
             self.img_std = img_std
             self.sentences, self.captions, self.path_list = self.load(overwrite)
