@@ -30,7 +30,7 @@ data:
       dataset_name: 'TextDataset'
       cache_dir: '/data/pyz/data/cache2'
 #      train: true
-      overwrite: false
+      overwrite: true
 
 
 trainer:

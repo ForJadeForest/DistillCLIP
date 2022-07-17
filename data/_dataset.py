@@ -94,10 +94,6 @@ class TextDataset(Dataset):
         if overwirite or not cache_path.exists():
             print('重写/不存在缓存文件，开始处理文件')
             if self.train:
-                print('直接加载缓存文件')
-                data = torch.load(cache_path)['data_set']
-                print('加载完成！')
-                return data
                 tokenize_text = self.process()
                 torch.save({'data_set': tokenize_text}, cache_path)
                 return tokenize_text
