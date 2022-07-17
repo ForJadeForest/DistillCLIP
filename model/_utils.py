@@ -1,10 +1,11 @@
 import hashlib
 import urllib
 import warnings
-from typing import Any, Union, List
+from typing import Union, List
+
 import torch
-from torch import nn
 from PIL import Image
+from torch import nn
 from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize
 from tqdm import tqdm
 
@@ -187,3 +188,25 @@ def build_model(state_dict: dict):
     convert_weights(model)
     model.load_state_dict(state_dict)
     return model.eval()
+
+
+def get_transformer_para(state_dict):
+    transformer_para = {
+        'embed_dim': state_dict["text_projection"].shape[1],
+        'context_length': state_dict["positional_embedding"].shape[0],
+        'vocab_size': state_dict["token_embedding.weight"].shape[0],
+        'transformer_width': state_dict["ln_final.weight"].shape[0],
+        'transformer_heads': state_dict["ln_final.weight"].shape[0] // 64,
+        'transformer_layers': len(set(k.split(".")[2] for k in state_dict if k.startswith(f"transformer.resblocks"))),
+    }
+    return transformer_para
+
+
+def teacher_load(teacher_model: nn.Module):
+    state_dict = load('ViT-B/32', download_root='./')
+    my_state_dict = teacher_model.state_dict()
+    for k in my_state_dict:
+        if k in state_dict:
+            my_state_dict[k] = state_dict[k]
+    teacher_model.load_state_dict(my_state_dict)
+    return teacher_model
