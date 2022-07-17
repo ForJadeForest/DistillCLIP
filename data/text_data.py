@@ -23,7 +23,7 @@ class TextDataModule(pl.LightningDataModule):
         # Assign train/val datasets for use in dataloaders
         if stage == 'fit' or stage is None:
             self.trainset = self.instancialize(train=True)
-            self.valset = self.instancialize(train=True)
+            self.valset = self.instancialize(train=False)
 
         # Assign test dataset for use in dataloader(s)
         if stage == 'test' or stage is None:

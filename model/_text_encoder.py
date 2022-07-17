@@ -65,7 +65,6 @@ class TextEncoder(nn.Module):
         attn_std = self.transformer.width ** -0.5
         fc_std = (2 * self.transformer.width) ** -0.5
         for block in self.transformer.resblocks:
-            # nn.init.normal_(block.attn.in_proj.weight, std=attn_std)
             nn.init.normal_(block.attn.in_proj_weight, std=attn_std)
             nn.init.normal_(block.attn.in_proj_bias, std=attn_std)
             nn.init.normal_(block.attn.out_proj.weight, std=proj_std)

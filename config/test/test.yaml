@@ -15,7 +15,7 @@ model:
     teacher_name: ViT-B/32
     context_length: 77
     download_root: '/data/pyz/.cache'
-    loss_weight: [1, 1, 1, 1]
+    loss_weight: [1.0e3, 1, 1, 1]
     t: 2
 
 
@@ -26,15 +26,15 @@ data:
     dataset: '_dataset'
     kwargs:
       data_dir: '/data/pyz/data'
-      batch_size: 512
+      batch_size: 128
       dataset_name: 'TextDataset'
-      cache_dir: '/data/pyz/data/cache'
-      train: true
+      cache_dir: '/data/pyz/data/cache2'
+#      train: true
       overwrite: false
 
 
 trainer:
-  auto_select_gpus: True # If enabled and gpus or devices is an integer, pick available gpus automatically.
+#  auto_select_gpus: True # If enabled and gpus or devices is an integer, pick available gpus automatically.
   accumulate_grad_batches: 1
   accelerator: 'gpu'
   max_epochs: 30
@@ -58,7 +58,7 @@ trainer:
     - class_path: LearningRateMonitor
     - class_path: EarlyStopping
       init_args:
-        monitor: 'valid/loss'
+        monitor: 'val/loss'
     - class_path: ModelSummary
       init_args:
         max_depth: 2
@@ -71,7 +71,7 @@ trainer:
 #  limit_train_batches: 0.5
 #  limit_val_batches: 0.2 # or int 3 means 3 batches
 #  limit_test_batches:
-#  fast_dev_run: True
+  fast_dev_run: True
 #  limit_predict_batches
 #  overfit_batches: 0.0 # Overfit a fracion of training/validation data (float) or a set number of batches (int). Default: 0.0.t
 

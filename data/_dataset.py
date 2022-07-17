@@ -26,7 +26,19 @@ class TextDataset(Dataset):
         else:
             self.img_mean = img_mean
             self.img_std = img_std
-            self.sentences, self.captions, self.path_list = self.load(overwrite)
+            self.sentences, self.captions, self.path_list, self.image_rep = self.load(overwrite)
+            self.image_rep = self.image_rep.squeeze(dim=1)
+    def encode_images(self, path_list):
+        from clip import load
+        image_encode = []
+        for path in tqdm(path_list):
+            device = 'cuda'
+            model, preprocess = load("ViT-B/32", device=device)
+            image = preprocess(Image.open(path)).unsqueeze(0).to(device)
+            with torch.no_grad():
+                image_features = model.encode_image(image.to(device)).float()
+                image_encode.append(image_features)
+        return torch.cat(image_encode, dim=0)
 
     def process(self):
         raw_text = []
@@ -74,27 +86,32 @@ class TextDataset(Dataset):
                     sentences.append(caption)
                     captions.append(self.tokenizer(caption).squeeze())
                     path_list.append(val_image_file_list_path / file_name)
-
-            return sentences, captions, path_list
+            image_rep = self.encode_images(path_list)
+            return sentences, captions, path_list, image_rep
 
     def load(self, overwirite):
         cache_path = self.cache_dir / 'cache-train.pth' if self.train else self.cache_dir / 'cache-val.pth'
         if overwirite or not cache_path.exists():
             print('重写/不存在缓存文件，开始处理文件')
             if self.train:
+                print('直接加载缓存文件')
+                data = torch.load(cache_path)['data_set']
+                print('加载完成！')
+                return data
                 tokenize_text = self.process()
                 torch.save({'data_set': tokenize_text}, cache_path)
                 return tokenize_text
             else:
-                sentences, captions, path_list = self.process()
+                sentences, captions, path_list, image_rep = self.process()
                 torch.save({
                     'data_set': [
                         sentences,
                         captions,
-                        path_list
+                        path_list,
+                        image_rep
                     ]
                 }, cache_path)
-                return sentences, captions, path_list
+                return sentences, captions, path_list, image_rep
         else:
             print('直接加载缓存文件')
             data = torch.load(cache_path)['data_set']
@@ -110,17 +127,17 @@ class TextDataset(Dataset):
     def __getitem__(self, idx):
         if self.train:
             return self.tokenize_text[idx]
-        path = self.path_list[idx]
-        img = Image.open(path).convert('RGB')
-        trans = transforms.Compose([
-            transforms.Resize(224),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            transforms.Normalize(self.img_mean, self.img_std)
-        ])
-        img_tensor = trans(img)
-        return img_tensor, self.captions[idx], self.sentences[idx]
-
+        # path = self.path_list[idx]
+        # img = Image.open(path).convert('RGB')
+        # trans = transforms.Compose([
+        #     transforms.Resize(224),
+        #     transforms.CenterCrop(224),
+        #     transforms.ToTensor(),
+        #     transforms.Normalize(self.img_mean, self.img_std)
+        # ])
+        # img_tensor = trans(img)
+        # return img_tensor, self.captions[idx], self.sentences[idx]
+        return self.image_rep[idx], self.captions[idx], self.sentences[idx]
 
 if __name__ == '__main__':
     from clip import tokenize
