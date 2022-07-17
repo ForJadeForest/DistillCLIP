@@ -1,16 +1,18 @@
 import pytorch_lightning as pl
-from torch import nn, optim, utils
-from torchvision.models import resnet18
-from torch.nn import functional as f
-from pytorch_lightning.utilities import cli as pl_cli
-from torchmetrics import Accuracy
 import torch
+from pytorch_lightning.utilities import cli as pl_cli
+from torch import nn, optim
+from torch.nn import functional as f
+
 try:
-    from _utils import load, build_model
+    from _utils import load, build_model, get_transformer_para
     from _common import VisionTransformer
+    from _text_encoder import TextEncoder
 except ModuleNotFoundError:
-    from ._utils import load, build_model
+    from ._utils import load, build_model, get_transformer_para
     from ._common import VisionTransformer
+    from ._text_encoder import TextEncoder
+
 
 # 导入需要的组件
 
@@ -23,24 +25,33 @@ def layer_map(stu_layer_num, step):
 
 @pl_cli.MODEL_REGISTRY
 class DistillModel(pl.LightningModule):
-    def __init__(self, student_encoder, teacher_name, t, download_root):
+    def __init__(self, student_encoder: nn.Module, teacher_name, context_length, t, download_root, loss_weight,
+                 model_type='text'):
         super().__init__()
-        self.example_input_array = torch.Tensor(32, 1, 28, 28)
+        self.example_input_array = torch.tensor((torch.randint(low=0, high=300, size=(64, 77))))
         self.__dict__.update(locals())
-        self.save_hyperparameters()
+        self.save_hyperparameters(ignore=['student_encoder'])
         # 定义模型
         self.student = student_encoder
         self.teacher_name = teacher_name
         state_dict = load(teacher_name, download_root=download_root)
-        self.teacher = build_model(state_dict)
-
+        if model_type == 'text':
+            para = get_transformer_para(state_dict)
+        elif model_type == 'image':
+            para = {}
+            pass
+        else:
+            para = {}
+        self.teacher = TextEncoder(is_student=False, **para)
+        for p in self.teacher.parameters():
+            p.requires_grad = False
         # 定义指标
         self.loss_mse = nn.MSELoss()
         self.loss_kl = loss_function = nn.KLDivLoss(reduction='batchmean')
 
     def forward(self, input):
-        student_outs = self.student(input)
-        teacher_outs = self.teacher(input)
+        student_outs = self.student(input, only_last_state=False)
+        teacher_outs = self.teacher(input, only_last_state=False)
         return student_outs, teacher_outs
 
     def cal_loss(self, student_outs, teacher_outs):
@@ -55,7 +66,8 @@ class DistillModel(pl.LightningModule):
         tea_layer_num = len(tea_attention_maps)
         # attention loss
         attn_loss = 0
-        step = tea_layer_num / stu_layer_num
+        assert tea_layer_num % stu_layer_num == 0
+        step = tea_layer_num // stu_layer_num
         for layer_num, stu_attn_out in enumerate(stu_attention_maps):
             attn_loss += self.loss_mse(stu_attention_maps[layer_num], tea_attention_maps[layer_map(layer_num, step)])
         attn_loss /= stu_layer_num
@@ -71,7 +83,9 @@ class DistillModel(pl.LightningModule):
             f.softmax(tea_last_rep / self.hparams.t, dim=1)
         ) * self.hparams.t ** 2
 
-        loss = emb_loss + attn_loss + hidden_loss + logits_loss
+        loss = 0
+        for w, l in zip(self.hparams.loss_weight, [emb_loss, attn_loss, hidden_loss, logits_loss]):
+            loss += w * l
 
         return loss, emb_loss, attn_loss, hidden_loss, logits_loss
 
