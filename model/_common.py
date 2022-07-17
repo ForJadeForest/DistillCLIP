@@ -4,8 +4,9 @@ from typing import Tuple, Union
 
 import numpy as np
 import torch
-import torch.nn.functional as F
+import torch.nn.functional as f
 from torch import nn
+from torch.nn.parameter import Parameter
 
 
 class Bottleneck(nn.Module):
@@ -196,10 +197,10 @@ class MultiheadAttention(nn.Module):
         self.num_attention_heads = num_attention_heads
         self.attention_head_size = int(hidden_size / num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.in_proj_weight = Parameter(torch.empty((3 * hidden_size, hidden_size)))
+        self.out_proj = nn.Linear(hidden_size, hidden_size)
+        self.in_proj_bias = Parameter(torch.empty(3 * hidden_size))
 
-        self.query = nn.Linear(hidden_size, self.all_head_size)
-        self.key = nn.Linear(hidden_size, self.all_head_size)
-        self.value = nn.Linear(hidden_size, self.all_head_size)
         self.dropout = nn.Dropout(drop_prob)
 
     def transpose_for_scores(self, x):
@@ -207,16 +208,11 @@ class MultiheadAttention(nn.Module):
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def forward(self, hidden_states, attention_mask=None, head_mask=None):
-        mixed_query_layer = self.query(hidden_states)
-        mixed_key_layer = self.key(hidden_states)
-        mixed_value_layer = self.value(hidden_states)
-
-        query_layer = self.transpose_for_scores(mixed_query_layer)
-        key_layer = self.transpose_for_scores(mixed_key_layer)
-        value_layer = self.transpose_for_scores(mixed_value_layer)
-
-        # Take the dot product between "query" and "key" to get the raw attention scores.
+    def forward(self, hidden_states, attention_mask=None):
+        q, k, v = f.linear(hidden_states, self.in_proj_weight, self.in_proj_bias).chunk(3, dim=-1)
+        query_layer = self.transpose_for_scores(q)
+        key_layer = self.transpose_for_scores(k)
+        value_layer = self.transpose_for_scores(v)
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
@@ -229,16 +225,12 @@ class MultiheadAttention(nn.Module):
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
         context_layer = torch.matmul(attention_probs, value_layer)
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
+        context_layer = self.out_proj(context_layer)
         return context_layer, attention_scores
 
 
@@ -247,7 +239,6 @@ class ResidualAttentionBlock(nn.Module):
         super().__init__()
 
         self.attn = MultiheadAttention(d_model, n_head, drop_prob)
-        self.attn_out = AttentionOutput(d_model, drop_prob)
         self.ln_1 = LayerNorm(d_model)
         self.mlp = nn.Sequential(OrderedDict([
             ("c_fc", nn.Linear(d_model, d_model * 4)),
@@ -263,8 +254,8 @@ class ResidualAttentionBlock(nn.Module):
 
     def forward(self, x: torch.Tensor):
         attn_output, attn_output_scores = self.attention(self.ln_1(x))
-        output = self.attn_out(attn_output, x)
-        x = x + self.mlp(self.ln_2(output))
+        x = x + attn_output
+        x = x + self.mlp(self.ln_2(x))
         return x, attn_output_scores
 
 
@@ -480,6 +471,3 @@ def convert_weights(model: nn.Module):
                     attr.data = attr.data.half()
 
     model.apply(_convert_weights_to_fp16)
-
-
-
