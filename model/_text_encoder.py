@@ -1,9 +1,11 @@
 import torch
 from torch import nn
+
 try:
     from ._common import Transformer, LayerNorm
 except ModuleNotFoundError:
     from _common import Transformer, LayerNorm
+
 
 class TextEncoder(nn.Module):
     def __init__(self, transformer_width, transformer_layers, transformer_heads, context_length, vocab_size, embed_dim,
@@ -39,7 +41,6 @@ class TextEncoder(nn.Module):
         x = embedding + self.positional_embedding
         x, attention_maps, representations = self.transformer(x)
         x = self.ln_final(x)
-
         # x.shape = [batch_size, n_ctx, transformer.width]
         # take features from the eot embedding (eot_token is the highest number in each sequence)
         x = x[torch.arange(x.shape[0]), text.argmax(dim=-1)] @ self.text_projection
@@ -50,9 +51,9 @@ class TextEncoder(nn.Module):
             for i in range(len(representations)):
                 representations[i] = self.hidden_projection(representations[i])
             embedding = self.embedding_projection(embedding)
-            for i in range(len(attention_maps)):
-                attention_maps[i] = torch.where(attention_maps[i] == float('-inf'), torch.zeros_like(attention_maps[i]),
-                                                attention_maps[i])
+        for i in range(len(attention_maps)):
+            attention_maps[i] = torch.where(attention_maps[i] == float('-inf'), torch.zeros_like(attention_maps[i]),
+                                            attention_maps[i])
 
         return x, attention_maps, representations, embedding
 
@@ -64,11 +65,10 @@ class TextEncoder(nn.Module):
         attn_std = self.transformer.width ** -0.5
         fc_std = (2 * self.transformer.width) ** -0.5
         for block in self.transformer.resblocks:
-            nn.init.normal_(block.attn.query.weight, std=attn_std)
-            nn.init.normal_(block.attn.key.weight, std=attn_std)
-            nn.init.normal_(block.attn.value.weight, std=attn_std)
-
-            nn.init.normal_(block.attn_out.out_linear.weight, std=proj_std)
+            # nn.init.normal_(block.attn.in_proj.weight, std=attn_std)
+            nn.init.normal_(block.attn.in_proj_weight, std=attn_std)
+            nn.init.normal_(block.attn.in_proj_bias, std=attn_std)
+            nn.init.normal_(block.attn.out_proj.weight, std=proj_std)
             nn.init.normal_(block.mlp.c_fc.weight, std=fc_std)
             nn.init.normal_(block.mlp.c_proj.weight, std=proj_std)
 
