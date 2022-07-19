@@ -10,14 +10,16 @@ from pytorch_lightning.utilities import cli as pl_cli
 class TextDataModule(pl.LightningDataModule):
     def __init__(self, kwargs, num_workers=8,
                  dataset='',
+                 batch_size=128,
                  ):
         super().__init__()
         self.num_workers = num_workers
         self.dataset = dataset
         self.kwargs = kwargs
-        self.batch_size = kwargs['batch_size']
+        self.batch_size = batch_size
         self.dataset_name = kwargs['dataset_name']
         self.load_data_module()
+        self.save_hyperparameters()
 
     def setup(self, stage=None):
         # Assign train/val datasets for use in dataloaders

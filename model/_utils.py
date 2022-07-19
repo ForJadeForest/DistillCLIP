@@ -11,8 +11,10 @@ from tqdm import tqdm
 
 try:
     from ._common import CLIP, Transformer, VisionTransformer
+    from ._text_encoder import TextEncoder
 except ModuleNotFoundError:
     from _common import CLIP, Transformer, VisionTransformer
+    from _text_encoder import TextEncoder
 import os
 
 try:
@@ -202,8 +204,10 @@ def get_transformer_para(state_dict):
     return transformer_para
 
 
-def teacher_load(teacher_model: nn.Module):
-    state_dict = load('ViT-B/32', download_root='./')
+def teacher_load(teacher_name: str, download_root):
+    state_dict = load(teacher_name, download_root=download_root)
+    para = get_transformer_para(state_dict)
+    teacher_model = TextEncoder(is_student=False, **para)
     my_state_dict = teacher_model.state_dict()
     for k in my_state_dict:
         if k in state_dict:

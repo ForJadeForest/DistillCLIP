@@ -5,11 +5,11 @@ from torch import nn, optim
 from torch.nn import functional as f
 from torchmetrics.functional import accuracy
 try:
-    from _utils import load, build_model, get_transformer_para
+    from _utils import load, build_model, get_transformer_para, teacher_load
     from _common import VisionTransformer
     from _text_encoder import TextEncoder
 except ModuleNotFoundError:
-    from ._utils import load, build_model, get_transformer_para
+    from ._utils import load, build_model, get_transformer_para, teacher_load
     from ._common import VisionTransformer
     from ._text_encoder import TextEncoder
 
@@ -34,15 +34,7 @@ class DistillModel(pl.LightningModule):
         # 定义模型
         self.student = student_encoder
         self.teacher_name = teacher_name
-        state_dict = load(teacher_name, download_root=download_root)
-        if model_type == 'text':
-            para = get_transformer_para(state_dict)
-        elif model_type == 'image':
-            para = {}
-            pass
-        else:
-            para = {}
-        self.teacher = TextEncoder(is_student=False, **para)
+        self.teacher = teacher_load(teacher_name, download_root=download_root)
         for p in self.teacher.parameters():
             p.requires_grad = False
         # 定义指标
@@ -90,6 +82,7 @@ class DistillModel(pl.LightningModule):
         return loss, emb_loss, attn_loss, hidden_loss, logits_loss
 
     def training_step(self, inputs, batch_idx):
+        # self.teacher.eval()
         student_outs, teacher_outs = self.forward(inputs)
         loss, emb_loss, attn_loss, hidden_loss, logits_loss = self.cal_loss(student_outs, teacher_outs)
 
@@ -108,10 +101,12 @@ class DistillModel(pl.LightningModule):
         loss, emb_loss, attn_loss, hidden_loss, logits_loss = self.cal_loss(student_outs, teacher_outs)
         label = torch.arange(student_outs[0].shape[0], device=self.device)
         stu_logits, tea_logits = norm_and_logits(imgs, student_outs[0], teacher_outs[0])[:2]
-        k_list = [i for i in [1, 2, 3, 4, 5, 10, 20, 30, 50] if i < self.hparams.batch_size]
+        k_list = [i for i in [1, 2, 3, 4, 5, 10, 20, 30, 50] if i < len(imgs)]
         for k in k_list:
             acc = accuracy(stu_logits, label, top_k=k)
+            acc_tea = accuracy(tea_logits, label, top_k=k)
             self.log('val/acc_top{}'.format(k), acc, on_epoch=True, on_step=False, prog_bar=False, sync_dist=True)
+            self.log('val/tea_acc_top{}'.format(k), acc_tea, on_epoch=True, on_step=False, prog_bar=False, sync_dist=True)
         # Logging to TensorBoard by default
         self.log("val/loss", loss, on_epoch=True)
         self.log("val/emb_loss", emb_loss, on_step=True)

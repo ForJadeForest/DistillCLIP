@@ -11,11 +11,13 @@
 - Vit的模型架构中的embedding层或许有所差异。是否蒸馏Embeeding？
 - 蒸馏的attention map是均值？还是每一个头都进行求和？
   - 均值的话，attention 头数可以减少，但似乎头数是一个比较重要的参数。
-
 - 或许两个一起蒸馏才能拥有好的效果？
 - 使用`nn.Parameter()`的时候一定要初始化，不然会直接`nan`
 
 
+### bug fix
+- [x] teacher model 没有使用 `.eval()`
+- [ ] 测试model load
 ### On Going
 - 编写通用蒸馏模型
   - [x] 获取attention分数
@@ -38,5 +40,5 @@
 ### 模型书写过程
 
 - [ ] forwad 函数  
-- [ ] 输出测试
+  - [ ] 输出测试
 - [ ] init 权重
