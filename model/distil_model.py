@@ -3,7 +3,9 @@ import torch
 from pytorch_lightning.utilities import cli as pl_cli
 from torch import nn, optim
 from torch.nn import functional as f
+from torchmetrics import Accuracy
 from torchmetrics.functional import accuracy
+
 try:
     from _utils import load, build_model, get_transformer_para, teacher_load
     from _common import VisionTransformer
@@ -40,6 +42,10 @@ class DistillModel(pl.LightningModule):
         # 定义指标
         self.loss_mse = nn.MSELoss()
         self.loss_kl = loss_function = nn.KLDivLoss(reduction='batchmean')
+        k_list = [i for i in [1, 2, 3, 4, 5, 10, 20, 30, 50]]
+        self.acc_metrics = []
+        for k in k_list:
+            self.acc_metrics.append(Accuracy(top_k=k))
 
     def forward(self, input):
         student_outs = self.student(input, only_last_state=False)
@@ -87,12 +93,7 @@ class DistillModel(pl.LightningModule):
         loss, emb_loss, attn_loss, hidden_loss, logits_loss = self.cal_loss(student_outs, teacher_outs)
 
         # Logging to TensorBoard by default
-        self.log("train/loss", loss, on_epoch=True)
-        self.log("train/emb_loss", emb_loss, on_step=True)
-        self.log("train/attn_loss", attn_loss, on_step=True)
-        self.log("train/hidden_loss", hidden_loss, on_step=True)
-        self.log("train/logits_loss", logits_loss, on_step=True)
-
+        self.log_info('train', loss, emb_loss, attn_loss, hidden_loss, logits_loss)
         return loss
 
     def validation_step(self, inputs, batch_idx):
@@ -101,26 +102,29 @@ class DistillModel(pl.LightningModule):
         loss, emb_loss, attn_loss, hidden_loss, logits_loss = self.cal_loss(student_outs, teacher_outs)
         label = torch.arange(student_outs[0].shape[0], device=self.device)
         stu_logits, tea_logits = norm_and_logits(imgs, student_outs[0], teacher_outs[0])[:2]
-        k_list = [i for i in [1, 2, 3, 4, 5, 10, 20, 30, 50] if i < len(imgs)]
-        for k in k_list:
-            acc = accuracy(stu_logits, label, top_k=k)
-            acc_tea = accuracy(tea_logits, label, top_k=k)
-            self.log('val/acc_top{}'.format(k), acc, on_epoch=True, on_step=False, prog_bar=False, sync_dist=True)
-            self.log('val/tea_acc_top{}'.format(k), acc_tea, on_epoch=True, on_step=False, prog_bar=False, sync_dist=True)
+        for i, metric in enumerate(self.acc_metrics):
+            metric(stu_logits, label)
+            self.log('hp_metric/stu_acc_top{}'.format(i + 1), metric)
+            if self.current_epoch == 0:
+                acc_tea = accuracy(tea_logits, label, top_k=i + 1)
+                self.log('hp_metric/tea_acc_top{}'.format(i + 1), acc_tea, prog_bar=False, sync_dist=True)
         # Logging to TensorBoard by default
-        self.log("val/loss", loss, on_epoch=True)
-        self.log("val/emb_loss", emb_loss, on_step=True)
-        self.log("val/attn_loss", attn_loss, on_step=True)
-        self.log("val/hidden_loss", hidden_loss, on_step=True)
-        self.log("val/logits_loss", logits_loss, on_step=True)
-
+        self.log_info('val', loss, emb_loss, attn_loss, hidden_loss, logits_loss)
         return loss
+
+    def log_info(self, stage, loss, emb_loss, attn_loss, hidden_loss, logits_loss):
+        self.log("{}/loss".format(stage), loss, on_epoch=True, on_step=True)
+        self.log("{}/emb_loss".format(stage), emb_loss, on_epoch=True, on_step=True)
+        self.log("{}/attn_loss".format(stage), attn_loss, on_epoch=True, on_step=True)
+        self.log("{}/hidden_loss".format(stage), hidden_loss, on_epoch=True, on_step=True)
+        self.log("{}/logits_loss".format(stage), logits_loss, on_epoch=True, on_step=True)
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr=self.lr)
         scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=1)
 
         return optimizer, scheduler
+
 
 def norm_and_logits(image_encode, stu_text_encode, tea_text_encode):
     image_encode = image_encode / image_encode.norm(dim=1, keepdim=True)
