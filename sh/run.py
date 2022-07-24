@@ -19,7 +19,7 @@ def run_version(ex_name, ver_num, config_path):
     version_config_path = ex_path / ver_num / 'version.yaml'
     config_path = [str(share_config_path), str(version_config_path)]
     print('='*20 + 'Now is Running {} experiment and version {}'.format(ex_name, ver_num) + '='*20)
-    os.system('python ../main.py fit -c ' + ' -c '.join(config_path))
+    os.system('python ./main.py fit -c ' + ' -c '.join(config_path))
     print('='*20 + '{} experiment and version {} is done!'.format(ex_name, ver_num) + '='*20)
 
 
@@ -39,7 +39,7 @@ if __name__ == '__main__':
     elif args.all_ver and args.ex_name is not None:
         # 完成一个实验的所有版本
         ex_path = args.config / args.ex_name
-        for v in ex_path.iterdir():
+        for v in sorted(ex_path.iterdir()):
             if not v.is_dir():
                 continue
             run_version(args.ex_name, v.name, args.config)

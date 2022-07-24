@@ -84,7 +84,7 @@ class DistillModel(pl.LightningModule):
         return loss, emb_loss, attn_loss, hidden_loss, logits_loss
 
     def training_step(self, inputs, batch_idx):
-        # self.teacher.eval()
+        self.teacher.eval()
         student_outs, teacher_outs = self.forward(inputs)
         loss, emb_loss, attn_loss, hidden_loss, logits_loss = self.cal_loss(student_outs, teacher_outs)
 
@@ -109,10 +109,11 @@ class DistillModel(pl.LightningModule):
             clip_model, _ = load(self.teacher_name, device=self.device, download_root=self.hparams.download_root)
             tea_text_logits = clip_model.encode_text(contrary)
             stu_logits, tea_logits = norm_and_logits(tea_text_logits, student_outs[0], teacher_outs[0])[:2]
-
+        self.log('hp_metric', self.acc_metrics[0], metric_attribute='acc_metrics', batch_size=len(inputs))
         for i, metric in enumerate(self.acc_metrics):
             metric.to(self.device)
             metric(stu_logits, label)
+
             self.log('hp_metric/stu_acc_top{}'.format(self.k_list[i]), metric, metric_attribute='acc_metrics',
                      batch_size=len(inputs))
             if self.current_epoch == 0:
