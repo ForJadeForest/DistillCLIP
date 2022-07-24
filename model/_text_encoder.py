@@ -3,8 +3,10 @@ from torch import nn
 
 try:
     from ._common import Transformer, LayerNorm
+    from ._utils import output_filter
 except ModuleNotFoundError:
     from _common import Transformer, LayerNorm
+    from _utils import output_filter
 
 
 class TextEncoder(nn.Module):
@@ -23,6 +25,8 @@ class TextEncoder(nn.Module):
             heads=transformer_heads,
             attn_mask=self.build_attention_mask()
         )
+        self.embedding_projection = None
+        self.hidden_projection = None
         if is_student:
             self.embedding_projection = nn.Linear(transformer_width, tea_transformer_width)
             self.hidden_projection = nn.Linear(transformer_width, tea_transformer_width)
@@ -47,15 +51,9 @@ class TextEncoder(nn.Module):
 
         if only_last_state:
             return x
-        if self.is_student:
-            for i in range(len(representations)):
-                representations[i] = self.hidden_projection(representations[i])
-            embedding = self.embedding_projection(embedding)
-        for i in range(len(attention_maps)):
-            attention_maps[i] = torch.where(attention_maps[i] == float('-inf'), torch.zeros_like(attention_maps[i]),
-                                            attention_maps[i])
 
-        return x, attention_maps, representations, embedding
+        return output_filter(self.is_student, representations, self.embedding_projection, embedding, attention_maps, x,
+                             self.hidden_projection)
 
     def initialize_parameters(self):
         nn.init.normal_(self.token_embedding.weight, std=0.02)
