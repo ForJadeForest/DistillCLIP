@@ -71,7 +71,7 @@ class AttentionPool2d(nn.Module):
         x = x.reshape(x.shape[0], x.shape[1], x.shape[2] * x.shape[3]).permute(2, 0, 1)  # NCHW -> (HW)NC
         x = torch.cat([x.mean(dim=0, keepdim=True), x], dim=0)  # (HW+1)NC
         x = x + self.positional_embedding[:, None, :].to(x.dtype)  # (HW+1)NC
-        x, _ = F.multi_head_attention_forward(
+        x, _ = f.multi_head_attention_forward(
             query=x, key=x, value=x,
             embed_dim_to_check=x.shape[-1],
             num_heads=self.num_heads,
@@ -303,18 +303,16 @@ class VisionTransformer(nn.Module):
             [self.class_embedding.to(x.dtype) + torch.zeros(x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device),
              x], dim=1)  # shape = [*, grid ** 2 + 1, width]
         x = x + self.positional_embedding.to(x.dtype)
+        embeddings = x
         x = self.ln_pre(x)
-
-        x = x.permute(1, 0, 2)  # NLD -> LND
         x, attention_maps, representations = self.transformer(x)
-        x = x.permute(1, 0, 2)  # LND -> NLD
 
         x = self.ln_post(x[:, 0, :])
 
         if self.proj is not None:
             x = x @ self.proj
 
-        return x, attention_maps, representations
+        return x, attention_maps, representations, embeddings
 
 
 class CLIP(nn.Module):
