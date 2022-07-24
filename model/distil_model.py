@@ -7,13 +7,9 @@ from torchmetrics import Accuracy
 from torchmetrics.functional import accuracy
 
 try:
-    from _utils import load, build_model, get_transformer_para, teacher_load
-    from _common import VisionTransformer
-    from _text_encoder import TextEncoder
+    from _utils import teacher_load
 except ModuleNotFoundError:
-    from ._utils import load, build_model, get_transformer_para, teacher_load
-    from ._common import VisionTransformer
-    from ._text_encoder import TextEncoder
+    from ._utils import teacher_load
 
 
 # 导入需要的组件
@@ -27,8 +23,8 @@ def layer_map(stu_layer_num, step):
 
 @pl_cli.MODEL_REGISTRY
 class DistillModel(pl.LightningModule):
-    def __init__(self, student_encoder: nn.Module, teacher_name, context_length, t, download_root, loss_weight,
-                 model_type='text'):
+    def __init__(self, student_encoder: nn.Module, teacher_name, t, download_root, loss_weight,
+                 model_type='text', lr=1e-3):
         super().__init__()
         # self.example_input_array = torch.tensor((torch.randint(low=0, high=300, size=(64, 77))))
         self.__dict__.update(locals())
@@ -36,15 +32,15 @@ class DistillModel(pl.LightningModule):
         # 定义模型
         self.student = student_encoder
         self.teacher_name = teacher_name
-        self.teacher = teacher_load(teacher_name, download_root=download_root)
+        self.teacher = teacher_load(teacher_name, download_root, model_type)
         for p in self.teacher.parameters():
             p.requires_grad = False
         # 定义指标
         self.loss_mse = nn.MSELoss()
         self.loss_kl = loss_function = nn.KLDivLoss(reduction='batchmean')
-        k_list = [i for i in [1, 2, 3, 4, 5, 10, 20, 30, 50]]
+        self.k_list = [i for i in [1, 2, 3, 4, 5, 10, 20, 30, 50]]
         self.acc_metrics = []
-        for k in k_list:
+        for k in self.k_list:
             self.acc_metrics.append(Accuracy(top_k=k))
 
     def forward(self, input):
@@ -96,18 +92,33 @@ class DistillModel(pl.LightningModule):
         self.log_info('train', loss, emb_loss, attn_loss, hidden_loss, logits_loss)
         return loss
 
-    def validation_step(self, inputs, batch_idx):
-        imgs, texts, captions = inputs
-        student_outs, teacher_outs = self.forward(texts)
-        loss, emb_loss, attn_loss, hidden_loss, logits_loss = self.cal_loss(student_outs, teacher_outs)
-        label = torch.arange(student_outs[0].shape[0], device=self.device)
-        stu_logits, tea_logits = norm_and_logits(imgs, student_outs[0], teacher_outs[0])[:2]
+    def validation_step(self, batch, batch_idx):
+        imgs, texts, sentence = batch
+        if self.hparams.model_type == 'text':
+            inputs, contrary = texts, imgs
+            student_outs, teacher_outs = self.forward(inputs)
+            loss, emb_loss, attn_loss, hidden_loss, logits_loss = self.cal_loss(student_outs, teacher_outs)
+            label = torch.arange(student_outs[0].shape[0], device=self.device)
+            stu_logits, tea_logits = norm_and_logits(imgs, student_outs[0], teacher_outs[0])[:2]
+        else:
+            inputs, contrary = imgs, texts
+            student_outs, teacher_outs = self.forward(inputs)
+            loss, emb_loss, attn_loss, hidden_loss, logits_loss = self.cal_loss(student_outs, teacher_outs)
+            label = torch.arange(student_outs[0].shape[0], device=self.device)
+            from clip import load
+            clip_model, _ = load(self.teacher_name, device=self.device, download_root=self.hparams.download_root)
+            tea_text_logits = clip_model.encode_text(contrary)
+            stu_logits, tea_logits = norm_and_logits(tea_text_logits, student_outs[0], teacher_outs[0])[:2]
+
         for i, metric in enumerate(self.acc_metrics):
+            metric.to(self.device)
             metric(stu_logits, label)
-            self.log('hp_metric/stu_acc_top{}'.format(i + 1), metric)
+            self.log('hp_metric/stu_acc_top{}'.format(self.k_list[i]), metric, metric_attribute='acc_metrics',
+                     batch_size=len(inputs))
             if self.current_epoch == 0:
-                acc_tea = accuracy(tea_logits, label, top_k=i + 1)
-                self.log('hp_metric/tea_acc_top{}'.format(i + 1), acc_tea, prog_bar=False, sync_dist=True)
+                acc_tea = accuracy(tea_logits, label, top_k=self.k_list[i])
+                self.log('hp_metric/tea_acc_top{}'.format(self.k_list[i]), acc_tea, prog_bar=False, sync_dist=True,
+                         batch_size=len(inputs))
         # Logging to TensorBoard by default
         self.log_info('val', loss, emb_loss, attn_loss, hidden_loss, logits_loss)
         return loss
@@ -120,7 +131,7 @@ class DistillModel(pl.LightningModule):
         self.log("{}/logits_loss".format(stage), logits_loss, on_epoch=True, on_step=True)
 
     def configure_optimizers(self):
-        optimizer = optim.Adam(self.parameters(), lr=self.lr)
+        optimizer = optim.Adam(self.parameters(), lr=self.hparams.lr)
         scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=1)
 
         return optimizer, scheduler
