@@ -11,10 +11,8 @@ from tqdm import tqdm
 
 try:
     from ._common import CLIP, Transformer, VisionTransformer
-    from ._text_encoder import TextEncoder
 except ModuleNotFoundError:
     from _common import CLIP, Transformer, VisionTransformer
-    from _text_encoder import TextEncoder
 import os
 
 try:
@@ -204,13 +202,64 @@ def get_transformer_para(state_dict):
     return transformer_para
 
 
-def teacher_load(teacher_name: str, download_root):
-    state_dict = load(teacher_name, download_root=download_root)
-    para = get_transformer_para(state_dict)
-    teacher_model = TextEncoder(is_student=False, **para)
-    my_state_dict = teacher_model.state_dict()
-    for k in my_state_dict:
-        if k in state_dict:
-            my_state_dict[k] = state_dict[k]
-    teacher_model.load_state_dict(my_state_dict)
-    return teacher_model
+def get_visual_transformer_para(state_dict):
+    vit = "visual.proj" in state_dict
+    embed_dim = state_dict["text_projection"].shape[1]
+    if vit:
+        print('get the parameters of visual transformer')
+        vision_width = state_dict["visual.conv1.weight"].shape[0]
+        vision_layers = len(
+            [k for k in state_dict.keys() if k.startswith("visual.") and k.endswith(".attn.in_proj_weight")])
+        vision_patch_size = state_dict["visual.conv1.weight"].shape[-1]
+        grid_size = round((state_dict["visual.positional_embedding"].shape[0] - 1) ** 0.5)
+        image_resolution = vision_patch_size * grid_size
+        vision_heads = vision_width // 64
+
+        image_encoder_para = {
+            'layers': vision_layers,
+            'width': vision_width,
+            'patch_size': vision_patch_size,
+            'input_resolution': image_resolution,
+            'heads': vision_heads,
+            'output_dim': embed_dim
+        }
+    else:
+        raise ValueError('the state_dict is error, you should give the state_dict of clip model')
+    return image_encoder_para
+
+
+def teacher_load(teacher_name: str, download_root, model_type):
+    from ._text_encoder import TextEncoder
+    from ._image_encoder import ImageEncoder
+    if model_type == 'text':
+        state_dict = load(teacher_name, download_root=download_root)
+        para = get_transformer_para(state_dict)
+        teacher_model = TextEncoder(is_student=False, **para)
+        my_state_dict = teacher_model.state_dict()
+        for k in my_state_dict:
+            if k in state_dict:
+                my_state_dict[k] = state_dict[k]
+        teacher_model.load_state_dict(my_state_dict)
+        return teacher_model
+    elif model_type == 'image':
+        state_dict = load(teacher_name, download_root=download_root)
+        para = get_visual_transformer_para(state_dict)
+        teacher_model = ImageEncoder(is_student=False, vit_paras=para)
+        my_state_dict = teacher_model.state_dict()
+        for k in my_state_dict:
+            if k in state_dict:
+                my_state_dict[k] = state_dict[k]
+        teacher_model.load_state_dict(my_state_dict)
+        return teacher_model
+
+
+def output_filter(is_student, representations, embedding_projection, embedding, attention_maps, last_state,
+                  hidden_projection):
+    if is_student:
+        for i in range(len(representations)):
+            representations[i] = hidden_projection(representations[i])
+        embedding = embedding_projection(embedding)
+    for i in range(len(attention_maps)):
+        attention_maps[i] = torch.where(attention_maps[i] == float('-inf'), torch.zeros_like(attention_maps[i]),
+                                        attention_maps[i])
+    return last_state, attention_maps, representations, embedding
