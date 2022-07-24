@@ -9,15 +9,17 @@
 - Tiny模型embedding维度比原始的低，那么在最后两个Tiny模型合并的时候，由于缺少标签的监督。效果会不会比较差？具体差多少？这个在阶段二会不会有所改善？
   - 在最后一层加入个Linear，投射到相同空间
 - Vit的模型架构中的embedding层或许有所差异。是否蒸馏Embeeding？
+- 蒸馏Embedding是否加position embedding
+  - 目前采用不加的方法
 - 蒸馏的attention map是均值？还是每一个头都进行求和？
   - 均值的话，attention 头数可以减少，但似乎头数是一个比较重要的参数。
 - 或许两个一起蒸馏才能拥有好的效果？
 - 使用`nn.Parameter()`的时候一定要初始化，不然会直接`nan`
 
-
 ### bug fix
 - [x] teacher model 没有使用 `.eval()`
 - [ ] 测试model load
+- [x] 因为copy的小错误，导致ImageEncoder构建的时候，`attention head num` 出现错误调试bug一个晚上。警钟长鸣
 ### On Going
 - 编写通用蒸馏模型
   - [x] 获取attention分数
