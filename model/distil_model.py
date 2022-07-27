@@ -7,24 +7,15 @@ from torchmetrics import Accuracy
 from torchmetrics.functional import accuracy
 
 try:
-    from _utils import teacher_load
+    from _utils import teacher_load, LayerMap
 except ModuleNotFoundError:
-    from ._utils import teacher_load
-
-
-# 导入需要的组件
-
-
-# from _utils import xxx
-# from _metrics import xxx
-def layer_map(stu_layer_num, step):
-    return stu_layer_num * step
+    from ._utils import teacher_load, LayerMap
 
 
 @pl_cli.MODEL_REGISTRY
 class DistillModel(pl.LightningModule):
     def __init__(self, student_encoder: nn.Module, teacher_name, t, download_root, loss_weight,
-                 model_type='text', lr=1e-3):
+                 model_type='text', lr=1e-3, map_type='mid'):
         super().__init__()
         # self.example_input_array = torch.tensor((torch.randint(low=0, high=300, size=(64, 77))))
         self.__dict__.update(locals())
@@ -32,9 +23,10 @@ class DistillModel(pl.LightningModule):
         # 定义模型
         self.student = student_encoder
         self.teacher_name = teacher_name
-        self.teacher = teacher_load(teacher_name, download_root, model_type)
+        self.teacher, tea_layer_num = teacher_load(teacher_name, download_root, model_type)
         for p in self.teacher.parameters():
             p.requires_grad = False
+        self.layer_map = LayerMap(student_encoder.layers, tea_layer_num, map_type)
         # 定义指标
         self.loss_mse = nn.MSELoss()
         self.loss_kl = loss_function = nn.KLDivLoss(reduction='batchmean')
@@ -63,12 +55,12 @@ class DistillModel(pl.LightningModule):
         assert tea_layer_num % stu_layer_num == 0
         step = tea_layer_num // stu_layer_num
         for layer_num, stu_attn_out in enumerate(stu_attention_maps):
-            attn_loss += self.loss_mse(stu_attention_maps[layer_num], tea_attention_maps[layer_map(layer_num, step)])
+            attn_loss += self.loss_mse(stu_attention_maps[layer_num], tea_attention_maps[self.layer_map(layer_num)])
         attn_loss /= stu_layer_num
         hidden_loss = 0
         for layer_num, stu_attn_out in enumerate(stu_representations):
             hidden_loss += self.loss_mse(stu_representations[layer_num],
-                                         tea_representations[layer_map(layer_num, step)])
+                                         tea_representations[self.layer_map(layer_num)])
         hidden_loss /= stu_layer_num
 
         # calculate the pred loss
@@ -99,7 +91,7 @@ class DistillModel(pl.LightningModule):
             student_outs, teacher_outs = self.forward(inputs)
             loss, emb_loss, attn_loss, hidden_loss, logits_loss = self.cal_loss(student_outs, teacher_outs)
             label = torch.arange(student_outs[0].shape[0], device=self.device)
-            stu_logits, tea_logits = norm_and_logits(imgs, student_outs[0], teacher_outs[0])[:2]
+            stu_logits, tea_logits = norm_and_logits(imgs, student_outs[0], teacher_outs[0], type='text')[:2]
         else:
             inputs, contrary = imgs, texts
             student_outs, teacher_outs = self.forward(inputs)
@@ -108,7 +100,8 @@ class DistillModel(pl.LightningModule):
             from clip import load
             clip_model, _ = load(self.teacher_name, device=self.device, download_root=self.hparams.download_root)
             tea_text_logits = clip_model.encode_text(contrary)
-            stu_logits, tea_logits = norm_and_logits(tea_text_logits, student_outs[0], teacher_outs[0])[:2]
+            stu_logits, tea_logits = norm_and_logits(tea_text_logits, student_outs[0], teacher_outs[0], type='image')[
+                                     :2]
         self.log('hp_metric', self.acc_metrics[0], metric_attribute='acc_metrics', batch_size=len(inputs))
         for i, metric in enumerate(self.acc_metrics):
             metric.to(self.device)
@@ -138,10 +131,20 @@ class DistillModel(pl.LightningModule):
         return optimizer, scheduler
 
 
-def norm_and_logits(image_encode, stu_text_encode, tea_text_encode):
-    image_encode = image_encode / image_encode.norm(dim=1, keepdim=True)
-    stu_text_encode = stu_text_encode / stu_text_encode.norm(dim=1, keepdim=True)
-    tea_text_encode = tea_text_encode / tea_text_encode.norm(dim=1, keepdim=True)
-    stu_text_logits = stu_text_encode @ image_encode.t()
-    tea_text_logits = tea_text_encode @ image_encode.t()
-    return stu_text_logits, tea_text_logits, stu_text_logits.T, tea_text_logits.T
+def norm_and_logits(encode, stu_encode, tea_encode, type):
+    if type == 'text':
+        image_encode = encode
+        image_encode = image_encode / image_encode.norm(dim=1, keepdim=True)
+        stu_encode = stu_encode / stu_encode.norm(dim=1, keepdim=True)
+        tea_encode = tea_encode / tea_encode.norm(dim=1, keepdim=True)
+        stu_logits = stu_encode @ image_encode.t()
+        tea_logits = tea_encode @ image_encode.t()
+        return stu_logits, tea_logits, stu_logits.T, tea_logits.T
+    else:
+        text_encode = encode
+        text_encode = text_encode / text_encode.norm(dim=1, keepdim=True)
+        stu_encode = stu_encode / stu_encode.norm(dim=1, keepdim=True)
+        tea_encode = tea_encode / tea_encode.norm(dim=1, keepdim=True)
+        stu_logits = text_encode @ stu_encode.t()
+        tea_logits = text_encode @ tea_encode.t()
+        return stu_logits, tea_logits, stu_logits.T, tea_logits.T

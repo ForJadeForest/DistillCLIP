@@ -25,6 +25,7 @@ class TextEncoder(nn.Module):
             heads=transformer_heads,
             attn_mask=self.build_attention_mask()
         )
+        self.layers = transformer_layers
         self.embedding_projection = None
         self.hidden_projection = None
         if is_student:

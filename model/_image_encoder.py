@@ -15,6 +15,7 @@ class ImageEncoder(nn.Module):
         self.is_student = is_student
         self.embedding_projection = None
         self.hidden_projection = None
+        self.layers = vit_paras['layers']
         if is_student:
             self.embedding_projection = nn.Linear(vit_paras['width'], tea_transformer_width)
             self.hidden_projection = nn.Linear(vit_paras['width'], tea_transformer_width)

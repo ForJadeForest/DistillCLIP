@@ -235,12 +235,13 @@ def teacher_load(teacher_name: str, download_root, model_type):
         state_dict = load(teacher_name, download_root=download_root)
         para = get_transformer_para(state_dict)
         teacher_model = TextEncoder(is_student=False, **para)
+
         my_state_dict = teacher_model.state_dict()
         for k in my_state_dict:
             if k in state_dict:
                 my_state_dict[k] = state_dict[k]
         teacher_model.load_state_dict(my_state_dict)
-        return teacher_model
+        return teacher_model, para['transformer_layers']
     elif model_type == 'image':
         state_dict = load(teacher_name, download_root=download_root)
         para = get_visual_transformer_para(state_dict)
@@ -250,7 +251,7 @@ def teacher_load(teacher_name: str, download_root, model_type):
             if k in state_dict:
                 my_state_dict[k] = state_dict[k]
         teacher_model.load_state_dict(my_state_dict)
-        return teacher_model
+        return teacher_model, para['layers']
 
 
 def output_filter(is_student, representations, embedding_projection, embedding, attention_maps, last_state,
@@ -263,3 +264,20 @@ def output_filter(is_student, representations, embedding_projection, embedding, 
         attention_maps[i] = torch.where(attention_maps[i] == float('-inf'), torch.zeros_like(attention_maps[i]),
                                         attention_maps[i])
     return last_state, attention_maps, representations, embedding
+
+
+class LayerMap:
+    def __init__(self, stu_total_layer_num, tea_total_layer_num, map_type):
+        self.stu_total_layer_num = stu_total_layer_num
+        self.tea_total_layer_num = tea_total_layer_num
+        self.map_type = map_type
+        if self.map_type == 'mid':
+            assert self.tea_total_layer_num % self.stu_total_layer_num == 0
+            self.step = self.tea_total_layer_num // self.stu_total_layer_num
+    def __call__(self, stu_layer_num):
+        if self.map_type == 'mid':
+            return stu_layer_num * self.step
+        elif self.map_type == 'begin':
+            return stu_layer_num
+        elif self.map_type == 'end':
+            return self.tea_total_layer_num - self.stu_total_layer_num + stu_layer_num
