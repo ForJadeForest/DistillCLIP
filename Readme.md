@@ -20,6 +20,8 @@
 - [x] teacher model 没有使用 `.eval()`
 - [ ] 测试model load
 - [x] 因为copy的小错误，导致ImageEncoder构建的时候，`attention head num` 出现错误调试bug一个晚上。警钟长鸣
+- [ ] 测试teacher的mode
+- [ ] config 的更新能否细化
 ### On Going
 - 编写通用蒸馏模型
   - [x] 获取attention分数
