@@ -6,8 +6,8 @@ from PIL import Image
 from pathlib2 import Path
 from torch.utils.data import Dataset
 from torchvision import transforms
-from tqdm import tqdm
-
+from tqdm import tqdm, trange
+from datasets import load_dataset
 """
 1. 只取出文字
     需要进行tokenize
@@ -17,7 +17,7 @@ from tqdm import tqdm
 """
 
 
-class COCODataset(Dataset):
+class ConceptualCaptions(Dataset):
     def __init__(self, data_dir, cache_dir=None, is_train=True, data_type='all', overwrite=False):
         """
 
@@ -87,7 +87,8 @@ class COCODataset(Dataset):
         from clip import tokenize
         if not self.data['captions']:
             return
-        for caption in self.data['captions']:
+        print('begin tokenize.....')
+        for caption in tqdm(self.data['captions']):
             self.data['tokenized'].append(tokenize(caption).squeeze())
         torch.save(self.data['tokenized'], str(cache_file))
 
@@ -112,55 +113,32 @@ class COCODataset(Dataset):
         return captions
 
     def init_cache(self):
-        cache_file = self.cache_dir / 'COCO2017_image_captions_{}2017.pth'.format(self.mode)
+        cache_file = self.cache_dir / 'CC_image_captions_{}.pth'.format(self.mode)
         if cache_file.exists() and not self.overwrite:
             print('no need to init cache')
             return
+        path_list = []
+        captions = []
         print('initialize the cache file')
-        path_list = []
-        captions = []
-        val_image_file_list_path = self.data_dir / '{}2017'.format(self.mode)
-        coco2017_file = self.data_dir / 'annotations' / 'captions_{}2017.json'.format(self.mode)
-        with coco2017_file.open('r', encoding='utf8') as f:
-            data = json.load(f)
-        images = data['images']
-        id2caption = {}
-        id2filename = {}
-        for image in images:
-            id2filename[image['id']] = image['file_name']
-        for annotation in data['annotations']:
-            id2caption[annotation['image_id']] = annotation['caption']
-        print('begin tokenize......')
-        for id, file_name in tqdm(id2filename.items()):
-            caption = id2caption.get(id, None)
-            if caption:
+        if self.mode == 'train':
+            cc_file = self.data_dir / 'Train_GCC-training.tsv'
+        elif self.mode == 'val':
+            cc_file = self.data_dir / 'Validation_GCC-1.1.0-Validation.tsv'
+        else:
+            raise ValueError('the mode should be train or val, but got{}'.format(self.mode))
+        print('begin load data......')
+        drop_num = 0
+        with cc_file.open('r', encoding='utf8') as f:
+            for content in tqdm(f.readlines()):
+                caption, image_path = content.split('\t')
+                image_path = image_path.strip()
+                if len(caption) >= 75:
+                    drop_num += 1
+                    continue
                 captions.append(caption)
-                path_list.append(str(val_image_file_list_path / file_name))
-
+                path_list.append(image_path)
+        print('The sentence is too long will drop, the num of them is {}'.format(drop_num))
         torch.save([captions, path_list], str(cache_file))
-        return captions, path_list
-
-    def load_image_caption(self):
-        path_list = []
-        captions = []
-        val_image_file_list_path = self.data_dir / '{}2017'.format(self.mode)
-        coco2017_file = self.data_dir / 'annotations' / 'captions_{}2017.json'.format(self.mode)
-        with coco2017_file.open('r', encoding='utf8') as f:
-            data = json.load(f)
-        images = data['images']
-        id2caption = {}
-        id2filename = {}
-        for image in images:
-            id2filename[image['id']] = image['file_name']
-        for annotation in data['annotations']:
-            id2caption[annotation['image_id']] = annotation['caption']
-        print('begin tokenize......')
-        for id, file_name in tqdm(id2filename.items()):
-            caption = id2caption.get(id, None)
-            if caption:
-                captions.append(caption)
-                path_list.append((val_image_file_list_path / file_name).name)
-
         return captions, path_list
 
     def image_process(self, data):
@@ -184,6 +162,6 @@ class COCODataset(Dataset):
 
 
 if __name__ == '__main__':
-    dataset = COCODataset('D:\data', cache_dir='./', is_train=False, data_type='all')
-    for i in range(10):
-        print(dataset[i])
+    dataset = ConceptualCaptions(r'/data/pyz/data/CC', cache_dir='./', is_train=True, data_type='all', overwrite=True)
+    for i in trange(len(dataset)):
+        a = dataset[i]
