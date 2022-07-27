@@ -1,6 +1,8 @@
 # 此处写对应的dataset类
 
 import json
+import os
+import os.path as op
 from pathlib import Path
 
 import torch
@@ -9,14 +11,6 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 from tqdm import tqdm
 from clip import tokenize
-import json
-import os
-import os.path as op
-
-from PIL import Image
-from clip import tokenize
-from torch.utils.data import Dataset
-from torchvision import transforms
 
 
 class TextDataset(Dataset):
@@ -149,11 +143,6 @@ class ImageDataset(Dataset):
         self.check_files()
 
     def check_files(self):
-        # This part is the core code block for load your own dataset.
-        # You can choose to scan a folder, or load a file list pickle
-        # file, or any other formats. The only thing you need to gua-
-        # rantee is the `self.path_list` must be given a valid value.
-
         if self.train:
             train_image_file_list_path = op.join(self.data_dir, 'COCO', 'train2017')
             self.path_list = [op.join(train_image_file_list_path, i) for i in os.listdir(train_image_file_list_path)]
@@ -178,22 +167,26 @@ class ImageDataset(Dataset):
                     self.sentence.append(caption)
                     self.captions.append(self.tokenizer(caption).squeeze())
                     self.path_list.append(op.join(val_image_file_list_path, file_name))
+            self.captions = self.encode_text(self.captions)
+
+    def encode_text(self, captions):
+        from clip import load
+        text_encode = []
+        for caption in tqdm(captions):
+            device = 'cuda:2'
+            model, preprocess = load("ViT-B/32", device=device)
+            with torch.no_grad():
+                text_features = model.encode_text(caption.to(device)).float().to('cpu')
+                text_encode.append(text_features)
+        return torch.cat(text_encode, dim=0)
 
     def __len__(self):
         return len(self.path_list)
 
     def __getitem__(self, idx):
         path = self.path_list[idx]
-
         img = Image.open(path).convert('RGB')
-        # try:
-        #     img = jpeg4py.JPEG(path).decode()
-        #     img = transforms.ToPILImage()(img)
-        # except:
-        #     img = Image.open(path).convert('RGB')
-        # img = Image.fromarray(img)
         trans = transforms.Compose([
-
             transforms.Resize(224),
             transforms.CenterCrop(224),
             transforms.RandomHorizontalFlip(self.aug_prob),
