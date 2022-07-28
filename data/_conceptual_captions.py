@@ -8,6 +8,13 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 from tqdm import tqdm, trange
 from datasets import load_dataset
+from io import StringIO
+from PIL import Image
+import requests
+import urllib
+
+
+from urllib.request import urlopen
 """
 1. 只取出文字
     需要进行tokenize
@@ -43,7 +50,7 @@ class ConceptualCaptions(Dataset):
         if is_train:
             self.mode = 'train'
         else:
-            self.mode = 'val'
+            self.mode = 'validation'
         self.init_cache()
         self.load_data()
         self.text_process()
@@ -113,35 +120,11 @@ class ConceptualCaptions(Dataset):
         return captions
 
     def init_cache(self):
-        cache_file = self.cache_dir / 'CC_image_captions_{}.pth'.format(self.mode)
-        if cache_file.exists() and not self.overwrite:
-            print('no need to init cache')
-            return
-        path_list = []
-        captions = []
-        print('initialize the cache file')
-        if self.mode == 'train':
-            cc_file = self.data_dir / 'Train_GCC-training.tsv'
-        elif self.mode == 'val':
-            cc_file = self.data_dir / 'Validation_GCC-1.1.0-Validation.tsv'
-        else:
-            raise ValueError('the mode should be train or val, but got{}'.format(self.mode))
-        print('begin load data......')
-        drop_num = 0
-        with cc_file.open('r', encoding='utf8') as f:
-            for content in tqdm(f.readlines()):
-                caption, image_path = content.split('\t')
-                image_path = image_path.strip()
-                if len(caption) >= 75:
-                    drop_num += 1
-                    continue
-                captions.append(caption)
-                path_list.append(image_path)
-        print('The sentence is too long will drop, the num of them is {}'.format(drop_num))
-        torch.save([captions, path_list], str(cache_file))
-        return captions, path_list
+        data = load_dataset('datasets/conceptual captions/conceptual_captions.py', split=self.mode)
+        self.data['image_path_list'] = data['image_url']
+        self.data['captions'] = data['caption']
 
-    def image_process(self, data):
+    def image_process(self, url):
         trans = transforms.Compose([
             transforms.Resize(224),
             transforms.CenterCrop(224),
@@ -156,12 +139,16 @@ class ConceptualCaptions(Dataset):
             transforms.ToTensor(),
             transforms.Normalize(self.para['img_mean'], self.para['img_std'])
         ])
-        img = Image.open(data).convert('RGB')
+        response = requests.get(url)
+        # img = Image.open(urlopen(url)).convert('RGB')
+        img = Image.open(StringIO(urllib.requests.urlopen(url).read()))
+        Image.open(urllib2.urlopen(url))
+        Image.open(requests.get(url, stream=True).raw)
         img_tensor = trans(img)
         return img_tensor
 
 
 if __name__ == '__main__':
-    dataset = ConceptualCaptions(r'/data/pyz/data/CC', cache_dir='./', is_train=True, data_type='all', overwrite=True)
+    dataset = ConceptualCaptions(r'/data/pyz/data/CC', cache_dir='./', is_train=True, data_type='all', overwrite=False)
     for i in trange(len(dataset)):
         a = dataset[i]
