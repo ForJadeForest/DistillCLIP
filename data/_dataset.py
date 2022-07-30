@@ -133,7 +133,7 @@ class TextDataset(Dataset):
 
 class ImageDataset(Dataset):
     def __init__(self, data_dir=r'data/ref', train=True, no_augment=True, aug_prob=0.5, img_mean=(0.485, 0.456, 0.406),
-                 img_std=(0.229, 0.224, 0.225)):
+                 img_std=(0.229, 0.224, 0.225), train_dir=None):
         super(ImageDataset, self).__init__()
         self.__dict__.update(locals())
         self.aug = train and not no_augment
@@ -144,14 +144,19 @@ class ImageDataset(Dataset):
 
     def check_files(self):
         if self.train:
-            train_image_file_list_path = op.join(self.data_dir, 'COCO', 'train2017')
+            # self.imgs = []
+            # train_image_file_list_path = op.join(self.data_dir, 'COCO', 'train2017')
+            train_image_file_list_path = self.train_dir
             self.path_list = [op.join(train_image_file_list_path, i) for i in os.listdir(train_image_file_list_path)]
+            # for i in tqdm(self.path_list):
+            #     self.imgs.append(Image.open(i).convert('RGB'))
         else:
             val_image_file_list_path = op.join(self.data_dir, 'COCO', 'val2017')
             self.path_list = []
             self.captions = []
             self.sentence = []
             self.annotations_dir = op.join(self.data_dir, 'COCO', 'annotations')
+            # self.imgs = []
             with open(op.join(self.annotations_dir, 'captions_val2017.json'), 'r') as f:
                 data = json.load(f)
             images = data['images']
@@ -167,16 +172,17 @@ class ImageDataset(Dataset):
                     self.sentence.append(caption)
                     self.captions.append(self.tokenizer(caption).squeeze())
                     self.path_list.append(op.join(val_image_file_list_path, file_name))
-            self.captions = self.encode_text(self.captions)
+                    # self.imgs.append(Image.open(op.join(val_image_file_list_path, file_name)).convert('RGB'))
+            # self.captions = self.encode_text(self.captions)
 
     def encode_text(self, captions):
         from clip import load
         text_encode = []
         for caption in tqdm(captions):
-            device = 'cuda:2'
+            device = 'cuda:1'
             model, preprocess = load("ViT-B/32", device=device)
             with torch.no_grad():
-                text_features = model.encode_text(caption.to(device)).float().to('cpu')
+                text_features = model.encode_text(caption.unsqueeze(dim=0).to(device)).float().to('cpu')
                 text_encode.append(text_features)
         return torch.cat(text_encode, dim=0)
 
@@ -186,9 +192,10 @@ class ImageDataset(Dataset):
     def __getitem__(self, idx):
         path = self.path_list[idx]
         img = Image.open(path).convert('RGB')
+        # img = self.imgs[idx]
         trans = transforms.Compose([
-            transforms.Resize(224),
-            transforms.CenterCrop(224),
+            # transforms.Resize(224),
+            # transforms.CenterCrop(224),
             transforms.RandomHorizontalFlip(self.aug_prob),
             transforms.RandomVerticalFlip(self.aug_prob),
             transforms.RandomRotation(10),

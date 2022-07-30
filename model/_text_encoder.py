@@ -14,7 +14,12 @@ class TextEncoder(nn.Module):
                  tea_transformer_width=None, is_student=True):
         super().__init__()
         self.context_length = context_length
-        self.is_student = is_student
+        self.transformer_width = transformer_width
+        self.transformer_layers = transformer_layers
+        self.transformer_heads = transformer_heads
+        self.vocab_size = vocab_size
+        self.embed_dim = embed_dim
+
         self.token_embedding = nn.Embedding(vocab_size, transformer_width)
         self.positional_embedding = nn.Parameter(torch.empty(self.context_length, transformer_width))
         self.ln_final = LayerNorm(transformer_width)
@@ -28,6 +33,7 @@ class TextEncoder(nn.Module):
         self.layers = transformer_layers
         self.embedding_projection = None
         self.hidden_projection = None
+        self.is_student = is_student
         if is_student:
             self.embedding_projection = nn.Linear(transformer_width, tea_transformer_width)
             self.hidden_projection = nn.Linear(transformer_width, tea_transformer_width)
@@ -75,6 +81,17 @@ class TextEncoder(nn.Module):
 
     def forward(self, text, only_last_state=True):
         return self.encode_text(text, only_last_state)
+
+    @property
+    def hyper_para(self):
+        return {
+            'context_length': self.context_leng,
+            'transformer_width': self.transformer_width,
+            'transformer_layers': self.transformer_layers,
+            'transformer_heads': self.transformer_heads,
+            'vocab_size': self.vocab_size,
+            'embed_dim': self.embed_dim,
+        }
 
 
 if __name__ == '__main__':

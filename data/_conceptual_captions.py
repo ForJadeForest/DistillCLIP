@@ -12,7 +12,7 @@ from io import StringIO
 from PIL import Image
 import requests
 import urllib
-
+from urllib.parse import urljoin, urlparse
 
 from urllib.request import urlopen
 """
@@ -22,6 +22,8 @@ from urllib.request import urlopen
     需要进行transformer
 3. 二者都要
 """
+def parse_url(url):
+    return urljoin(url, urlparse(url).path)
 
 
 class ConceptualCaptions(Dataset):
@@ -63,7 +65,7 @@ class ConceptualCaptions(Dataset):
         elif self.data_type == 'text':
             self.data['captions'] = torch.load(str(cache_file))[0]
         elif self.data_type == 'all':
-            self.data['captions'], self.data['image_path_list'] = torch.load(str(cache_file))
+            self.data['image_path_list'], self.data['captions']= torch.load(str(cache_file))
 
     def __len__(self):
         if self.data_type == 'image' or self.data_type == 'all':
@@ -120,9 +122,33 @@ class ConceptualCaptions(Dataset):
         return captions
 
     def init_cache(self):
-        data = load_dataset('datasets/conceptual captions/conceptual_captions.py', split=self.mode)
-        self.data['image_path_list'] = data['image_url']
-        self.data['captions'] = data['caption']
+        cache_file = self.cache_dir / 'CC_image_captions_{}.pth'.format(self.mode)
+        if cache_file.exists() and not self.overwrite:
+            print('no need to init cache.')
+            return
+        data = load_dataset('conceptual captions/conceptual_captions.py', split=self.mode)
+        print('check length of captions')
+        captions, img_path = data['caption'], data['image_url']
+        pop_ids = []
+        drop_num = 0
+        for idx, caption in tqdm(enumerate(data['caption'])):
+            from clip import tokenize
+            try:
+                tokenize(caption)
+            except:
+                pop_ids.append(idx)
+                drop_num += 1
+        print('some sentence length are too long, there num is {}. They will drop'.format(drop_num))
+        new_captions, new_img_path = [], []
+        for idx, (caption, img_path) in enumerate(zip(captions, img_path)):
+            if idx not in pop_ids:
+                new_captions.append(caption)
+                new_img_path.append(img_path)
+        for i, img_path in enumerate(new_img_path):
+            new_img_path[i] = parse_url(img_path)
+
+
+        torch.save([new_img_path, new_captions], str(cache_file))
 
     def image_process(self, url):
         trans = transforms.Compose([
@@ -139,11 +165,7 @@ class ConceptualCaptions(Dataset):
             transforms.ToTensor(),
             transforms.Normalize(self.para['img_mean'], self.para['img_std'])
         ])
-        response = requests.get(url)
-        # img = Image.open(urlopen(url)).convert('RGB')
-        img = Image.open(StringIO(urllib.requests.urlopen(url).read()))
-        Image.open(urllib2.urlopen(url))
-        Image.open(requests.get(url, stream=True).raw)
+        img = Image.open(requests.get(url, stream=True).raw)
         img_tensor = trans(img)
         return img_tensor
 

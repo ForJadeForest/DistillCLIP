@@ -1,11 +1,12 @@
 import hashlib
 import urllib
 import warnings
-from typing import Union, List
+from typing import List
 
 import torch
 from PIL import Image
 from torch import nn
+from torch.nn import functional as f
 from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize
 from tqdm import tqdm
 
@@ -108,35 +109,10 @@ def _transform(n_px):
 
 
 def available_models() -> List[str]:
-    """Returns the names of available CLIP models"""
     return list(_MODELS.keys())
 
 
 def load(name: str, download_root: str = None):
-    """Load a CLIP model
-
-    Parameters
-    ----------
-    name : str
-        A model name listed by `clip.available_models()`, or the path to a model checkpoint containing the state_dict
-
-    device : Union[str, torch.device]
-        The device to put the loaded model
-
-    jit : bool
-        Whether to load the optimized JIT model or more hackable non-JIT model (default).
-
-    download_root: str
-        path to download the model files; by default, it uses "~/.cache/clip"
-
-    Returns
-    -------
-    state_dict : dict
-        The CLIP model
-
-    preprocess : Callable[[PIL.Image], torch.Tensor]
-        A torchvision transform that converts a PIL image into a tensor that the returned model can take as its input
-    """
     if name in _MODELS:
         model_path = _download(_MODELS[name], download_root or os.path.expanduser("~/.cache/clip"))
     elif os.path.isfile(name):
@@ -147,47 +123,6 @@ def load(name: str, download_root: str = None):
     with open(model_path, 'rb') as opened_file:
         model = torch.jit.load(opened_file, map_location="cpu").eval()
     return model.state_dict()
-
-
-def build_model(state_dict: dict):
-    vit = "visual.proj" in state_dict
-    if vit:
-        vision_width = state_dict["visual.conv1.weight"].shape[0]
-        vision_layers = len(
-            [k for k in state_dict.keys() if k.startswith("visual.") and k.endswith(".attn.in_proj_weight")])
-        vision_patch_size = state_dict["visual.conv1.weight"].shape[-1]
-        grid_size = round((state_dict["visual.positional_embedding"].shape[0] - 1) ** 0.5)
-        image_resolution = vision_patch_size * grid_size
-    else:
-        counts: list = [len(set(k.split(".")[2] for k in state_dict if k.startswith(f"visual.layer{b}"))) for b in
-                        [1, 2, 3, 4]]
-        vision_layers = tuple(counts)
-        vision_width = state_dict["visual.layer1.0.conv1.weight"].shape[0]
-        output_width = round((state_dict["visual.attnpool.positional_embedding"].shape[0] - 1) ** 0.5)
-        vision_patch_size = None
-        assert output_width ** 2 + 1 == state_dict["visual.attnpool.positional_embedding"].shape[0]
-        image_resolution = output_width * 32
-
-    embed_dim = state_dict["text_projection"].shape[1]
-    context_length = state_dict["positional_embedding"].shape[0]
-    vocab_size = state_dict["token_embedding.weight"].shape[0]
-    transformer_width = state_dict["ln_final.weight"].shape[0]
-    transformer_heads = transformer_width // 64
-    transformer_layers = len(set(k.split(".")[2] for k in state_dict if k.startswith(f"transformer.resblocks")))
-
-    model = CLIP(
-        embed_dim,
-        image_resolution, vision_layers, vision_width, vision_patch_size,
-        context_length, vocab_size, transformer_width, transformer_heads, transformer_layers
-    )
-
-    for key in ["input_resolution", "context_length", "vocab_size"]:
-        if key in state_dict:
-            del state_dict[key]
-
-    convert_weights(model)
-    model.load_state_dict(state_dict)
-    return model.eval()
 
 
 def get_transformer_para(state_dict):
@@ -274,6 +209,7 @@ class LayerMap:
         if self.map_type == 'mid':
             assert self.tea_total_layer_num % self.stu_total_layer_num == 0
             self.step = self.tea_total_layer_num // self.stu_total_layer_num
+
     def __call__(self, stu_layer_num):
         if self.map_type == 'mid':
             return stu_layer_num * self.step
@@ -281,3 +217,95 @@ class LayerMap:
             return stu_layer_num
         elif self.map_type == 'end':
             return self.tea_total_layer_num - self.stu_total_layer_num + stu_layer_num
+
+
+class LossControl:
+    def __init__(self, loss_name, loss_scale: dict = None, temperature=None, percent=None):
+        self.loss_name = loss_name
+        self.loss_scale = loss_scale
+        if self.loss_scale is None:
+            self.loss_scale = {n: 1 for n in self.loss_name}
+        self.loss = self._init_loss()
+        self.temperature = temperature
+        self.percent = percent
+        if self.percent is None:
+            self.percent = {n: 1 / len(loss_name) for n in loss_name}
+            assert sum(self.percent) - 1 <= 1e-5
+        print(self.percent)
+        print(self.loss_scale)
+
+    def _init_loss(self):
+        losses = {}
+        for n in self.loss_name:
+            if n == 'l1':
+                loss_function = nn.L1Loss()
+            elif n == 'ce':
+                loss_function = nn.CrossEntropyLoss(reduction='mean')
+            elif n == 'kl':
+                loss_function = nn.KLDivLoss(reduction='batchmean')
+            elif n == 'cos':
+                loss_function = nn.CosineEmbeddingLoss()
+            elif n == 'emb':
+                loss_function = nn.MSELoss()
+            elif n == 'attn':
+                loss_function = nn.MSELoss()
+            elif n == 'hidden':
+                loss_function = nn.MSELoss()
+            else:
+                raise ValueError("Invalid Loss Type!")
+            losses[n] = loss_function
+        return losses
+
+    def cal_loss(self, stu_out, tea_out, layer_map, device):
+        stu_last_rep, stu_attention_maps, stu_representations, stu_embedding = stu_out
+        tea_last_rep, tea_attention_maps, tea_representations, tea_embedding = tea_out
+        stu_layer_num = len(stu_attention_maps)
+        tea_layer_num = len(tea_attention_maps)
+        assert tea_layer_num % stu_layer_num == 0
+        cal_res = {}
+        for loss_name in self.loss:
+            loss = self.loss[loss_name]
+            if loss_name == 'emb':
+                # calculate the embedding loss
+                cal_res[loss_name] = loss(stu_embedding, tea_embedding)
+            elif loss_name == 'attn':
+                # attention loss
+                attn_loss = 0
+                for layer_num, stu_attn_out in enumerate(stu_attention_maps):
+                    attn_loss += loss(stu_attention_maps[layer_num], tea_attention_maps[layer_map(layer_num)])
+                attn_loss /= stu_layer_num
+                cal_res[loss_name] = attn_loss
+            elif loss_name == 'hidden':
+                hidden_loss = 0
+                for layer_num, stu_attn_out in enumerate(stu_representations):
+                    hidden_loss += loss(stu_representations[layer_num],
+                                    tea_representations[layer_map(layer_num)])
+                hidden_loss /= stu_layer_num
+                cal_res[loss_name] = hidden_loss
+            elif loss_name == 'l1':
+                logits_l1_loss = loss(stu_last_rep, tea_last_rep)
+                cal_res[loss_name] = logits_l1_loss
+            elif loss_name == 'kl':
+                # calculate the pred loss
+                assert self.temperature, 'You should give the temperature for the kl loss'
+                logits_ce_loss = loss(
+                    f.softmax(stu_last_rep / self.temperature, dim=1).log(),
+                    f.softmax(tea_last_rep / self.temperature, dim=1)
+                ) * self.temperature ** 2
+                cal_res[loss_name] = logits_ce_loss
+            elif loss_name == 'cos':
+                assert self.temperature, 'You should give the device for the cos loss'
+                logits_cos_loss = loss(stu_last_rep, tea_last_rep, torch.ones(len(stu_last_rep), device=device))
+                cal_res[loss_name] = logits_cos_loss
+            elif loss_name == 'ce':
+                logits_ce_loss = loss(
+                    stu_last_rep.softmax(dim=1),
+                    tea_last_rep.softmax(dim=1)
+                )
+                cal_res[loss_name] = logits_ce_loss
+        loss = 0
+        for (loss_name, scale) in self.loss_scale.items():
+            cal_res[loss_name] = cal_res[loss_name] * scale
+            loss += cal_res[loss_name] * self.percent[loss_name]
+
+        return loss, cal_res

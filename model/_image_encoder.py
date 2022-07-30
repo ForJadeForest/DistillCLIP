@@ -11,6 +11,8 @@ except ModuleNotFoundError:
 class ImageEncoder(nn.Module):
     def __init__(self, is_student, vit_paras, tea_transformer_width=None):
         super().__init__()
+        self.vit_paras = vit_paras
+
         self.visual = VisionTransformer(**vit_paras)
         self.is_student = is_student
         self.embedding_projection = None
@@ -46,3 +48,7 @@ class ImageEncoder(nn.Module):
 
     def forward(self, image, only_last_state=True):
         return self.encode_image(image, only_last_state)
+
+    @property
+    def hyper_para(self):
+        return self.vit_paras
