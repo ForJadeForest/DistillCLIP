@@ -49,6 +49,5 @@ class ImageEncoder(nn.Module):
     def forward(self, image, only_last_state=True):
         return self.encode_image(image, only_last_state)
 
-    @property
     def hyper_para(self):
         return self.vit_paras

@@ -41,8 +41,8 @@ class DistillModel(pl.LightningModule):
         for k in self.k_list:
             self.acc_metrics.append(Accuracy(top_k=k))
 
-    def on_train_start(self):
-        self.logger.experiment.config['student_para'] = self.student.hyper_para
+    # def on_train_start(self):
+    #     self.logger.experiment.config['student_para'] = self.student.hyper_para()
 
     def forward(self, inputs):
         student_outs = self.student(inputs, only_last_state=False)

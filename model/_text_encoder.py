@@ -82,7 +82,6 @@ class TextEncoder(nn.Module):
     def forward(self, text, only_last_state=True):
         return self.encode_text(text, only_last_state)
 
-    @property
     def hyper_para(self):
         return {
             'context_length': self.context_leng,
