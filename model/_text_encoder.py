@@ -2,11 +2,11 @@ import torch
 from torch import nn
 
 try:
-    from ._common import Transformer, LayerNorm
-    from ._utils import output_filter
-except ModuleNotFoundError:
     from _common import Transformer, LayerNorm
     from _utils import output_filter
+except ModuleNotFoundError:
+    from ._common import Transformer, LayerNorm
+    from ._utils import output_filter
 
 
 class TextEncoder(nn.Module):
@@ -47,10 +47,14 @@ class TextEncoder(nn.Module):
         mask.triu_(1)  # zero out the lower diagonal
         return mask
 
-    def encode_text(self, text, only_last_state=True):
+    def encode_text(self, text, only_last_state=True, need_attn_score=False, need_value_map=False, need_attn_prob=False,
+                    need_rep=False, need_emb=False):
         embedding = self.token_embedding(text)  # [batch_size, n_ctx, d_model]
         x = embedding + self.positional_embedding
-        x, attention_maps, representations = self.transformer(x)
+        x, attention_maps, attention_probs, representations, value_map = self.transformer(x, need_attn_score,
+                                                                                          need_value_map,
+                                                                                          need_attn_prob,
+                                                                                          need_rep)
         x = self.ln_final(x)
         # x.shape = [batch_size, n_ctx, transformer.width]
         # take features from the eot embedding (eot_token is the highest number in each sequence)
@@ -60,7 +64,7 @@ class TextEncoder(nn.Module):
             return x
 
         return output_filter(self.is_student, representations, self.embedding_projection, embedding, attention_maps, x,
-                             self.hidden_projection)
+                             self.hidden_projection, attention_probs, value_map, need_emb, need_rep, need_attn_score)
 
     def initialize_parameters(self):
         nn.init.normal_(self.token_embedding.weight, std=0.02)
@@ -79,8 +83,8 @@ class TextEncoder(nn.Module):
         if self.text_projection is not None:
             nn.init.normal_(self.text_projection, std=self.transformer.width ** -0.5)
 
-    def forward(self, text, only_last_state=True):
-        return self.encode_text(text, only_last_state)
+    def forward(self, text, only_last_state=True, **need_para):
+        return self.encode_text(text, only_last_state, **need_para)
 
     def hyper_para(self):
         return {

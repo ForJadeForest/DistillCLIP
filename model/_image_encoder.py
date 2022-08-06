@@ -37,17 +37,22 @@ class ImageEncoder(nn.Module):
             nn.init.normal_(block.mlp.c_fc.weight, std=fc_std)
             nn.init.normal_(block.mlp.c_proj.weight, std=proj_std)
 
-    def encode_image(self, image, only_last_state=True):
-        last_state, attention_maps, representations, embedding = self.visual(image)
-
+    def encode_image(self, image, only_last_state=True, need_attn_score=False, need_value_map=False,
+                     need_attn_prob=False, need_rep=False, need_emb=False):
+        last_state, attention_maps, representations, embedding, attention_probs, value_map = self.visual(image,
+                                                                                                         need_attn_score,
+                                                                                                         need_value_map,
+                                                                                                         need_attn_prob,
+                                                                                                         need_rep)
         if only_last_state:
             return last_state
 
         return output_filter(self.is_student, representations, self.embedding_projection, embedding, attention_maps,
-                             last_state, self.hidden_projection)
+                             last_state, self.hidden_projection, attention_probs, value_map, need_emb, need_rep,
+                             need_attn_score)
 
-    def forward(self, image, only_last_state=True):
-        return self.encode_image(image, only_last_state)
+    def forward(self, image, only_last_state=True, **need_para):
+        return self.encode_image(image, only_last_state, **need_para)
 
     def hyper_para(self):
         return self.vit_paras
