@@ -27,7 +27,7 @@ def parse_url(url):
 
 
 class ConceptualCaptions(Dataset):
-    def __init__(self, data_dir, cache_dir=None, is_train=True, data_type='all', overwrite=False):
+    def __init__(self, data_dir, cache_dir=None, data_type='all', overwrite=False):
         """
 
         :param data_dir: The path to COCO2017
@@ -49,6 +49,8 @@ class ConceptualCaptions(Dataset):
         self.data_type = data_type
         self.data_dir = Path(data_dir)
         self.cache_dir = Path(cache_dir)
+
+    def check_mode(self, is_train):
         if is_train:
             self.mode = 'train'
         else:
@@ -171,6 +173,6 @@ class ConceptualCaptions(Dataset):
 
 
 if __name__ == '__main__':
-    dataset = ConceptualCaptions(r'/data/pyz/data/CC', cache_dir='./', is_train=True, data_type='all', overwrite=False)
+    dataset = ConceptualCaptions(r'/data/pyz/data/CC', cache_dir='./', data_type='all', overwrite=False)
     for i in trange(len(dataset)):
         a = dataset[i]

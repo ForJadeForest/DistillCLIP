@@ -18,7 +18,7 @@ from tqdm import tqdm
 
 
 class COCODataset(Dataset):
-    def __init__(self, data_dir, cache_dir=None, is_train=True, data_type='all', overwrite=False):
+    def __init__(self, data_dir, cache_dir=None, data_type='all', overwrite=False):
         """
 
         :param data_dir: The path to COCO2017
@@ -40,6 +40,8 @@ class COCODataset(Dataset):
         self.data_type = data_type
         self.data_dir = Path(data_dir)
         self.cache_dir = Path(cache_dir)
+
+    def check_mode(self, is_train):
         if is_train:
             self.mode = 'train'
         else:
@@ -167,9 +169,7 @@ class COCODataset(Dataset):
         trans = transforms.Compose([
             transforms.Resize(224),
             transforms.CenterCrop(224),
-            transforms.RandomHorizontalFlip(self.para['aug_prob']),
-            transforms.RandomVerticalFlip(self.para['aug_prob']),
-            transforms.RandomRotation(10),
+            transforms.RandAugment(),
             transforms.ToTensor(),
             transforms.Normalize(self.para['img_mean'], self.para['img_std']),
         ]) if self.mode == 'train' else transforms.Compose([
