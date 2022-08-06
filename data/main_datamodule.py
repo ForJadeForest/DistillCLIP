@@ -1,13 +1,14 @@
 import importlib
 import inspect
+from typing import *
 
 import pytorch_lightning as pl
-from torch.utils.data import DataLoader
 from pytorch_lightning.utilities import cli as pl_cli
+from torch.utils.data import DataLoader, Dataset
 
 
 @pl_cli.DATAMODULE_REGISTRY
-class TextDataModule(pl.LightningDataModule):
+class DistillationDataModule(pl.LightningDataModule):
     def __init__(self, kwargs, num_workers=8,
                  dataset='',
                  batch_size=128,
@@ -32,7 +33,8 @@ class TextDataModule(pl.LightningDataModule):
             self.testset = self.instancialize(train=False)
 
     def train_dataloader(self):
-        return DataLoader(self.trainset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=True)
+        return DataLoader(self.trainset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=True,
+                          pin_memory=True)
 
     def val_dataloader(self):
         return DataLoader(self.valset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
@@ -83,5 +85,5 @@ if __name__ == '__main__':
     parser.add_argument('--dataset_name', default='TextDataset', type=str)
     parser.add_argument('--data_dir', default='/data/pyz/data', type=str)
     args = parser.parse_args()
-    data_module = TextDataModule(**vars(args))
+    data_module = DistillationDataModule(**vars(args))
     data_module.setup()
