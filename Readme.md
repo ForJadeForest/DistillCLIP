@@ -5,23 +5,88 @@
 - CLIP训练是对比学习，缺少标签。因此在最后一层的pred_loss决定修改为最后输出representation的KL散度。
 - [原版训练过程小细节](https://github.com/huawei-noah/Pretrained-Language-Model/blob/master/TinyBERT/general_distill.py#L425)：此处目前没有采用，把attention小于-100的值修改成0
 - TinyBert 在计算中间层attention和hidden state的loss时使用了一个矩阵进行线性的映射。
-- Tiny模型的 embedding 维度比原始的低，在单独蒸馏一个编码器时，无法使用CLIP中另一种编码器进行指标的计算。（使用投影矩阵投射？去计算一个指标）
 - Tiny模型embedding维度比原始的低，那么在最后两个Tiny模型合并的时候，由于缺少标签的监督。效果会不会比较差？具体差多少？这个在阶段二会不会有所改善？
   - 在最后一层加入个Linear，投射到相同空间
 - Vit的模型架构中的embedding层或许有所差异。是否蒸馏Embeeding？
 - 蒸馏Embedding是否加position embedding
   - 目前采用不加的方法
-- 蒸馏的attention map是均值？还是每一个头都进行求和？
+- 蒸馏的attention map是均值？还是每一个头都进行loss计算？
   - 均值的话，attention 头数可以减少，但似乎头数是一个比较重要的参数。
+  - 目前使用计算每一个头的loss
 - 或许两个一起蒸馏才能拥有好的效果？
 - 使用`nn.Parameter()`的时候一定要初始化，不然会直接`nan`
+- 图像数据较少，蒸馏后对于一些没有出现在train dataset中的物体结果比较差
+  - 由于图像和文本是对齐的，能否直接用文本的dataset去蒸馏图像的Encoder？ (input 无法确定)
 
 ### bug fix
 - [x] teacher model 没有使用 `.eval()`
-- [ ] 测试model load
+- [x] 测试model load
 - [x] 因为copy的小错误，导致ImageEncoder构建的时候，`attention head num` 出现错误调试bug一个晚上。警钟长鸣
-- [ ] 测试teacher的mode
+- [x] 测试teacher的mode
 - [ ] config 的更新能否细化
+- [ ] 目前训练花费时间比较长。ImageEncoder一个epoch ~ 35min，TextEncoder ~ 25min。
+  - [ ] 将图像存为lmdb格式
+  - [x] 将data存放到home下
+  - [ ] pin_memory 参数设置
+  - [x] 提前做好数据裁切
+
+
+### Config
+#### dataset
+依据之前的经验，数据量需要达到一定的程度蒸馏效果才会比较好。但目前缺少大量的图像文本对。这也是采用分开蒸馏的原因之一
+- ImageDateset: MSCOCO + Caltech 256 + Imagenet
+
+![image-20220731142222754](https://jadepicgo.oss-cn-shenzhen.aliyuncs.com/img/image-20220731142222754.png)
+
+- TextDataset: MSCOCO + Conceptual Captions
+
+![image-20220731142303147](https://jadepicgo.oss-cn-shenzhen.aliyuncs.com/img/image-20220731142303147.png)
+
+**Plan**
+
+- 计划在下载好 Conceptual Captions的Image的时候，可以考虑一起蒸馏。或者单纯增加图像的数量。大概达到6M的样子。
+
+- 使用RandAugmentation进行增强
+
+
+
+## Ex
+
+1. 32精度效果比较好
+
+2. loss 搭配：
+
+   - 只使用 `l1 + cos` 
+   - 使用`l1 + cos + kl`
+   - 使用 `value + attn_probs`
+   - 使用 `rep + attn_probs + emb` 
+
+3. 数据
+
+   - 使用 data_256 + imagenet + MSCOCO
+   - 不用 data_256
+
+4. 模型架构
+
+   暂定这四个模型，之后可以采用4 layers
+
+   - 减少层数，不减少宽度 ，增加头数(768 width + 6 layers + 24 heads)
+   - 减少宽度，减少层数，增加头数 (768 // 2 width + 6 layers + 24 heads)
+   - 减少层数，不减少宽度 ，不增加头数(768 width + 6 layers + 12 heads) **做为基础模型**
+   - 减少宽度，减少层数，不增加头数 (768 // 2 width + 6 layers + 12 heads)
+
+5. Input 图像大小，按理来说Vit应该没有输入限制？
+
+
+
+
+
+
+
+
+
+
+
 ### On Going
 - 编写通用蒸馏模型
   - [x] 获取attention分数
@@ -33,17 +98,16 @@
       - [ ] 在imagenet上的预测效果
   - [ ] CLIP 的Transformer带mask，而TinyBert不使用mask。导致CLIP的attention map存在 -inf。会影响loss计算
     - [x] 将 inf 设置为0
-    - [ ] 使用不加mask 的attention进行蒸馏
+    - [ ] 使用不加mask的attention进行蒸馏
   - [ ] 各个loss的权重
     - [x] 手动调节
   
   - [ ] 指标的书写，测试结果
   
   
-
 ### 模型书写过程
 
-- [ ] forwad 函数  
+- [ ] forward 函数  
   - [ ] 输出测试
 - [ ] init 权重
 

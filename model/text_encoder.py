@@ -34,6 +34,8 @@ class TextEncoder(nn.Module):
         self.embedding_projection = None
         self.hidden_projection = None
         self.is_student = is_student
+        if self.vit_paras['width'] == tea_transformer_width:
+            self.no_trans = True
         if is_student:
             self.embedding_projection = nn.Linear(transformer_width, tea_transformer_width)
             self.hidden_projection = nn.Linear(transformer_width, tea_transformer_width)
@@ -64,7 +66,8 @@ class TextEncoder(nn.Module):
             return x
 
         return output_filter(self.is_student, representations, self.embedding_projection, embedding, attention_maps, x,
-                             self.hidden_projection, attention_probs, value_map, need_emb, need_rep, need_attn_score)
+                             self.hidden_projection, attention_probs, value_map, need_emb, need_rep, need_attn_score,
+                             self.no_trans)
 
     def initialize_parameters(self):
         nn.init.normal_(self.token_embedding.weight, std=0.02)

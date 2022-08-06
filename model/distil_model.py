@@ -24,19 +24,21 @@ loss 管理：
 @pl_cli.MODEL_REGISTRY
 class DistillModel(pl.LightningModule):
     def __init__(self, student_encoder: nn.Module, teacher_name: str, loss_control_para: Dict, download_root: str,
-                 model_type: str = 'text', lr: float = 1e-3, map_type: str = 'mid'):
+                 model_type: str = 'text', lr: float = 1e-3, map_type: str = 'mid', init_type=None):
         super().__init__()
-        # self.example_input_array = torch.tensor((torch.randint(low=0, high=300, size=(64, 77))))
         self.__dict__.update(locals())
         self.save_hyperparameters(ignore=['student_encoder'])
 
         # 定义模型
         self.student = student_encoder
+
         self.teacher_name = teacher_name
         self.teacher, tea_layer_num = teacher_load(teacher_name, download_root, model_type)
         for p in self.teacher.parameters():
             p.requires_grad = False
         self.layer_map = LayerMap(student_encoder.layers, tea_layer_num, map_type)
+        if init_type:
+            self.student.init_layers_with_teacher(self.layer_map, teacher_state_dict=self.teacher.state_dict())
         self.loss_control = LossControl(**loss_control_para)
         self.need_return_para = self.loss_control.need_output()
         # 定义指标
@@ -50,7 +52,6 @@ class DistillModel(pl.LightningModule):
             self.logger.experiment.config.update({'student_para': self.student.hyper_para()})
         elif isinstance(self.logger, TensorBoardLogger):
             self.logger.log_hyperparams(self.hparams, {"hp/stu_acc_top1": 0, "hp/stu_acc_top10": 0})
-
 
     def forward(self, inputs):
         student_outs = self.student(inputs, only_last_state=False, **self.need_return_para)
@@ -89,7 +90,7 @@ class DistillModel(pl.LightningModule):
             metric(stu_logits, label)
             self.log('hp_metric/stu_acc_top{}'.format(self.k_list[i]), metric, metric_attribute='acc_metrics',
                      batch_size=len(inputs))
-            if self.current_epoch == 0:
+            if self.current_epoch == 0 and self.global_rank == 0:
                 acc_tea = accuracy(tea_logits, label, top_k=self.k_list[i])
                 self.log('hp_metric/tea_acc_top{}'.format(self.k_list[i]), acc_tea, prog_bar=False, sync_dist=True,
                          batch_size=len(inputs))

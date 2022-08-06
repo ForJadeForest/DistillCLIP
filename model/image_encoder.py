@@ -2,22 +2,25 @@ from torch import nn
 
 try:
     from ._common import VisionTransformer
-    from ._utils import output_filter
+    from ._utils import output_filter, load
 except ModuleNotFoundError:
     from _common import VisionTransformer
-    from _utils import output_filter
+    from _utils import output_filter, load
 
 
 class ImageEncoder(nn.Module):
-    def __init__(self, is_student, vit_paras, tea_transformer_width=None):
+    def __init__(self, is_student, vit_paras, tea_transformer_width=None, init_type=None):
         super().__init__()
         self.vit_paras = vit_paras
-
+        self.init_type = init_type
         self.visual = VisionTransformer(**vit_paras)
         self.is_student = is_student
         self.embedding_projection = None
         self.hidden_projection = None
         self.layers = vit_paras['layers']
+        self.no_trans = False
+        if self.vit_paras['width'] == tea_transformer_width:
+            self.no_trans = True
         if is_student:
             self.embedding_projection = nn.Linear(vit_paras['width'], tea_transformer_width)
             self.hidden_projection = nn.Linear(vit_paras['width'], tea_transformer_width)
@@ -49,10 +52,41 @@ class ImageEncoder(nn.Module):
 
         return output_filter(self.is_student, representations, self.embedding_projection, embedding, attention_maps,
                              last_state, self.hidden_projection, attention_probs, value_map, need_emb, need_rep,
-                             need_attn_score)
+                             need_attn_score, self.no_trans)
 
     def forward(self, image, only_last_state=True, **need_para):
         return self.encode_image(image, only_last_state, **need_para)
+
+    def init_layers_with_teacher(self, layer_map, teacher_state_dict=None):
+        if self.init_type is None:
+            self.initialize_parameters()
+        elif self.init_type == 'begin':
+            self.visual.load_state_dict(teacher_state_dict, strict=False)
+        elif self.init_type == 'end':
+            pass
+        import re
+        pattern = re.compile('visual.transformer.resblocks.([\d])')
+        stu_layer_num = layer_map.stu_total_layer_num
+        tea_layer_num = layer_map.tea_total_layer_num
+        tea_state_dict = teacher_state_dict
+        my_model_state_dict = self.visual.state_dict()
+        if self.init_type == 'begin':
+            map_layer = lambda x: str(x)
+        elif self.init_type == 'end':
+            map_layer = lambda x: str(tea_layer_num - stu_layer_num + x)
+        elif self.init_type == 'mid':
+            map_layer = lambda x: str(x * layer_map.step)
+        else:
+            raise ValueError('the init_type should be begin, end, and mid, but got {}'.format(self.init_type))
+        for key in self.visual.keys():
+            res = re.findall(pattern, key)
+            if key not in tea_state_dict:
+                continue
+            if not res:
+                my_model_state_dict[key] = tea_state_dict[key]
+            else:
+                tea_key = re.sub(re.compile('\d'), map_layer(int(res[0])), string=key, count=1)
+                my_model_state_dict[key] = tea_state_dict[tea_key]
 
     def hyper_para(self):
         return self.vit_paras
