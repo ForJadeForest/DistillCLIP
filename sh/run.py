@@ -8,6 +8,8 @@ def get_args():
     parse.add_argument('-e', '--ex_name', type=str, help='the experiment name')
     parse.add_argument('-v', '--v_num', type=str, help='the number of the version')
     parse.add_argument('-c', '--config', type=str, help='the config path', default='./config')
+    parse.add_argument('-b', '--begin_ver', type=int,  default=0)
+    parse.add_argument('-t', '--end_ver', type=int)
     parse.add_argument('--all_ver', action='store_true', help='whether to deal with all experiment and the versions')
     parse.add_argument('--all_ex', action='store_true', help='whether to deal with all experiment and the versions')
     return parse.parse_args()
@@ -19,6 +21,7 @@ def run_version(ex_name, ver_num, config_path):
     version_config_path = ex_path / ver_num / 'version.yaml'
     config_path = [str(share_config_path), str(version_config_path)]
     print('='*20 + 'Now is Running {} experiment and version {}'.format(ex_name, ver_num) + '='*20)
+    print('run: python ./main.py fit -c ' + ' -c '.join(config_path))
     os.system('python ./main.py fit -c ' + ' -c '.join(config_path))
     print('='*20 + '{} experiment and version {} is done!'.format(ex_name, ver_num) + '='*20)
 
@@ -33,16 +36,16 @@ if __name__ == '__main__':
             if not ex.is_dir():
                 continue
             for v in ex.iterdir():
-                if not v.is_dir():
-                    continue
-                run_version(ex.name, v.name, args.config)
+                if v.is_dir():
+                    run_version(ex.name, v.name, args.config)
     elif args.all_ver and args.ex_name is not None:
         # 完成一个实验的所有版本
         ex_path = args.config / args.ex_name
         for v in sorted(ex_path.iterdir()):
-            if not v.is_dir():
-                continue
-            run_version(args.ex_name, v.name, args.config)
+            if v.is_dir():
+                if args.begin_ver <= int(v.name[-1]) <= args.end_ver:
+                    run_version(args.ex_name, v.name, args.config)
+
 
     elif args.ex_name and args.v_num:
         # 完成指定的一个实验和一个版本

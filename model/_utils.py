@@ -134,8 +134,8 @@ def get_visual_transformer_para(state_dict):
 
 
 def teacher_load(teacher_name: str, download_root, model_type):
-    from ._text_encoder import TextEncoder
-    from ._image_encoder import ImageEncoder
+    from .text_encoder import TextEncoder
+    from .image_encoder import ImageEncoder
     if model_type == 'text':
         state_dict = load(teacher_name, download_root=download_root)
         para = get_transformer_para(state_dict)
@@ -160,15 +160,16 @@ def teacher_load(teacher_name: str, download_root, model_type):
 
 
 def output_filter(is_student, representations, embedding_projection, embedding, attention_maps, last_state,
-                  hidden_projection, attention_probs, value_maps, need_emb, need_rep, need_attn_score):
-    if is_student:
+                  hidden_projection, attention_probs, value_maps, need_emb, need_rep, need_attn_score, no_trans):
+    if is_student and not no_trans:
+
         for i in range(len(representations)):
             if need_rep:
                 representations[i] = hidden_projection(representations[i])
             else:
                 break
         if need_emb:
-            embedding = embedding_projection(embedding)
+                embedding = embedding_projection(embedding)
         else:
             embedding = None
     if need_attn_score:
@@ -263,7 +264,7 @@ class LossControl:
 
         return need_para
 
-    def cal_loss(self, stu_out, tea_out, layer_map:LayerMap, device):
+    def cal_loss(self, stu_out, tea_out, layer_map: LayerMap, device):
         stu_last_rep, stu_attention_maps, stu_representations, stu_embedding, stu_attention_probs, stu_value_map = stu_out
         tea_last_rep, tea_attention_maps, tea_representations, tea_embedding, tea_attention_probs, tea_value_map = tea_out
         stu_layer_num = layer_map.stu_total_layer_num
@@ -278,7 +279,11 @@ class LossControl:
                 # attention loss
                 attn_loss = 0
                 for layer_num, stu_attn_out in enumerate(stu_attention_maps):
-                    attn_loss += loss(stu_attention_maps[layer_num], tea_attention_maps[layer_map(layer_num)])
+                    stu_head_num = stu_attn_out.shape()[1]
+                    tea_head_num = tea_attention_maps[layer_map(layer_num)].shape()[1]
+                    stu_mean_head_out = torch.sum(stu_attn_out, dim=1) / stu_head_num
+                    tea_mean_head_out = torch.sum(tea_attention_maps[layer_map(layer_num)], dim=1) / tea_head_num
+                    attn_loss += loss(stu_mean_head_out, tea_mean_head_out)
                 attn_loss /= stu_layer_num
                 cal_res[loss_name] = attn_loss
             elif loss_name == 'hidden':
@@ -300,7 +305,6 @@ class LossControl:
                 ) * self.temperature ** 2
                 cal_res[loss_name] = logits_ce_loss
             elif loss_name == 'cos':
-                assert self.temperature, 'You should give the device for the cos loss'
                 logits_cos_loss = loss(stu_last_rep, tea_last_rep, torch.ones(len(stu_last_rep), device=device))
                 cal_res[loss_name] = logits_cos_loss
             elif loss_name == 'ce':
@@ -321,8 +325,12 @@ class LossControl:
                 )
             elif loss_name == 'attn_probs':
                 attn_loss = 0
-                for layer_num, stu_attn_out in enumerate(stu_attention_maps):
-                    attn_loss += loss(stu_attention_probs[layer_num], tea_attention_probs[layer_map(layer_num)])
+                for layer_num, stu_attn_out in enumerate(stu_attention_probs):
+                    stu_head_num = stu_attn_out.shape()[1]
+                    tea_head_num = tea_attention_probs[layer_map(layer_num)].shape()[1]
+                    stu_mean_head_out = torch.sum(stu_attn_out, dim=1) / stu_head_num
+                    tea_mean_head_out = torch.sum(tea_attention_probs[layer_map(layer_num)], dim=1) / tea_head_num
+                    attn_loss += loss(stu_mean_head_out, tea_mean_head_out)
                 attn_loss /= stu_layer_num
                 cal_res[loss_name] = attn_loss
 
