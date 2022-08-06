@@ -1,6 +1,9 @@
+from typing import *
+
 import pytorch_lightning as pl
 import torch
 from pytorch_lightning.utilities import cli as pl_cli
+from pytorch_lightning.loggers import WandbLogger, TensorBoardLogger
 from torch import nn, optim
 from torchmetrics import Accuracy
 from torchmetrics.functional import accuracy
@@ -20,8 +23,8 @@ loss 管理：
 
 @pl_cli.MODEL_REGISTRY
 class DistillModel(pl.LightningModule):
-    def __init__(self, student_encoder: nn.Module, teacher_name, loss_control_para, download_root,
-                 model_type='text', lr=1e-3, map_type='mid'):
+    def __init__(self, student_encoder: nn.Module, teacher_name: str, loss_control_para: Dict, download_root: str,
+                 model_type: str = 'text', lr: float = 1e-3, map_type: str = 'mid'):
         super().__init__()
         # self.example_input_array = torch.tensor((torch.randint(low=0, high=300, size=(64, 77))))
         self.__dict__.update(locals())
@@ -35,18 +38,23 @@ class DistillModel(pl.LightningModule):
             p.requires_grad = False
         self.layer_map = LayerMap(student_encoder.layers, tea_layer_num, map_type)
         self.loss_control = LossControl(**loss_control_para)
+        self.need_return_para = self.loss_control.need_output()
         # 定义指标
         self.k_list = [i for i in [1, 2, 3, 4, 5, 10]]
         self.acc_metrics = []
         for k in self.k_list:
             self.acc_metrics.append(Accuracy(top_k=k))
 
-    # def on_train_start(self):
-    #     self.logger.experiment.config['student_para'] = self.student.hyper_para()
+    def on_train_start(self):
+        if isinstance(self.logger, WandbLogger):
+            self.logger.experiment.config.update({'student_para': self.student.hyper_para()})
+        elif isinstance(self.logger, TensorBoardLogger):
+            self.logger.log_hyperparams(self.hparams, {"hp/stu_acc_top1": 0, "hp/stu_acc_top10": 0})
+
 
     def forward(self, inputs):
-        student_outs = self.student(inputs, only_last_state=False)
-        teacher_outs = self.teacher(inputs, only_last_state=False)
+        student_outs = self.student(inputs, only_last_state=False, **self.need_return_para)
+        teacher_outs = self.teacher(inputs, only_last_state=False, **self.need_return_para)
         return student_outs, teacher_outs
 
     def training_step(self, inputs, batch_idx):
@@ -57,9 +65,6 @@ class DistillModel(pl.LightningModule):
         # Logging to TensorBoard by default
         self.log_info('train', loss, cal_res, batch_size=len(inputs))
         return loss
-
-    # def on_train_start(self):
-    #     self.logger.log_hyperparams(self.hparams, {"hp/stu_acc_top1": 0, "hp/stu_acc_top10": 0})
 
     def validation_step(self, batch, batch_idx):
         imgs, texts, sentence = batch
@@ -107,6 +112,7 @@ class DistillModel(pl.LightningModule):
 
 def norm_and_logits(encode, stu_encode, tea_encode):
     encode = encode / encode.norm(dim=1, keepdim=True)
+    encode = encode.float()
     stu_encode = stu_encode / stu_encode.norm(dim=1, keepdim=True)
     tea_encode = tea_encode / tea_encode.norm(dim=1, keepdim=True)
     stu_logits = stu_encode @ encode.t()
