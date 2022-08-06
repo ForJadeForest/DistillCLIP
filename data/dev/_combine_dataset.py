@@ -1,19 +1,20 @@
-from typing import List, Dict
+from typing import List
 
 import numpy as np
-from PIL import Image
 from torch.utils.data import Dataset
-from torchvision import transforms
 
 
 class CombineDataset(Dataset):
-    def __init__(self, dataset_list: List[Dataset], is_train: bool = True):
+    def __init__(self, dataset_list: List[Dataset], train: bool = True):
 
         self.datasets = dataset_list
         self.lengths = [len(dataset) for dataset in dataset_list]
         self.cum_lengths = np.array([0] + self.lengths).cumsum()
         self.combine_length = sum(self.lengths)
-        self.is_train = is_train
+        self.is_train = train
+        for dataset in self.datasets:
+            # assert hasattr(dataset, 'check_mode')
+            dataset.check_mode(train)
 
     def __len__(self):
         return self.combine_length
