@@ -1,4 +1,5 @@
 import hashlib
+import os
 import urllib
 import warnings
 from typing import List
@@ -11,42 +12,11 @@ from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normal
 from tqdm import tqdm
 
 try:
-    from ._common import CLIP, Transformer, VisionTransformer
-except ModuleNotFoundError:
-    from _common import CLIP, Transformer, VisionTransformer
-import os
-
-try:
     from torchvision.transforms import InterpolationMode
 
     BICUBIC = InterpolationMode.BICUBIC
 except ImportError:
     BICUBIC = Image.BICUBIC
-
-
-def convert_weights(model: nn.Module):
-    """Convert applicable model parameters to fp16"""
-
-    def _convert_weights_to_fp16(l):
-        if isinstance(l, (nn.Conv1d, nn.Conv2d, nn.Linear)):
-            l.weight.data = l.weight.data.half()
-            if l.bias is not None:
-                l.bias.data = l.bias.data.half()
-
-        if isinstance(l, nn.MultiheadAttention):
-            for attr in [*[f"{s}_proj_weight" for s in ["in", "q", "k", "v"]], "in_proj_bias", "bias_k", "bias_v"]:
-                tensor = getattr(l, attr)
-                if tensor is not None:
-                    tensor.data = tensor.data.half()
-
-        for name in ["text_projection", "proj"]:
-            if hasattr(l, name):
-                attr = getattr(l, name)
-                if attr is not None:
-                    attr.data = attr.data.half()
-
-    model.apply(_convert_weights_to_fp16)
-
 
 _MODELS = {
     "RN50": "https://openaipublic.azureedge.net/clip/models/afeb0e10f9e5a86da6080e35cf09123aca3b358a0c3e3b6c78a7b63bc04b6762/RN50.pt",
@@ -190,15 +160,22 @@ def teacher_load(teacher_name: str, download_root, model_type):
 
 
 def output_filter(is_student, representations, embedding_projection, embedding, attention_maps, last_state,
-                  hidden_projection):
+                  hidden_projection, attention_probs, value_maps, need_emb, need_rep, need_attn_score):
     if is_student:
         for i in range(len(representations)):
-            representations[i] = hidden_projection(representations[i])
-        embedding = embedding_projection(embedding)
-    for i in range(len(attention_maps)):
-        attention_maps[i] = torch.where(attention_maps[i] == float('-inf'), torch.zeros_like(attention_maps[i]),
-                                        attention_maps[i])
-    return last_state, attention_maps, representations, embedding
+            if need_rep:
+                representations[i] = hidden_projection(representations[i])
+            else:
+                break
+        if need_emb:
+            embedding = embedding_projection(embedding)
+        else:
+            embedding = None
+    if need_attn_score:
+        for i in range(len(attention_maps)):
+            attention_maps[i] = torch.where(attention_maps[i] == float('-inf'), torch.zeros_like(attention_maps[i]),
+                                            attention_maps[i])
+    return last_state, attention_maps, representations, embedding, attention_probs, value_maps
 
 
 class LayerMap:
@@ -249,19 +226,48 @@ class LossControl:
                 loss_function = nn.MSELoss()
             elif n == 'attn':
                 loss_function = nn.MSELoss()
+            elif n == 'attn_probs':
+                loss_function = nn.MSELoss()
             elif n == 'hidden':
                 loss_function = nn.MSELoss()
+            elif n == 'last_attn':
+                loss_function = nn.KLDivLoss(reduction='batchmean')
+            elif n == 'last_value_map':
+                loss_function = nn.KLDivLoss(reduction='batchmean')
             else:
                 raise ValueError("Invalid Loss Type!")
             losses[n] = loss_function
         return losses
 
-    def cal_loss(self, stu_out, tea_out, layer_map, device):
-        stu_last_rep, stu_attention_maps, stu_representations, stu_embedding = stu_out
-        tea_last_rep, tea_attention_maps, tea_representations, tea_embedding = tea_out
-        stu_layer_num = len(stu_attention_maps)
-        tea_layer_num = len(tea_attention_maps)
-        assert tea_layer_num % stu_layer_num == 0
+    def need_output(self):
+        need_para = {
+            'need_attn_score': False,
+            'need_value_map': False,
+            'need_attn_prob': False,
+            'need_rep': False,
+            'need_emb': False
+        }
+        for n in self.loss_name:
+            if n == 'emb':
+                need_para['need_emb'] = True
+            elif n == 'attn':
+                need_para['need_attn_score'] = True
+            elif n == 'attn_probs':
+                need_para['need_attn_prob'] = True
+            elif n == 'hidden':
+                need_para['need_rep'] = True
+            elif n == 'last_attn':
+                need_para['need_attn_prob'] = True
+            elif n == 'last_value_map':
+                need_para['need_value_map'] = True
+
+        return need_para
+
+    def cal_loss(self, stu_out, tea_out, layer_map:LayerMap, device):
+        stu_last_rep, stu_attention_maps, stu_representations, stu_embedding, stu_attention_probs, stu_value_map = stu_out
+        tea_last_rep, tea_attention_maps, tea_representations, tea_embedding, tea_attention_probs, tea_value_map = tea_out
+        stu_layer_num = layer_map.stu_total_layer_num
+
         cal_res = {}
         for loss_name in self.loss:
             loss = self.loss[loss_name]
@@ -279,7 +285,7 @@ class LossControl:
                 hidden_loss = 0
                 for layer_num, stu_attn_out in enumerate(stu_representations):
                     hidden_loss += loss(stu_representations[layer_num],
-                                    tea_representations[layer_map(layer_num)])
+                                        tea_representations[layer_map(layer_num)])
                 hidden_loss /= stu_layer_num
                 cal_res[loss_name] = hidden_loss
             elif loss_name == 'l1':
@@ -303,6 +309,23 @@ class LossControl:
                     tea_last_rep.softmax(dim=1)
                 )
                 cal_res[loss_name] = logits_ce_loss
+            elif loss_name == 'last_attn':
+                cal_res[loss_name] = loss(
+                    f.softmax(stu_attention_probs[-1], dim=1).log(),
+                    f.softmax(tea_attention_probs[-1], dim=1)
+                )
+            elif loss_name == 'last_value_map':
+                cal_res[loss_name] = loss(
+                    f.softmax(stu_value_map, dim=1).log(),
+                    f.softmax(tea_value_map, dim=1)
+                )
+            elif loss_name == 'attn_probs':
+                attn_loss = 0
+                for layer_num, stu_attn_out in enumerate(stu_attention_maps):
+                    attn_loss += loss(stu_attention_probs[layer_num], tea_attention_probs[layer_map(layer_num)])
+                attn_loss /= stu_layer_num
+                cal_res[loss_name] = attn_loss
+
         loss = 0
         for (loss_name, scale) in self.loss_scale.items():
             cal_res[loss_name] = cal_res[loss_name] * scale
