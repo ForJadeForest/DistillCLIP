@@ -9,10 +9,9 @@ except ModuleNotFoundError:
 
 
 class ImageEncoder(nn.Module):
-    def __init__(self, is_student, vit_paras, tea_transformer_width=None, init_type=None):
+    def __init__(self, is_student, vit_paras, tea_transformer_width=None):
         super().__init__()
         self.vit_paras = vit_paras
-        self.init_type = init_type
         self.visual = VisionTransformer(**vit_paras)
         self.is_student = is_student
         self.embedding_projection = None
@@ -57,28 +56,24 @@ class ImageEncoder(nn.Module):
     def forward(self, image, only_last_state=True, **need_para):
         return self.encode_image(image, only_last_state, **need_para)
 
-    def init_layers_with_teacher(self, layer_map, teacher_state_dict=None):
-        if self.init_type is None:
-            self.initialize_parameters()
-        elif self.init_type == 'begin':
-            self.visual.load_state_dict(teacher_state_dict, strict=False)
-        elif self.init_type == 'end':
-            pass
+    def init_layers_with_teacher(self, layer_map, teacher_state_dict=None, init_type=None):
         import re
         pattern = re.compile('visual.transformer.resblocks.([\d])')
         stu_layer_num = layer_map.stu_total_layer_num
         tea_layer_num = layer_map.tea_total_layer_num
         tea_state_dict = teacher_state_dict
         my_model_state_dict = self.visual.state_dict()
-        if self.init_type == 'begin':
+        if init_type is None:
+            return
+        elif init_type == 'begin':
             map_layer = lambda x: str(x)
-        elif self.init_type == 'end':
+        elif init_type == 'end':
             map_layer = lambda x: str(tea_layer_num - stu_layer_num + x)
-        elif self.init_type == 'mid':
+        elif init_type == 'mid':
             map_layer = lambda x: str(x * layer_map.step)
         else:
             raise ValueError('the init_type should be begin, end, and mid, but got {}'.format(self.init_type))
-        for key in self.visual.keys():
+        for key in my_model_state_dict.keys():
             res = re.findall(pattern, key)
             if key not in tea_state_dict:
                 continue

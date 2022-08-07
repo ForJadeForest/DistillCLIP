@@ -208,7 +208,7 @@ class LossControl:
         self.percent = percent
         if self.percent is None:
             self.percent = {n: 1 / len(loss_name) for n in loss_name}
-            assert sum(self.percent) - 1 <= 1e-5
+        assert sum([v for v in self.percent.values()]) - 1 <= 1e-5
         print(self.percent)
         print(self.loss_scale)
 
@@ -279,8 +279,8 @@ class LossControl:
                 # attention loss
                 attn_loss = 0
                 for layer_num, stu_attn_out in enumerate(stu_attention_maps):
-                    stu_head_num = stu_attn_out.shape()[1]
-                    tea_head_num = tea_attention_maps[layer_map(layer_num)].shape()[1]
+                    stu_head_num = stu_attn_out.shape[1]
+                    tea_head_num = tea_attention_maps[layer_map(layer_num)].shape[1]
                     stu_mean_head_out = torch.sum(stu_attn_out, dim=1) / stu_head_num
                     tea_mean_head_out = torch.sum(tea_attention_maps[layer_map(layer_num)], dim=1) / tea_head_num
                     attn_loss += loss(stu_mean_head_out, tea_mean_head_out)
@@ -326,8 +326,8 @@ class LossControl:
             elif loss_name == 'attn_probs':
                 attn_loss = 0
                 for layer_num, stu_attn_out in enumerate(stu_attention_probs):
-                    stu_head_num = stu_attn_out.shape()[1]
-                    tea_head_num = tea_attention_probs[layer_map(layer_num)].shape()[1]
+                    stu_head_num = stu_attn_out.shape[1]
+                    tea_head_num = tea_attention_probs[layer_map(layer_num)].shape[1]
                     stu_mean_head_out = torch.sum(stu_attn_out, dim=1) / stu_head_num
                     tea_mean_head_out = torch.sum(tea_attention_probs[layer_map(layer_num)], dim=1) / tea_head_num
                     attn_loss += loss(stu_mean_head_out, tea_mean_head_out)

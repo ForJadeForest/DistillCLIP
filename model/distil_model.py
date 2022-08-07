@@ -31,14 +31,13 @@ class DistillModel(pl.LightningModule):
 
         # 定义模型
         self.student = student_encoder
-
         self.teacher_name = teacher_name
         self.teacher, tea_layer_num = teacher_load(teacher_name, download_root, model_type)
         for p in self.teacher.parameters():
             p.requires_grad = False
         self.layer_map = LayerMap(student_encoder.layers, tea_layer_num, map_type)
         if init_type:
-            self.student.init_layers_with_teacher(self.layer_map, teacher_state_dict=self.teacher.state_dict())
+            self.student.init_layers_with_teacher(self.layer_map, self.teacher.state_dict(), init_type)
         self.loss_control = LossControl(**loss_control_para)
         self.need_return_para = self.loss_control.need_output()
         # 定义指标
@@ -89,7 +88,7 @@ class DistillModel(pl.LightningModule):
             metric.to(self.device)
             metric(stu_logits, label)
             self.log('hp_metric/stu_acc_top{}'.format(self.k_list[i]), metric, metric_attribute='acc_metrics',
-                     batch_size=len(inputs))
+                     batch_size=len(inputs), sync_dist=True,)
             if self.current_epoch == 0 and self.global_rank == 0:
                 acc_tea = accuracy(tea_logits, label, top_k=self.k_list[i])
                 self.log('hp_metric/tea_acc_top{}'.format(self.k_list[i]), acc_tea, prog_bar=False, sync_dist=True,

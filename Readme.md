@@ -65,6 +65,7 @@
 
    - 使用 data_256 + imagenet + MSCOCO
    - 不用 data_256
+   - 需要加入自定义dataset的结构
 
 4. 模型架构
 

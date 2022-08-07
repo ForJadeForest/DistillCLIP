@@ -97,7 +97,7 @@ class MultiheadAttention(nn.Module):
         if need_attn_score:
             attn_score_res = attention_scores
         if need_attn_prob:
-            attn_prob_res = attn_prob_res
+            attn_prob_res = attention_probs
 
         return context_layer, attn_score_res, attn_prob_res, value_map
 
