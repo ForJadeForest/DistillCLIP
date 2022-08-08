@@ -80,6 +80,10 @@
 
 
 
+### 测试过程
+- batch_size 是否能容纳，num_work的配合
+- 学习率
+- scheduler
 
 
 

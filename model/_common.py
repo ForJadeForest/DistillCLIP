@@ -145,7 +145,8 @@ class Transformer(nn.Module):
         attention_probs = []
         value_map = None
         for layer in self.resblocks:
-            x, attn, attn_prob, value_map = layer(x, need_attn_score, need_attn_prob, need_value_map)
+            x, attn, attn_prob, value_map = layer(x, need_attn_score=need_attn_score, need_value_map=need_value_map,
+                                                  need_attn_prob=need_attn_prob)
             if need_rep:
                 representations.append(x)
             if need_attn_score:

@@ -208,7 +208,7 @@ class LossControl:
         self.percent = percent
         if self.percent is None:
             self.percent = {n: 1 / len(loss_name) for n in loss_name}
-        assert sum([v for v in self.percent.values()]) - 1 <= 1e-5
+        assert abs(sum([v for v in self.percent.values()]) - 1) <= 1e-5
         print(self.percent)
         print(self.loss_scale)
 

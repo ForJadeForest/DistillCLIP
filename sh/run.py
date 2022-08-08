@@ -14,6 +14,7 @@ def get_args():
     parse.add_argument('-t', '--end_ver', type=int, default=None)
     parse.add_argument('--all_ver', action='store_true', help='whether to deal with all experiment and the versions')
     parse.add_argument('--all_ex', action='store_true', help='whether to deal with all experiment and the versions')
+    parse.add_argument('-o', '--other_para', type=str, help='whether to deal with all experiment and the versions')
     return parse.parse_args()
 
 
@@ -24,6 +25,9 @@ def run_version(ex_name, ver_num, config_path):
     config_path = [str(share_config_path), str(version_config_path)]
     print('=' * 20 + 'Now is Running {} experiment and version {}'.format(ex_name, ver_num) + '=' * 20)
     print('run command: python ./main.py fit -c ' + ' -c '.join(config_path))
+    command = 'python ./main.py fit -c ' + ' -c '.join(config_path)
+    if args.other_para:
+        command += args.other_para
     os.system('python ./main.py fit -c ' + ' -c '.join(config_path))
     print('=' * 20 + '{} experiment and version {} is done!'.format(ex_name, ver_num) + '=' * 20)
 
@@ -31,7 +35,6 @@ def run_version(ex_name, ver_num, config_path):
 if __name__ == '__main__':
     args = get_args()
     args.config = Path(args.config)
-
     if args.all_ex:
         # 完成所有的实验
         ex_file = [file for file in sorted(args.config.iterdir()) if file.is_dir()]
@@ -48,7 +51,7 @@ if __name__ == '__main__':
     elif args.ex_name and args.v_num:
         # 完成指定的一个实验和一个版本
         run_version(args.ex_name, 'version_' + args.v_num, args.config)
-    elif args.ex_name and args.begin_ver and args.end_ver:
+    elif args.ex_name and args.begin_ver is not None and args.end_ver is not None:
         # 完成指定实验的部分版本
         ex_path = args.config / args.ex_name
         for v in [file for file in sorted(ex_path.iterdir()) if file.is_dir()][args.begin_ver: args.end_ver]:

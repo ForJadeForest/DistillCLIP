@@ -47,10 +47,12 @@ class DistillModel(pl.LightningModule):
             self.acc_metrics.append(Accuracy(top_k=k))
 
     def on_train_start(self):
-        if isinstance(self.logger, WandbLogger):
-            self.logger.experiment.config.update({'student_para': self.student.hyper_para()})
-        elif isinstance(self.logger, TensorBoardLogger):
-            self.logger.log_hyperparams(self.hparams, {"hp/stu_acc_top1": 0, "hp/stu_acc_top10": 0})
+        if self.global_rank == 0:
+            # 多gpu会报错
+            if isinstance(self.logger, WandbLogger):
+                self.logger.experiment.config.update({'student_para': self.student.hyper_para()})
+            elif isinstance(self.logger, TensorBoardLogger):
+                self.logger.log_hyperparams(self.hparams, {"hp/stu_acc_top1": 0, "hp/stu_acc_top10": 0})
 
     def forward(self, inputs):
         student_outs = self.student(inputs, only_last_state=False, **self.need_return_para)
@@ -89,7 +91,7 @@ class DistillModel(pl.LightningModule):
             metric(stu_logits, label)
             self.log('hp_metric/stu_acc_top{}'.format(self.k_list[i]), metric, metric_attribute='acc_metrics',
                      batch_size=len(inputs), sync_dist=True,)
-            if self.current_epoch == 0 and self.global_rank == 0:
+            if self.current_epoch == 0:
                 acc_tea = accuracy(tea_logits, label, top_k=self.k_list[i])
                 self.log('hp_metric/tea_acc_top{}'.format(self.k_list[i]), acc_tea, prog_bar=False, sync_dist=True,
                          batch_size=len(inputs))
