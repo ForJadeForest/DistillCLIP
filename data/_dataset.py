@@ -132,7 +132,7 @@ class TextDataset(Dataset):
 
 class ImageDataset(Dataset):
     def __init__(self, data_dir=r'data/ref', train=True, no_augment=True, aug_prob=0.5, img_mean=(0.485, 0.456, 0.406),
-                 img_std=(0.229, 0.224, 0.225), train_dir=None, need_crop=False):
+                 img_std=(0.229, 0.224, 0.225), train_dir=None, need_crop=False, image_use='all'):
         super(ImageDataset, self).__init__()
         self.data_dir = Path(data_dir)
         self.train = train
@@ -155,8 +155,11 @@ class ImageDataset(Dataset):
                 self.train_image_file_path = self.train_dir
             else:
                 self.train_image_file_path = self.data_dir / 'COCO' / 'train2017'
-            self.path_list = [path for path in self.train_dir.iterdir() if
-                              not str(path.name).startswith('data_256')]
+            if image_use == 'all':
+                self.path_list = [path for path in self.train_dir.iterdir()]
+            else:
+                self.path_list = [path for path in self.train_dir.iterdir() if
+                                not str(path.name).startswith('data_256')]
 
     def load_validation_data(self):
         self.path_list = []
