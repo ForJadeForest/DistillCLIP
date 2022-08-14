@@ -11,7 +11,7 @@ except ModuleNotFoundError:
 
 class TextEncoder(nn.Module):
     def __init__(self, transformer_width, transformer_layers, transformer_heads, context_length, vocab_size, embed_dim,
-                 tea_transformer_width=None, is_student=True):
+                 tea_transformer_width=None, is_student=True, drop_out=0.1):
         super().__init__()
         self.context_length = context_length
         self.transformer_width = transformer_width
@@ -28,13 +28,14 @@ class TextEncoder(nn.Module):
             width=transformer_width,
             layers=transformer_layers,
             heads=transformer_heads,
-            attn_mask=self.build_attention_mask()
+            attn_mask=self.build_attention_mask(),
+            drop_out=drop_out
         )
         self.layers = transformer_layers
         self.embedding_projection = None
         self.hidden_projection = None
         self.is_student = is_student
-        if self.vit_paras['width'] == tea_transformer_width:
+        if transformer_layers == tea_transformer_width:
             self.no_trans = True
         if is_student:
             self.embedding_projection = nn.Linear(transformer_width, tea_transformer_width)

@@ -198,13 +198,14 @@ class LayerMap:
 
 
 class LossControl:
-    def __init__(self, loss_name, loss_scale: dict = None, temperature=None, percent=None):
+    def __init__(self, loss_name, loss_scale: dict = None, temperature=None, percent=None, need_reduce=False):
         self.loss_name = loss_name
         self.loss_scale = loss_scale
         if self.loss_scale is None:
             self.loss_scale = {n: 1 for n in self.loss_name}
         self.loss = self._init_loss()
         self.temperature = temperature
+        self.need_reduce = need_reduce
         self.percent = percent
         if self.percent is None:
             self.percent = {n: 1 / len(loss_name) for n in loss_name}
@@ -279,11 +280,14 @@ class LossControl:
                 # attention loss
                 attn_loss = 0
                 for layer_num, stu_attn_out in enumerate(stu_attention_maps):
-                    stu_head_num = stu_attn_out.shape[1]
-                    tea_head_num = tea_attention_maps[layer_map(layer_num)].shape[1]
-                    stu_mean_head_out = torch.sum(stu_attn_out, dim=1) / stu_head_num
-                    tea_mean_head_out = torch.sum(tea_attention_maps[layer_map(layer_num)], dim=1) / tea_head_num
-                    attn_loss += loss(stu_mean_head_out, tea_mean_head_out)
+                    if self.need_reduce:
+                        stu_head_num = stu_attn_out.shape[1]
+                        tea_head_num = tea_attention_maps[layer_map(layer_num)].shape[1]
+                        stu_mean_head_out = torch.sum(stu_attn_out, dim=1) / stu_head_num
+                        tea_mean_head_out = torch.sum(tea_attention_maps[layer_map(layer_num)], dim=1) / tea_head_num
+                        attn_loss += loss(stu_mean_head_out, tea_mean_head_out)
+                    else:
+                        attn_loss += loss(stu_attn_out, tea_attention_maps[layer_map(layer_num)])
                 attn_loss /= stu_layer_num
                 cal_res[loss_name] = attn_loss
             elif loss_name == 'hidden':
@@ -326,11 +330,14 @@ class LossControl:
             elif loss_name == 'attn_probs':
                 attn_loss = 0
                 for layer_num, stu_attn_out in enumerate(stu_attention_probs):
-                    stu_head_num = stu_attn_out.shape[1]
-                    tea_head_num = tea_attention_probs[layer_map(layer_num)].shape[1]
-                    stu_mean_head_out = torch.sum(stu_attn_out, dim=1) / stu_head_num
-                    tea_mean_head_out = torch.sum(tea_attention_probs[layer_map(layer_num)], dim=1) / tea_head_num
-                    attn_loss += loss(stu_mean_head_out, tea_mean_head_out)
+                    if self.need_reduce:
+                        stu_head_num = stu_attn_out.shape[1]
+                        tea_head_num = tea_attention_probs[layer_map(layer_num)].shape[1]
+                        stu_mean_head_out = torch.sum(stu_attn_out, dim=1) / stu_head_num
+                        tea_mean_head_out = torch.sum(tea_attention_probs[layer_map(layer_num)], dim=1) / tea_head_num
+                        attn_loss += loss(stu_mean_head_out, tea_mean_head_out)
+                    else:
+                        attn_loss += loss(stu_attn_out, tea_attention_probs[layer_map(layer_num)])
                 attn_loss /= stu_layer_num
                 cal_res[loss_name] = attn_loss
 

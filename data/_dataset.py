@@ -29,6 +29,7 @@ class TextDataset(Dataset):
                  img_mean=(0.485, 0.456, 0.406),
                  img_std=(0.229, 0.224, 0.225)):
         super(TextDataset, self).__init__()
+        from clip import tokenize
         self.data_dir = Path(data_dir)
         self.cache_dir = Path(cache_dir)
         if not self.cache_dir.exists():
@@ -197,7 +198,7 @@ class ImageDataset(Dataset):
             img = crop_trans(img)
 
         trans = transforms.Compose([
-            transforms.RandAugment(),
+            transforms.RandAugment(num_ops=4),
             transforms.ToTensor(),
             transforms.Normalize(self.img_mean, self.img_std),
         ]) if self.train else transforms.Compose([

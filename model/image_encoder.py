@@ -9,10 +9,10 @@ except ModuleNotFoundError:
 
 
 class ImageEncoder(nn.Module):
-    def __init__(self, is_student, vit_paras, tea_transformer_width=None):
+    def __init__(self, is_student, vit_paras, tea_transformer_width=None, drop_out=0.1):
         super().__init__()
         self.vit_paras = vit_paras
-        self.visual = VisionTransformer(**vit_paras)
+        self.visual = VisionTransformer(**vit_paras, drop_out=drop_out)
         self.is_student = is_student
         self.embedding_projection = None
         self.hidden_projection = None
@@ -82,6 +82,8 @@ class ImageEncoder(nn.Module):
             else:
                 tea_key = re.sub(re.compile('\d'), map_layer(int(res[0])), string=key, count=1)
                 my_model_state_dict[key] = tea_state_dict[tea_key]
+        self.visual.load_state_dict(my_model_state_dict)
+        print('init with teacher weight success!')
 
     def hyper_para(self):
         return self.vit_paras
