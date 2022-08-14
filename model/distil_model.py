@@ -1,7 +1,9 @@
 from typing import *
 
+import clip
 import pytorch_lightning as pl
 import torch
+import transformers
 from pytorch_lightning.utilities import cli as pl_cli
 from pytorch_lightning.loggers import WandbLogger, TensorBoardLogger
 from torch import nn, optim
@@ -20,11 +22,10 @@ loss 管理：
 - 每个loss 最后需要取平均
 """
 
-
 @pl_cli.MODEL_REGISTRY
 class DistillModel(pl.LightningModule):
     def __init__(self, student_encoder: nn.Module, teacher_name: str, loss_control_para: Dict, download_root: str,
-                 model_type: str = 'text', lr: float = 1e-3, map_type: str = 'mid', init_type=None):
+                 model_type: str = 'text', lr: float = 1e-3, map_type: str = 'mid', init_type=None,):
         super().__init__()
         self.__dict__.update(locals())
         self.save_hyperparameters(ignore=['student_encoder'])
@@ -106,10 +107,24 @@ class DistillModel(pl.LightningModule):
             self.log("{}/{}".format(stage, loss_name), loss_res, batch_size=batch_size)
 
     def configure_optimizers(self):
-        optimizer = optim.Adam(self.parameters(), lr=self.hparams.lr)
-        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=1)
-
-        return optimizer, scheduler
+        optimizer = optim.AdamW(self.parameters(), lr=self.hparams.lr, weight_decay=0.0001)
+        scheduler = transformers.get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=20, num_training_steps=180)
+        """
+        optimizer:
+          class_path: AdamW
+          init_args:
+            lr: 1.0e-3
+            weight_decay: 0.0001
+            eps: 1.0e-8
+        
+        
+        lr_scheduler:
+          class_path: get_cosine_schedule_with_warmup
+          init_args:
+            num_warmup_steps: 5
+            num_training_steps: 200
+        """
+        return [optimizer], [scheduler]
 
 
 def norm_and_logits(encode, stu_encode, tea_encode):

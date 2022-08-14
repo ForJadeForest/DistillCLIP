@@ -1,11 +1,8 @@
-from data import *
 from model import *
-from pytorch_lightning.utilities import cli as pl_cli
-import torch
+from data import *
 import pytorch_lightning as pl
-import os
-
-os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+import torch
+from pytorch_lightning.utilities import cli as pl_cli
 
 # 导入torch中所有的优化器
 pl_cli.OPTIMIZER_REGISTRY.register_classes(module=torch.optim, base_cls=torch.optim.Optimizer)

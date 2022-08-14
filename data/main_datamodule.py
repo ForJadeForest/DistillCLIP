@@ -11,13 +11,15 @@ from torch.utils.data import DataLoader, Dataset
 class DistillationDataModule(pl.LightningDataModule):
     def __init__(self, kwargs, num_workers=8,
                  dataset='',
-                 batch_size=128,
+                 train_batch_size=128,
+                 val_batch_size=1024
                  ):
         super().__init__()
         self.num_workers = num_workers
         self.dataset = dataset
         self.kwargs = kwargs
-        self.batch_size = batch_size
+        self.train_batch_size = train_batch_size
+        self.val_batch_size = val_batch_size
         self.dataset_name = kwargs['dataset_name']
         self.load_data_module()
         self.save_hyperparameters()
@@ -33,14 +35,14 @@ class DistillationDataModule(pl.LightningDataModule):
             self.testset = self.instancialize(train=False)
 
     def train_dataloader(self):
-        return DataLoader(self.trainset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=True,
+        return DataLoader(self.trainset, batch_size=self.train_batch_size, num_workers=self.num_workers, shuffle=True,
                           pin_memory=True)
 
     def val_dataloader(self):
-        return DataLoader(self.valset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
+        return DataLoader(self.valset, batch_size=self.val_batch_size, num_workers=self.num_workers, shuffle=False)
 
     def test_dataloader(self):
-        return DataLoader(self.testset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
+        return DataLoader(self.testset, batch_size=self.val_batch_size, num_workers=self.num_workers, shuffle=False)
 
     def load_data_module(self):
         dataset_file = self.dataset

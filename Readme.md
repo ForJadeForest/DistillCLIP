@@ -24,11 +24,14 @@
 - [x] 因为copy的小错误，导致ImageEncoder构建的时候，`attention head num` 出现错误调试bug一个晚上。警钟长鸣
 - [x] 测试teacher的mode
 - [ ] config 的更新能否细化
-- [ ] 目前训练花费时间比较长。ImageEncoder一个epoch ~ 35min，TextEncoder ~ 25min。
+- [x] 目前训练花费时间比较长。ImageEncoder一个epoch ~ 35min，TextEncoder ~ 25min。
   - [ ] 将图像存为lmdb格式
+    - 似乎没什么用
   - [x] 将data存放到home下
-  - [ ] pin_memory 参数设置
+  - [x] pin_memory 参数设置
   - [x] 提前做好数据裁切
+  
+  - 使用16 precision + 多卡
 
 
 ### Config
@@ -77,6 +80,10 @@
    - 减少宽度，减少层数，不增加头数 (768 // 2 width + 6 layers + 12 heads)
 
 5. Input 图像大小，按理来说Vit应该没有输入限制？
+
+6. Deit 提到dropout会导致性能损失
+
+7. 多加一点图像增强
 
 
 
