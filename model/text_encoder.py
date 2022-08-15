@@ -35,6 +35,7 @@ class TextEncoder(nn.Module):
         self.embedding_projection = None
         self.hidden_projection = None
         self.is_student = is_student
+        self.no_trans = False
         if transformer_layers == tea_transformer_width:
             self.no_trans = True
         if is_student:
@@ -92,7 +93,7 @@ class TextEncoder(nn.Module):
 
     def hyper_para(self):
         return {
-            'context_length': self.context_leng,
+            'context_length': self.context_length,
             'transformer_width': self.transformer_width,
             'transformer_layers': self.transformer_layers,
             'transformer_heads': self.transformer_heads,
