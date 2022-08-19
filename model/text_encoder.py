@@ -101,9 +101,62 @@ class TextEncoder(nn.Module):
             'embed_dim': self.embed_dim,
         }
 
+    def init_layers_with_teacher(self, layer_map, teacher_state_dict=None, init_type=None):
+        if init_type is None:
+            return
+        import re
+        pattern = re.compile('transformer.resblocks.([\d])')
+        stu_layer_num = layer_map.stu_total_layer_num
+        tea_layer_num = layer_map.tea_total_layer_num
+        tea_state_dict = teacher_state_dict
+        my_model_state_dict = self.state_dict()
+
+        if init_type == 'begin':
+            map_layer = lambda x: str(x)
+        elif init_type == 'end':
+            map_layer = lambda x: str(tea_layer_num - stu_layer_num + x)
+        elif init_type == 'mid':
+            map_layer = lambda x: str(x * layer_map.step)
+        else:
+            raise ValueError('the init_type should be begin, end, and mid, but got {}'.format(self.init_type))
+        for key in my_model_state_dict.keys():
+            if key not in tea_state_dict:
+                continue
+            res = re.findall(pattern, key)
+            if not res and not key.startswith('visual'):
+                my_model_state_dict[key] = tea_state_dict[key]
+            else:
+                tea_key = re.sub(re.compile('\d'), map_layer(int(res[0])), string=key, count=1)
+                my_model_state_dict[key] = tea_state_dict[tea_key]
+        self.load_state_dict(my_model_state_dict)
+        print('init with teacher weight success!')
+
 
 if __name__ == '__main__':
-    m = TextEncoder(256, 2, 8, 77, 300, 150, 768, True)
-    inputs = torch.randint(low=0, high=300, size=(64, 77))
-    outputs = m(inputs, False)
-    print(len(outputs), outputs[0].shape)
+    m = TextEncoder(512, 6, 8, 77, 49408, 512, 768, True)
+    # inputs = torch.randint(low=0, high=300, size=(64, 77))
+    # outputs = m(inputs, False)
+    # print(len(outputs), outputs[0].shape)
+    from _utils import LayerMap
+    layer_map = LayerMap(6, 12, 'mid')
+    from _utils import load
+    state_dict = load('ViT-B/32', download_root='D:/data/cache')
+    para = {
+        'embed_dim': state_dict["text_projection"].shape[1],
+        'context_length': state_dict["positional_embedding"].shape[0],
+        'vocab_size': state_dict["token_embedding.weight"].shape[0],
+        'transformer_width': state_dict["ln_final.weight"].shape[0],
+        'transformer_heads': state_dict["ln_final.weight"].shape[0] // 64,
+        'transformer_layers': len(set(k.split(".")[2] for k in state_dict if k.startswith(f"transformer.resblocks"))),
+    }
+    teacher_model = TextEncoder(is_student=False, **para)
+    my_state_dict = teacher_model.state_dict()
+    for k in my_state_dict:
+        if k in state_dict:
+            my_state_dict[k] = state_dict[k]
+    teacher_model.load_state_dict(my_state_dict)
+
+    m.init_layers_with_teacher(layer_map, teacher_model.state_dict(), 'begin')
+    m.init_layers_with_teacher(layer_map, teacher_model.state_dict(), 'mid')
+    m.init_layers_with_teacher(layer_map, teacher_model.state_dict(), 'end')
+
