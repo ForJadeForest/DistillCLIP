@@ -136,11 +136,10 @@ def get_visual_transformer_para(state_dict):
 def teacher_load(teacher_name: str, download_root, model_type):
     from .text_encoder import TextEncoder
     from .image_encoder import ImageEncoder
+    state_dict = load(teacher_name, download_root=download_root)
     if model_type == 'text':
-        state_dict = load(teacher_name, download_root=download_root)
         para = get_transformer_para(state_dict)
         teacher_model = TextEncoder(is_student=False, **para)
-
         my_state_dict = teacher_model.state_dict()
         for k in my_state_dict:
             if k in state_dict:
@@ -148,7 +147,6 @@ def teacher_load(teacher_name: str, download_root, model_type):
         teacher_model.load_state_dict(my_state_dict)
         return teacher_model, para['transformer_layers']
     elif model_type == 'image':
-        state_dict = load(teacher_name, download_root=download_root)
         para = get_visual_transformer_para(state_dict)
         teacher_model = ImageEncoder(is_student=False, vit_paras=para)
         my_state_dict = teacher_model.state_dict()
@@ -157,6 +155,27 @@ def teacher_load(teacher_name: str, download_root, model_type):
                 my_state_dict[k] = state_dict[k]
         teacher_model.load_state_dict(my_state_dict)
         return teacher_model, para['layers']
+    elif model_type == 'all':
+        from .clip_model import CLIPModel
+        vit_para = get_visual_transformer_para(state_dict)
+        trans_para = get_transformer_para(state_dict)
+        teacher_model = CLIPModel(False, vit_para, trans_para)
+        my_state_dict = teacher_model.state_dict()
+        map_d = {
+            k: False for k in my_state_dict.keys()
+        }
+        for k in my_state_dict:
+            if k in state_dict:
+                my_state_dict[k] = state_dict[k]
+                map_d[k] = True
+            elif k.startswith('text_encoder'):
+                my_state_dict[k] = state_dict[k.replace('text_encoder.', '')]
+                map_d[k] = True
+            elif k.startswith('image_encoder'):
+                my_state_dict[k] = state_dict[k.replace('image_encoder.', '')]
+                map_d[k] = True
+        teacher_model.load_state_dict(my_state_dict)
+        return teacher_model, vit_para['layers']
 
 
 def output_filter(is_student, representations, embedding_projection, embedding, attention_maps, last_state,
@@ -169,7 +188,7 @@ def output_filter(is_student, representations, embedding_projection, embedding, 
             else:
                 break
         if need_emb:
-                embedding = embedding_projection(embedding)
+            embedding = embedding_projection(embedding)
         else:
             embedding = None
     if need_attn_score:
@@ -234,7 +253,13 @@ class LossControl:
                 loss_function = nn.MSELoss()
             elif n == 'last_attn':
                 loss_function = nn.KLDivLoss(reduction='batchmean')
+            elif n == 'last_attn_probs':
+                loss_function = nn.KLDivLoss(reduction='batchmean')
             elif n == 'last_value_map':
+                loss_function = nn.KLDivLoss(reduction='batchmean')
+            elif n == 'label':
+                loss_function = nn.CrossEntropyLoss(reduction='mean')
+            elif n == 'soft_label':
                 loss_function = nn.KLDivLoss(reduction='batchmean')
             else:
                 raise ValueError("Invalid Loss Type!")
@@ -259,13 +284,46 @@ class LossControl:
             elif n == 'hidden':
                 need_para['need_rep'] = True
             elif n == 'last_attn':
-                need_para['need_attn_prob'] = True
+                need_para['need_attn_score'] = True
             elif n == 'last_value_map':
                 need_para['need_value_map'] = True
+            elif n == 'last_attn_probs':
+                need_para['need_attn_prob'] = True
 
         return need_para
 
-    def cal_loss(self, stu_out, tea_out, layer_map: LayerMap, device):
+    def cal_tow_tower_loss(self, stu_out, tea_out, layer_map: LayerMap, device: str):
+        stu_image_output, stu_text_output, stu_logits = stu_out
+        tea_image_output, tea_text_output, tea_logits = tea_out
+        cal_res = {}
+        image_loss, image_loss_dict = self.cal_one_tower_loss(stu_image_output, tea_image_output, layer_map, device)
+        text_loss, text_loss_dict = self.cal_one_tower_loss(stu_text_output, tea_text_output, layer_map, device)
+        cal_res.update(image_loss_dict)
+        for k, v in image_loss_dict:
+            cal_res['image_' + k] = v
+        for k, v in text_loss_dict:
+            cal_res['text_' + k] = v
+
+        for loss_name in self.loss_name:
+            loss = self.loss[loss_name]
+            if loss_name == 'label':
+                label = torch.arange(stu_logits.shape[0], device=device)
+                cal_res[loss_name] = loss(stu_logits, label)
+            elif loss_name == 'soft_label':
+                assert self.temperature
+                logits_kl_loss = loss(
+                    f.softmax(stu_logits / self.temperature, dim=1).log(),
+                    f.softmax(tea_logits / self.temperature, dim=1)
+                ) * self.temperature ** 2
+                cal_res[loss_name] = logits_kl_loss
+        loss = 0.5 * (image_loss + text_loss)
+        for (loss_name, scale) in self.loss_scale.items():
+            if loss_name == 'label' or loss_name == 'soft_label':
+                cal_res[loss_name] = cal_res[loss_name] * scale
+            loss += cal_res[loss_name] * self.percent[loss_name]
+        return loss, cal_res
+
+    def cal_one_tower_loss(self, stu_out, tea_out, layer_map: LayerMap, device):
         stu_last_rep, stu_attention_maps, stu_representations, stu_embedding, stu_attention_probs, stu_value_map = stu_out
         tea_last_rep, tea_attention_maps, tea_representations, tea_embedding, tea_attention_probs, tea_value_map = tea_out
         stu_layer_num = layer_map.stu_total_layer_num
@@ -319,8 +377,8 @@ class LossControl:
                 cal_res[loss_name] = logits_ce_loss
             elif loss_name == 'last_attn':
                 cal_res[loss_name] = loss(
-                    f.softmax(stu_attention_probs[-1], dim=1).log(),
-                    f.softmax(tea_attention_probs[-1], dim=1)
+                    f.softmax(stu_attention_maps[-1], dim=1).log(),
+                    f.softmax(tea_attention_maps[-1], dim=1)
                 )
             elif loss_name == 'last_value_map':
                 cal_res[loss_name] = loss(
@@ -340,6 +398,15 @@ class LossControl:
                         attn_loss += loss(stu_attn_out, tea_attention_probs[layer_map(layer_num)])
                 attn_loss /= stu_layer_num
                 cal_res[loss_name] = attn_loss
+            elif loss_name == 'last_attn_probs':
+                cal_res[loss_name] = loss(
+                    f.softmax(stu_attention_probs[-1], dim=1).log(),
+                    f.softmax(tea_attention_probs[-1], dim=1)
+                )
+            elif loss_name == 'label':
+                continue
+            elif loss_name == 'soft_label':
+                continue
 
         loss = 0
         for (loss_name, scale) in self.loss_scale.items():
