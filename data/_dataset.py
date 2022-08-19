@@ -26,8 +26,9 @@ def encode_images(path_list):
 
 class TextDataset(Dataset):
     def __init__(self, cache_dir='cache', data_dir=r'data/ref', train=True, overwrite=False,
-                 img_mean=(0.485, 0.456, 0.406),
-                 img_std=(0.229, 0.224, 0.225)):
+                 img_mean=(0.48145466, 0.4578275, 0.40821073),
+                 img_std=(0.26862954, 0.26130258, 0.27577711)
+                 ):
         super(TextDataset, self).__init__()
         from clip import tokenize
         self.data_dir = Path(data_dir)
@@ -132,8 +133,9 @@ class TextDataset(Dataset):
 
 
 class ImageDataset(Dataset):
-    def __init__(self, data_dir=r'data/ref', train=True, no_augment=True, aug_prob=0.5, img_mean=(0.485, 0.456, 0.406),
-                 img_std=(0.229, 0.224, 0.225), train_dir=None, need_crop=False, image_use='all'):
+    def __init__(self, data_dir=r'data/ref', train=True, no_augment=True, aug_prob=0.5,
+                 img_mean=(0.48145466, 0.4578275, 0.40821073),
+                 img_std=(0.26862954, 0.26130258, 0.27577711), train_dir=None, need_crop=False, image_use='all'):
         super(ImageDataset, self).__init__()
         self.data_dir = Path(data_dir)
         self.train = train
@@ -141,7 +143,8 @@ class ImageDataset(Dataset):
         self.aug_prob = aug_prob
         self.img_mean = img_mean
         self.img_std = img_std
-        self.train_dir = Path(train_dir)
+        if train_dir:
+            self.train_dir = Path(train_dir)
         self.aug = train and not no_augment
         self.path_list = None
         self.need_crop = need_crop
@@ -160,7 +163,7 @@ class ImageDataset(Dataset):
                 self.path_list = [path for path in self.train_dir.iterdir()]
             else:
                 self.path_list = [path for path in self.train_dir.iterdir() if
-                                not str(path.name).startswith('data_256')]
+                                  not str(path.name).startswith('data_256')]
 
     def load_validation_data(self):
         self.path_list = []
