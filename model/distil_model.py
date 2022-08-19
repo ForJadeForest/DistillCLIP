@@ -1,11 +1,9 @@
 from typing import *
-
-import clip
 import pytorch_lightning as pl
 import torch
 import transformers
-from pytorch_lightning.utilities import cli as pl_cli
 from pytorch_lightning.loggers import WandbLogger, TensorBoardLogger
+from pytorch_lightning.utilities import cli as pl_cli
 from torch import nn, optim
 from torchmetrics import Accuracy
 from torchmetrics.functional import accuracy
@@ -22,10 +20,11 @@ loss 管理：
 - 每个loss 最后需要取平均
 """
 
+
 @pl_cli.MODEL_REGISTRY
 class DistillModel(pl.LightningModule):
     def __init__(self, student_encoder: nn.Module, teacher_name: str, loss_control_para: Dict, download_root: str,
-                 model_type: str = 'text', lr: float = 1e-3, map_type: str = 'mid', init_type=None,):
+                 model_type: str = 'text', lr: float = 1e-3, map_type: str = 'mid', init_type=None, ):
         super().__init__()
         self.__dict__.update(locals())
         self.save_hyperparameters(ignore=['student_encoder'])
@@ -37,8 +36,7 @@ class DistillModel(pl.LightningModule):
         for p in self.teacher.parameters():
             p.requires_grad = False
         self.layer_map = LayerMap(student_encoder.layers, tea_layer_num, map_type)
-        if init_type:
-            self.student.init_layers_with_teacher(self.layer_map, self.teacher.state_dict(), init_type)
+        self.student.init_layers_with_teacher(self.layer_map, self.teacher.state_dict(), init_type)
         self.loss_control = LossControl(**loss_control_para)
         self.need_return_para = self.loss_control.need_output()
         # 定义指标
@@ -64,7 +62,7 @@ class DistillModel(pl.LightningModule):
         self.teacher.eval()
         student_outs, teacher_outs = self.forward(inputs)
 
-        loss, cal_res = self.loss_control.cal_loss(student_outs, teacher_outs, self.layer_map, self.device)
+        loss, cal_res = self.loss_control.cal_one_tower_loss(student_outs, teacher_outs, self.layer_map, self.device)
         # Logging to TensorBoard by default
         self.log_info('train', loss, cal_res, batch_size=len(inputs))
         return loss
@@ -82,7 +80,7 @@ class DistillModel(pl.LightningModule):
 
         student_outs, teacher_outs = self.forward(inputs)
         label = torch.arange(student_outs[0].shape[0], device=self.device)
-        loss, cal_res = self.loss_control.cal_loss(student_outs, teacher_outs, self.layer_map, self.device)
+        loss, cal_res = self.loss_control.cal_one_tower_loss(student_outs, teacher_outs, self.layer_map, self.device)
         stu_logits, tea_logits = norm_and_logits(contrary_rep, student_outs[0], teacher_outs[0])[:2]
 
         # log metric
@@ -91,7 +89,7 @@ class DistillModel(pl.LightningModule):
             metric.to(self.device)
             metric(stu_logits, label)
             self.log('hp_metric/stu_acc_top{}'.format(self.k_list[i]), metric, metric_attribute='acc_metrics',
-                     batch_size=len(inputs), sync_dist=True,)
+                     batch_size=len(inputs), sync_dist=True, )
             if self.current_epoch == 0:
                 acc_tea = accuracy(tea_logits, label, top_k=self.k_list[i])
                 self.log('hp_metric/tea_acc_top{}'.format(self.k_list[i]), acc_tea, prog_bar=False, sync_dist=True,
