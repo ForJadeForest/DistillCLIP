@@ -14,15 +14,6 @@ try:
 except ModuleNotFoundError:
     from ._utils import teacher_load, LayerMap, LossControl
 
-"""
-loss 管理：
-- 可以指定loss进行计算。
-- 每个loss 需要规格化参数
-- 每个loss 最后需要取平均
-
-forward parameter 需要控制
-"""
-
 
 @pl_cli.MODEL_REGISTRY
 class DistillModel(pl.LightningModule):
