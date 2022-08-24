@@ -35,6 +35,16 @@ class AttentionOutput(nn.Module):
         return hidden_states
 
 
+# 代替attention层的无参数傅立叶变换模块Fourier
+class FNetBlock(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        x = torch.fft.fft(torch.fft.fft(x, dim=-1), dim=-2).real
+        return x
+
+
 class MultiheadAttention(nn.Module):
     def __init__(self, hidden_size, num_attention_heads, drop_prob):
         super().__init__()
@@ -100,6 +110,80 @@ class MultiheadAttention(nn.Module):
             attn_prob_res = attention_probs
 
         return context_layer, attn_score_res, attn_prob_res, value_map
+
+
+class ResidualAttentionBlockFFT(nn.Module):
+    def __init__(self, d_model: int):
+        super().__init__()
+
+        self.attn = FNetBlock()
+        self.ln_1 = LayerNorm(d_model)
+        self.mlp = nn.Sequential(OrderedDict([
+            ("c_fc", nn.Linear(d_model, d_model * 4)),
+            ("gelu", QuickGELU()),
+            ("c_proj", nn.Linear(d_model * 4, d_model))
+        ]))
+        self.ln_2 = LayerNorm(d_model)
+
+    def attention(self, x: torch.Tensor):
+        return self.attn(x)
+
+    def forward(self, x: torch.Tensor):
+        attn_output = self.attention(x)
+        x = x + attn_output
+        x = x + self.mlp(self.ln_2(x))
+        return x
+
+
+class TransformerFFT(nn.Module):
+    def __init__(self, width: int, layers: int):
+        super().__init__()
+        self.width = width
+        self.layers = layers
+        self.resblocks = nn.Sequential(
+            *[ResidualAttentionBlockFFT(width) for _ in range(layers)])
+
+    def forward(self, x: torch.Tensor):
+        for layer in self.resblocks:
+            x = layer(x)
+        return x
+
+
+class VisionTransformerFFT(nn.Module):
+    def __init__(self, input_resolution: int, patch_size: int, width: int, layers: int, output_dim: int,
+             ):
+        super().__init__()
+        self.input_resolution = input_resolution
+        self.output_dim = output_dim
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=width, kernel_size=patch_size, stride=patch_size, bias=False)
+
+        scale = width ** -0.5
+        self.class_embedding = nn.Parameter(scale * torch.randn(width))
+        self.positional_embedding = nn.Parameter(scale * torch.randn((input_resolution // patch_size) ** 2 + 1, width))
+        self.ln_pre = LayerNorm(width)
+
+        self.transformer = TransformerFFT(width, layers)
+
+        self.ln_post = LayerNorm(width)
+        self.proj = nn.Parameter(scale * torch.randn(width, output_dim))
+
+    def forward(self, x: torch.Tensor):
+        x = self.conv1(x)  # shape = [*, width, grid, grid]
+        x = x.reshape(x.shape[0], x.shape[1], -1)  # shape = [*, width, grid ** 2]
+        x = x.permute(0, 2, 1)  # shape = [*, grid ** 2, width]
+        x = torch.cat(
+            [self.class_embedding.to(x.dtype) + torch.zeros(x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device),
+             x], dim=1)  # shape = [*, grid ** 2 + 1, width]
+        x = x + self.positional_embedding.to(x.dtype)
+        x = self.ln_pre(x)
+        x = self.transformer(x)
+
+        x = self.ln_post(x[:, 0, :])
+
+        if self.proj is not None:
+            x = x @ self.proj
+
+        return x
 
 
 class ResidualAttentionBlock(nn.Module):

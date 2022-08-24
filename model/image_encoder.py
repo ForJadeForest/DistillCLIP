@@ -1,11 +1,31 @@
 from torch import nn
 
 try:
-    from ._common import VisionTransformer
-    from ._utils import output_filter, load
-except ModuleNotFoundError:
-    from _common import VisionTransformer
+    from _common import VisionTransformer, VisionTransformerFFT
     from _utils import output_filter, load
+
+except ModuleNotFoundError:
+    from ._common import VisionTransformer, VisionTransformerFFT
+    from ._utils import output_filter, load
+
+
+class ImageEncoderFFT(nn.Module):
+    def __init__(self, is_student, vit_paras):
+        super().__init__()
+        self.vit_paras = vit_paras
+        self.visual = VisionTransformerFFT(**vit_paras)
+        self.is_student = is_student
+        self.layers = vit_paras['layers']
+
+    def encode_image(self, image):
+        last_state = self.visual(image)
+        return last_state
+
+    def forward(self, image):
+        return self.encode_image(image)
+
+    def hyper_para(self):
+        return self.vit_paras
 
 
 class ImageEncoder(nn.Module):
