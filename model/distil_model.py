@@ -106,7 +106,7 @@ class DistillModel(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = optim.AdamW(self.parameters(), lr=self.hparams.lr, weight_decay=0.0001)
-        scheduler = transformers.get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=20, num_training_steps=180)
+        scheduler = transformers.get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=10, num_training_steps=90)
         """
         optimizer:
           class_path: AdamW
