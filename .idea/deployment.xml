@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" autoUpload="Always" serverName="pyz@223.3.82.119:22 password" confirmBeforeUploading="false">
+  <component name="PublishConfigData" autoUpload="Always" confirmBeforeUploading="false">
     <option name="confirmBeforeUploading" value="false" />
     <serverData>
       <paths name="pyz@10.201.118.82:22 password">
@@ -10,21 +10,17 @@
           </mappings>
         </serverdata>
       </paths>
-      <paths name="pyz@223.3.82.119:22 password">
+      <paths name="pyz@yang1.shiyu.ml:22 password">
         <serverdata>
           <mappings>
             <mapping deploy="/home/pyz/code/Dis_CLIP" local="$PROJECT_DIR$" />
           </mappings>
-          <excludedPaths>
-            <excludedPath local="true" path="$PROJECT_DIR$/cifar-100-python.tar.gz" />
-            <excludedPath local="true" path="$PROJECT_DIR$/cifar-100-python" />
-          </excludedPaths>
         </serverdata>
       </paths>
-      <paths name="yangxu">
+      <paths name="pyz@yang2.shiyu.ml:22 password">
         <serverdata>
           <mappings>
-            <mapping local="$PROJECT_DIR$" web="/" />
+            <mapping deploy="/home/pyz/code/Dis_CLIP" local="$PROJECT_DIR$" />
           </mappings>
         </serverdata>
       </paths>

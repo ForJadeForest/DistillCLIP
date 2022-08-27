@@ -93,16 +93,17 @@
   - [x] 编写teacher模型加载权重
     - [x] 代码书写
       - [x] CLIP使用的module不支持获取attention map，需要自己写Multi attention结构，二者代码结构上不同，所以权重加载得自己写。
-    - [ ] 测试
+    - [x] 测试
       - [x] 原版CLIP与加载权重后的CLIP输出结果误差： 1e-5
-      - [ ] 在imagenet上的预测效果
   - [ ] CLIP 的Text Transformer带mask，而TinyBert不使用mask。导致CLIP的attention map存在 -inf。会影响loss计算
     - [x] 将 inf 设置为0
     - [ ] 使用不加mask的attention进行蒸馏
   - [ ] 各个loss的权重
     - [x] 手动调节
-  
   - [ ] 指标的书写，测试结果
+  - [ ] 数据集的下载以及对应的dataset
+  - [ ] 模型蒸馏的速度评估
+    - [参考指标与计算方法](https://zhuanlan.zhihu.com/p/376925457)
   
   
 

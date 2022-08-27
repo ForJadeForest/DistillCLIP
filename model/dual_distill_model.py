@@ -14,6 +14,7 @@ try:
     from clip_model import CLIPModel
 except ModuleNotFoundError:
     from ._utils import teacher_load, LayerMap, LossControl
+    from .clip_model import CLIPModel
 
 
 @pl_cli.MODEL_REGISTRY
@@ -57,7 +58,6 @@ class DualDistillModel(pl.LightningModule):
         self.teacher.eval()
         student_outs, teacher_outs = self.forward(inputs)
         loss, cal_res = self.loss_control.cal_tow_tower_loss(student_outs, teacher_outs, self.layer_map, self.device)
-        # Logging to TensorBoard by default
         self.log_info('train', loss, cal_res, batch_size=len(inputs))
         return loss
 
