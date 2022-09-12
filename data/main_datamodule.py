@@ -7,7 +7,6 @@ from pytorch_lightning.utilities import cli as pl_cli
 from torch.utils.data import DataLoader, Dataset
 
 
-@pl_cli.DATAMODULE_REGISTRY
 class DistillationDataModule(pl.LightningDataModule):
     def __init__(self, kwargs, num_workers=8,
                  dataset='',

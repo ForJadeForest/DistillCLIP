@@ -13,10 +13,12 @@ except ModuleNotFoundError:
 
 
 class CLIPModel(nn.Module):
-    def __init__(self, is_student, vit_paras: Dict, text_encoder_para: Dict):
+    def __init__(self, is_student, vit_paras: Dict, text_encoder_para: Dict, tea_transformer_width=None):
         super().__init__()
-        self.image_encoder = ImageEncoder(is_student=is_student, vit_paras=vit_paras)
-        self.text_encoder = TextEncoder(is_student=is_student, **text_encoder_para)
+        self.image_encoder = ImageEncoder(is_student=is_student, vit_paras=vit_paras,
+                                          tea_transformer_width=tea_transformer_width)
+        self.text_encoder = TextEncoder(is_student=is_student, **text_encoder_para,
+                                        tea_transformer_width=tea_transformer_width)
         self.arch_para = vit_paras.update(text_encoder_para)
         self.is_student = is_student
 
@@ -40,9 +42,9 @@ class CLIPModel(nn.Module):
             logits = image_feature @ text_feature.t()
             return image_output, text_output, logits
 
-    def init_layers_with_teacher(self, layer_map, teacher_state_dict=None, init_type=None):
-        self.image_encoder.init_layers_with_teacher(layer_map, teacher_state_dict, init_type)
-        self.text_encoder.init_layers_with_teacher(layer_map, teacher_state_dict, init_type)
+    def init_layers_with_teacher(self, text_layer_map, image_layer_map, teacher_state_dict=None, init_type=None):
+        self.image_encoder.init_layers_with_teacher(image_layer_map, teacher_state_dict, init_type)
+        self.text_encoder.init_layers_with_teacher(text_layer_map, teacher_state_dict, init_type)
 
     def hyper_para(self):
         return self.arch_para

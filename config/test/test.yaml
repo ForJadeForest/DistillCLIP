@@ -122,6 +122,7 @@ optimizer:
     amsgrad: True
 
 lr_scheduler:
-  class_path: CosineAnnealingLR
+  class_path: transformers.optimization.get_cosine_schedule_with_warmup
   init_args:
-    T_max: 400
+    num_warmup_steps: 20
+    num_training_steps: 180

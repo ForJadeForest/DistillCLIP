@@ -161,9 +161,12 @@ class ImageDataset(Dataset):
                 self.train_image_file_path = self.data_dir / 'COCO' / 'train2017'
             if image_use == 'all':
                 self.path_list = [path for path in self.train_dir.iterdir()]
-            else:
+            elif image_use == 'no_all':
                 self.path_list = [path for path in self.train_dir.iterdir() if
                                   not str(path.name).startswith('data_256')]
+            else:
+                self.path_list = [path for path in self.train_dir.iterdir() if not
+                                str(path.name).startswith('data_256') and not str(path.name).startswith('imagenet')]
 
     def load_validation_data(self):
         self.path_list = []

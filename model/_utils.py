@@ -175,7 +175,7 @@ def teacher_load(teacher_name: str, download_root, model_type):
                 my_state_dict[k] = state_dict[k.replace('image_encoder.', '')]
                 map_d[k] = True
         teacher_model.load_state_dict(my_state_dict)
-        return teacher_model, vit_para['layers']
+        return teacher_model, vit_para['layers'], trans_para['transformer_layers']
 
 
 def output_filter(is_student, representations, embedding_projection, embedding, attention_maps, last_state,
@@ -292,16 +292,17 @@ class LossControl:
 
         return need_para
 
-    def cal_tow_tower_loss(self, stu_out, tea_out, layer_map: LayerMap, device: str):
+    def cal_tow_tower_loss(self, stu_out, tea_out, image_layer_map: LayerMap, text_layer_map: LayerMap, device: str):
         stu_image_output, stu_text_output, stu_logits = stu_out
         tea_image_output, tea_text_output, tea_logits = tea_out
         cal_res = {}
-        image_loss, image_loss_dict = self.cal_one_tower_loss(stu_image_output, tea_image_output, layer_map, device)
-        text_loss, text_loss_dict = self.cal_one_tower_loss(stu_text_output, tea_text_output, layer_map, device)
+        image_loss, image_loss_dict = self.cal_one_tower_loss(stu_image_output, tea_image_output, image_layer_map,
+                                                              device)
+        text_loss, text_loss_dict = self.cal_one_tower_loss(stu_text_output, tea_text_output, text_layer_map, device)
         cal_res.update(image_loss_dict)
-        for k, v in image_loss_dict:
+        for k, v in image_loss_dict.items():
             cal_res['image_' + k] = v
-        for k, v in text_loss_dict:
+        for k, v in text_loss_dict.items():
             cal_res['text_' + k] = v
 
         for loss_name in self.loss_name:
@@ -403,13 +404,11 @@ class LossControl:
                     f.softmax(stu_attention_probs[-1], dim=1).log(),
                     f.softmax(tea_attention_probs[-1], dim=1)
                 )
-            elif loss_name == 'label':
-                continue
-            elif loss_name == 'soft_label':
-                continue
 
         loss = 0
         for (loss_name, scale) in self.loss_scale.items():
+            if loss_name == 'label' or loss_name == 'soft_label':
+                continue
             cal_res[loss_name] = cal_res[loss_name] * scale
             loss += cal_res[loss_name] * self.percent[loss_name]
 

@@ -15,7 +15,6 @@ except ModuleNotFoundError:
     from ._utils import teacher_load, LayerMap, LossControl
 
 
-@pl_cli.MODEL_REGISTRY
 class DistillModel(pl.LightningModule):
     def __init__(self, student_encoder: nn.Module, teacher_name: str, loss_control_para: Dict, download_root: str,
                  model_type: str = 'text', lr: float = 1e-3, map_type: str = 'mid', init_type=None, ):

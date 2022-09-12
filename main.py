@@ -3,8 +3,14 @@ from data import *
 import pytorch_lightning as pl
 import torch
 from pytorch_lightning.utilities import cli as pl_cli
+from transformers.optimization import get_cosine_schedule_with_warmup
+#
+#
+# @pl_cli.LR_SCHEDULER_REGISTRY
+# def warm_up_scheduler(*args, **kwargs):
+#     return get_cosine_schedule_with_warmup(*args, **kwargs)
 
-# 导入torch中所有的优化器
+
 class MyLightningCLI(pl_cli.LightningCLI):
     @staticmethod
     def configure_optimizers(lightning_module, optimizer, lr_scheduler=None):
