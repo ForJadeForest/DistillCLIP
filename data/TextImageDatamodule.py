@@ -16,6 +16,7 @@ class TextImageDataModule(pl.LightningDataModule):
         self.img_std = (0.26862954, 0.26130258, 0.27577711)
         url = [str(i) for i in list(Path(image_path).glob('*.tar'))]
         self.train_url, self.val_url = train_test_split(url, test_size=0.1)
+        print(f'len(train) == {len(self.train_url)}, len(val) == {len(self.val_url)}')
 
     def make_transform(self, is_train):
         if is_train:
@@ -55,7 +56,7 @@ class TextImageDataModule(pl.LightningDataModule):
             .shuffle(shuffle)
             .decode("pil")
             .to_tuple("jpg", "txt")
-            .map(lambda x: (transform(x[0]), tokenize(x[1])))
+            .map(lambda x: (transform(x[0]), tokenize(x[1], truncate=True)))
             .batched(self.batch_size, partial=False)
         )
 

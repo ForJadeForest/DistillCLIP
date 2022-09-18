@@ -66,7 +66,7 @@ class DualDistillModel(pl.LightningModule):
         student_outs, teacher_outs = self.forward(inputs)
         loss, cal_res = self.loss_control.cal_tow_tower_loss(student_outs, teacher_outs, self.image_layer_map,
                                                              self.text_layer_map, self.device)
-        self.log_info('train', loss, cal_res, batch_size=len(inputs), )
+        self.log_info('train', loss, cal_res, batch_size=len(inputs))
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -102,7 +102,7 @@ class DualDistillModel(pl.LightningModule):
             self.log("{}/{}".format(stage, loss_name), loss_res, batch_size=batch_size, sync_dist=True)
 
     def configure_optimizers(self):
-        optimizer = optim.AdamW(self.parameters(), lr=self.hparams.lr, weight_decay=0.0001)
+        optimizer = optim.AdamW(self.parameters(), lr=self.hparams.lr, weight_decay=0.01)
         scheduler = transformers.get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=20, num_training_steps=180)
         """
         optimizer:
