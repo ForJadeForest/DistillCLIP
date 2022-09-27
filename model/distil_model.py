@@ -65,11 +65,7 @@ class DistillModel(pl.LightningModule):
         if self.hparams.model_type == 'text':
             inputs, contrary_rep = texts, imgs
         else:
-            inputs, contrary = imgs, texts
-            from clip import load
-            clip_model, _ = load(self.teacher_name, device=self.device, download_root=self.hparams.download_root)
-            tea_text_logits = clip_model.encode_text(contrary)
-            contrary_rep = tea_text_logits
+            inputs, contrary_rep = imgs, texts
 
         student_outs, teacher_outs = self.forward(inputs)
         label = torch.arange(student_outs[0].shape[0], device=self.device)

@@ -78,7 +78,7 @@ class ImageEncoder(nn.Module):
 
     def init_layers_with_teacher(self, layer_map, teacher_state_dict=None, init_type=None):
         import re
-        pattern = re.compile('visual.transformer.resblocks.([\d])')
+        pattern = re.compile('visual.transformer.resblocks.(\\d)')
         stu_layer_num = layer_map.stu_total_layer_num
         tea_layer_num = layer_map.tea_total_layer_num
         tea_state_dict = teacher_state_dict
@@ -100,7 +100,7 @@ class ImageEncoder(nn.Module):
             if not res:
                 my_model_state_dict[key] = tea_state_dict[key]
             else:
-                tea_key = re.sub(re.compile('\d'), map_layer(int(res[0])), string=key, count=1)
+                tea_key = re.sub(re.compile('\\d'), map_layer(int(res[0])), string=key, count=1)
                 my_model_state_dict[key] = tea_state_dict[tea_key]
         self.visual.load_state_dict(my_model_state_dict)
         print('init with teacher weight success!')

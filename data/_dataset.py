@@ -1,4 +1,5 @@
 import json
+import logging
 import os.path as op
 from pathlib import Path
 
@@ -10,22 +11,41 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 from tqdm import tqdm
 
+LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
+logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
+IMAGE_DATASET_NAME = ['coco', 'data_256', 'imagenet']
 
-def encode_images(path_list):
+
+def encode_images(path_list, teacher_name: str):
     from clip import load
     image_encode = []
+    device = 'cuda'
+    model, preprocess = load(teacher_name, device)
+    model.eval()
     for path in tqdm(path_list):
-        device = 'cuda'
-        model, preprocess = load("ViT-B/32", device=device)
         image = preprocess(Image.open(path)).unsqueeze(0).to(device)
         with torch.no_grad():
-            image_features = model.encode_image(image.to(device)).float()
+            image_features = model.encode_image(image).float()
             image_encode.append(image_features)
     return torch.cat(image_encode, dim=0)
 
 
+def encode_texts(caption_list, teacher_name: str):
+    from clip import load, tokenize
+    text_encode = []
+    device = 'cuda'
+    model, preprocess = load(teacher_name, device)
+    model.eval()
+    for caption in tqdm(caption_list):
+        with torch.no_grad():
+            caption = tokenize(caption).squeeze().to(device)
+            image_features = model.encode_text(caption).float()
+            text_encode.append(image_features)
+    return torch.cat(text_encode, dim=0)
+
+
 class TextDataset(Dataset):
-    def __init__(self, cache_dir='cache', data_dir=r'data/ref', train=True, overwrite=False,
+    def __init__(self, cache_dir='cache', data_dir=r'data/ref', train=True, overwrite=False, teacher_name='ViT-B/32',
                  img_mean=(0.48145466, 0.4578275, 0.40821073),
                  img_std=(0.26862954, 0.26130258, 0.27577711)
                  ):
@@ -40,17 +60,18 @@ class TextDataset(Dataset):
         if self.train:
             self.tokenize_text = self.load(overwrite)
         else:
+            self.teacher_name = teacher_name
             self.img_mean = img_mean
             self.img_std = img_std
             self.sentences, self.captions, self.path_list, self.image_rep = self.load(overwrite)
             self.image_rep = self.image_rep.squeeze(dim=1)
 
     def process(self):
-        raw_text = []
         if self.train:
+            raw_text = []
             coco2017_file = self.data_dir / 'COCO' / 'annotations' / 'captions_train2017.json'
             cc_file = self.data_dir / 'CC' / 'Train_GCC-training.tsv'
-            print(coco2017_file)
+            logging.info(f'read coco2017 text data: {str(coco2017_file)}')
             with cc_file.open('r', encoding='utf8') as f:
                 for content in f.readlines():
                     raw_text.append(content.split('\t')[0])
@@ -59,22 +80,16 @@ class TextDataset(Dataset):
                 for annotation in res['annotations']:
                     raw_text.append(annotation['caption'])
 
-            print('All data: {} Begin tokenizing...'.format(len(raw_text)))
+            logging.info('All data: {} Begin tokenizing...'.format(len(raw_text)))
             tokenize_text = []
             for text in tqdm(raw_text):
-                try:
-                    tokenize_text.append(self.tokenizer(text).squeeze())
-                except:
-                    continue
-            print('Tokenize Done! with {} texts loads'.format(len(tokenize_text)))
-            print('the rate is {}'.format(len(tokenize_text) / len(raw_text)))
-
+                tokenize_text.append(self.tokenizer(text, truncate=True).squeeze())
             return torch.stack(tokenize_text)
         else:
             val_image_file_list_path = self.data_dir / 'COCO' / 'val2017'
             path_list = []
+            tokenized_sentence = []
             captions = []
-            sentences = []
             file_dir = self.data_dir / 'COCO' / 'annotations' / 'captions_val2017.json'
             with file_dir.open('r', encoding='utf8') as f:
                 data = json.load(f)
@@ -88,35 +103,37 @@ class TextDataset(Dataset):
             for id, file_name in id2filename.items():
                 caption = id2caption.get(id, None)
                 if caption:
-                    sentences.append(caption)
-                    captions.append(self.tokenizer(caption).squeeze())
+                    captions.append(caption)
+                    tokenized_sentence.append(self.tokenizer(caption, truncate=True).squeeze())
                     path_list.append(val_image_file_list_path / file_name)
-            image_rep = encode_images(path_list)
-            return sentences, captions, path_list, image_rep
+            image_rep = encode_images(path_list, self.teacher_name)
+            return captions, tokenized_sentence, path_list, image_rep
 
     def load(self, overwirite):
-        cache_path = self.cache_dir / 'cache-train.pth' if self.train else self.cache_dir / 'cache-val.pth'
+        cache_path = self.cache_dir / f'cache-train-{self.teacher_name}.pth' \
+            if self.train else self.cache_dir / f'cache-val-{self.teacher_name}.pth'
+
         if overwirite or not cache_path.exists():
-            print('重写/不存在缓存文件，开始处理文件')
+            logging.info('重写/不存在缓存文件，开始处理文件')
             if self.train:
                 tokenize_text = self.process()
                 torch.save({'data_set': tokenize_text}, cache_path)
                 return tokenize_text
             else:
-                sentences, captions, path_list, image_rep = self.process()
+                captions, tokenized_sentence, path_list, image_rep = self.process()
                 torch.save({
                     'data_set': [
-                        sentences,
                         captions,
+                        tokenized_sentence,
                         path_list,
                         image_rep
                     ]
                 }, cache_path)
-                return sentences, captions, path_list, image_rep
+                return captions, tokenized_sentence, path_list, image_rep
         else:
-            print('直接加载缓存文件')
+            logging.info('直接加载缓存文件')
             data = torch.load(cache_path)['data_set']
-            print('加载完成！')
+            logging.info('加载完成！')
             return data
 
     def __len__(self):
@@ -133,62 +150,76 @@ class TextDataset(Dataset):
 
 
 class ImageDataset(Dataset):
-    def __init__(self, data_dir=r'data/ref', train=True, no_augment=True, aug_prob=0.5,
+    def __init__(self, data_dir=r'data/ref', train=True, no_augment=True,
+                 aug_prob=0.5, image_use=None, cache_dir='cache', teacher_name='ViT-B/32', overwrite=False,
                  img_mean=(0.48145466, 0.4578275, 0.40821073),
-                 img_std=(0.26862954, 0.26130258, 0.27577711), train_dir=None, need_crop=False, image_use='all'):
+                 img_std=(0.26862954, 0.26130258, 0.27577711)):
         super(ImageDataset, self).__init__()
+        if image_use is None:
+            image_use = ['coco', 'data_256', 'imagenet']
+
+        for i in image_use:
+            assert i in IMAGE_DATASET_NAME, logging.error(f'the {i} dataset name is not exists in {IMAGE_DATASET_NAME}')
         self.data_dir = Path(data_dir)
         self.train = train
         self.no_augment = no_augment
         self.aug_prob = aug_prob
         self.img_mean = img_mean
         self.img_std = img_std
-        if train_dir:
-            self.train_dir = Path(train_dir)
+        self.cache_dir = Path(cache_dir)
         self.aug = train and not no_augment
         self.path_list = None
-        self.need_crop = need_crop
-
+        self.teacher_name = teacher_name
         if not train:
-            from clip import tokenize
-            self.tokenizer = tokenize
-            self.val_image_file_list_path = self.data_dir / 'COCO' / 'val2017'
-            self.load_validation_data()
+            cache_path = self.cache_dir / f'cache-val-{self.teacher_name}.pth'
+            if not self.cache_dir.exists() or overwrite:
+                logging.info('the cache_dir not exists or you set overwrite')
+                from clip import tokenize
+                self.tokenizer = tokenize
+                self.val_image_file_list_path = self.data_dir / 'COCO' / 'val2017'
+                self.load_validation_data()
+                self.captions_rep = encode_texts(self.captions, self.teacher_name)
+                torch.save({
+                    'data_set': [
+                        self.val_image_file_list_path,
+                        self.captions_rep
+                    ]
+                }, cache_path)
+                logging.info(f'cache data saved in {str(cache_path)}')
+            else:
+                logging.info(f'cache data exists in {str(cache_path)}')
+                self.val_image_file_list_path, self.captions_rep = torch.load(cache_path)['data_set']
+                logging.info(f'load cache data successfully')
         else:
-            if self.train_dir:
-                self.train_image_file_path = self.train_dir
-            else:
-                self.train_image_file_path = self.data_dir / 'COCO' / 'train2017'
-            if image_use == 'all':
-                self.path_list = [path for path in self.train_dir.iterdir()]
-            elif image_use == 'no_all':
-                self.path_list = [path for path in self.train_dir.iterdir() if
-                                  not str(path.name).startswith('data_256')]
-            else:
-                self.path_list = [path for path in self.train_dir.iterdir() if not
-                                str(path.name).startswith('data_256') and not str(path.name).startswith('imagenet')]
+            self.train_image_file_path = self.data_dir
+
+            def filter_dataset(x):
+                res = False
+                for prefix in image_use:
+                    res = res | x.startswith(prefix)
+                return res
+
+            self.path_list = [path for path in self.data_dir.iterdir() if filter_dataset(str(path))]
 
     def load_validation_data(self):
         self.path_list = []
         self.captions = []
-        self.sentence = []
         self.annotations_dir = self.data_dir / 'COCO' / 'annotations'
 
         with open((self.annotations_dir / 'captions_val2017.json'), 'r') as f:
-            data = json.load(f)
-        images = data['images']
+            coco_data = json.load(f)
+        images = coco_data['images']
         id2caption = {}
         id2filename = {}
         for image in images:
             id2filename[image['id']] = image['file_name']
-        for annotation in data['annotations']:
+        for annotation in coco_data['annotations']:
             id2caption[annotation['image_id']] = annotation['caption']
         for id, file_name in id2filename.items():
             caption = id2caption.get(id, None)
             if caption:
-                self.sentence.append(caption)
-                self.captions.append(self.tokenizer(caption).squeeze())
-                self.path_list.append(op.join(self.val_image_file_list_path / file_name))
+                self.captions.append(caption)
+                self.path_list.append(self.val_image_file_list_path / file_name)
 
     def __len__(self):
         return len(self.path_list)
@@ -196,12 +227,6 @@ class ImageDataset(Dataset):
     def __getitem__(self, idx):
         path = self.path_list[idx]
         img = Image.open(path).convert('RGB')
-        if self.need_crop:
-            crop_trans = transforms.Compose([
-                transforms.Resize(224),
-                transforms.CenterCrop(224),
-            ])
-            img = crop_trans(img)
 
         trans = transforms.Compose([
             transforms.RandAugment(num_ops=4),
@@ -219,7 +244,7 @@ class ImageDataset(Dataset):
         if self.train:
             return img_tensor
         else:
-            return img_tensor, self.captions[idx], self.sentence[idx]
+            return img_tensor, self.captions_rep[idx], self.captions[idx]
 
 
 class ImageDatasetLmdb(Dataset):
@@ -317,7 +342,6 @@ class ImageDatasetLmdb(Dataset):
             return img_tensor
         else:
             return img_tensor, self.captions[idx], self.sentence[idx]
-
 
 
 def _read_img_lmdb(env, key, size):
