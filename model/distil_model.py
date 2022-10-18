@@ -4,7 +4,6 @@ import pytorch_lightning as pl
 import torch
 import transformers
 from pytorch_lightning.loggers import WandbLogger, TensorBoardLogger
-from pytorch_lightning.utilities import cli as pl_cli
 from torch import nn, optim
 from torchmetrics import Accuracy
 from torchmetrics.functional import accuracy
@@ -17,7 +16,8 @@ except ModuleNotFoundError:
 
 class DistillModel(pl.LightningModule):
     def __init__(self, student_encoder: nn.Module, teacher_name: str, loss_control_para: Dict, download_root: str,
-                 model_type: str = 'text', lr: float = 1e-3, map_type: str = 'mid', init_type=None, ):
+                 model_type: str = 'text', lr: float = 1e-3, map_type: str = 'mid', init_type=None, warm_steps=10,
+                 total_steps=200, weight_decay=1e-3):
         super().__init__()
         self.__dict__.update(locals())
         self.save_hyperparameters(ignore=['student_encoder'])
@@ -28,8 +28,11 @@ class DistillModel(pl.LightningModule):
         self.teacher, tea_layer_num = teacher_load(teacher_name, download_root, model_type)
         for p in self.teacher.parameters():
             p.requires_grad = False
-        self.layer_map = LayerMap(student_encoder.layers, tea_layer_num, map_type)
-        self.student.init_layers_with_teacher(self.layer_map, self.teacher.state_dict(), init_type)
+        if hasattr(student_encoder, 'layers'):
+            self.layer_map = LayerMap(student_encoder.layers, tea_layer_num, map_type)
+            self.student.init_layers_with_teacher(self.layer_map, self.teacher.state_dict(), init_type)
+        else:
+            self.layer_map = None
         self.loss_control = LossControl(**loss_control_para)
         self.need_return_para = self.loss_control.need_output()
         # 定义指标
@@ -47,7 +50,10 @@ class DistillModel(pl.LightningModule):
                 self.logger.log_hyperparams(self.hparams, {"hp/stu_acc_top1": 0, "hp/stu_acc_top10": 0})
 
     def forward(self, inputs):
-        student_outs = self.student(inputs, only_last_state=False, **self.need_return_para)
+        if self.layer_map is None:
+            student_outs = self.student(inputs)
+        else:
+            student_outs = self.student(inputs, only_last_state=False, **self.need_return_para)
         teacher_outs = self.teacher(inputs, only_last_state=False, **self.need_return_para)
         return student_outs, teacher_outs
 
@@ -72,6 +78,8 @@ class DistillModel(pl.LightningModule):
         loss, cal_res = self.loss_control.cal_one_tower_loss(student_outs, teacher_outs, self.layer_map, self.device)
         stu_logits, tea_logits = norm_and_logits(contrary_rep, student_outs[0], teacher_outs[0])[:2]
 
+        mean_score = torch.diagonal(stu_logits).mean()
+        self.log('mean_score', mean_score, batch_size=len(inputs), sync_dist=True)
         # log metric
         self.log('hp_metric', self.acc_metrics[0], metric_attribute='acc_metrics', batch_size=len(inputs))
         for i, metric in enumerate(self.acc_metrics):
@@ -94,8 +102,12 @@ class DistillModel(pl.LightningModule):
             self.log("{}/{}".format(stage, loss_name), loss_res, batch_size=batch_size)
 
     def configure_optimizers(self):
-        optimizer = optim.AdamW(self.parameters(), lr=self.hparams.lr, weight_decay=0.0001)
-        scheduler = transformers.get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=20, num_training_steps=180)
+        optimizer = optim.AdamW(self.parameters(), lr=self.hparams.lr, weight_decay=self.hparams.weight_decay)
+        scheduler = transformers.get_cosine_schedule_with_warmup(
+            optimizer,
+            num_warmup_steps=self.hparams.warm_steps,
+            num_training_steps=self.hparams.total_steps
+        )
         """
         optimizer:
           class_path: AdamW

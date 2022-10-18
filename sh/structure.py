@@ -28,9 +28,10 @@ if __name__ == '__main__':
     args.template = Path(args.template)
     if not (args.config / args.ex_name).exists():
         Path.mkdir(args.config / args.ex_name)
-    with open(args.template, 'r', encoding='utf8') as template_f:
-        with open(args.config / args.ex_name / 'share.yaml', 'w', encoding='utf8') as out_f:
-            out_f.write(template_f.read())
+    if args.template:
+        with open(args.template, 'r', encoding='utf8') as template_f:
+            with open(args.config / args.ex_name / 'share.yaml', 'w', encoding='utf8') as out_f:
+                out_f.write(template_f.read())
     desc_file = args.config / args.ex_name / 'desc.txt'
     gene_desc(desc_file)
 

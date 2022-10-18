@@ -303,3 +303,6 @@ class VisionTransformer(nn.Module):
             x = x @ self.proj
 
         return x, attention_maps, representations, embeddings, attention_probs, value_maps
+
+
+

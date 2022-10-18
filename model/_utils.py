@@ -327,7 +327,8 @@ class LossControl:
     def cal_one_tower_loss(self, stu_out, tea_out, layer_map: LayerMap, device):
         stu_last_rep, stu_attention_maps, stu_representations, stu_embedding, stu_attention_probs, stu_value_map = stu_out
         tea_last_rep, tea_attention_maps, tea_representations, tea_embedding, tea_attention_probs, tea_value_map = tea_out
-        stu_layer_num = layer_map.stu_total_layer_num
+        if layer_map:
+            stu_layer_num = layer_map.stu_total_layer_num
 
         cal_res = {}
         for loss_name in self.loss:

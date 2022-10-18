@@ -14,7 +14,11 @@ from tqdm import tqdm
 LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
 logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
 IMAGE_DATASET_NAME = ['coco', 'data_256', 'imagenet']
-
+IMAGE_PREFIX = {
+    'coco': '0',
+    'data_256': 'data_256',
+    'imagenet': 'imagenet'
+}
 
 def encode_images(path_list, teacher_name: str):
     from clip import load
@@ -38,8 +42,8 @@ def encode_texts(caption_list, teacher_name: str):
     model.eval()
     for caption in tqdm(caption_list):
         with torch.no_grad():
-            caption = tokenize(caption).squeeze().to(device)
-            image_features = model.encode_text(caption).float()
+            caption = tokenize(caption).to(device)
+            image_features = model.encode_text(caption).float().to('cpu')
             text_encode.append(image_features)
     return torch.cat(text_encode, dim=0)
 
@@ -152,6 +156,7 @@ class TextDataset(Dataset):
 class ImageDataset(Dataset):
     def __init__(self, data_dir=r'data/ref', train=True, no_augment=True,
                  aug_prob=0.5, image_use=None, cache_dir='cache', teacher_name='ViT-B/32', overwrite=False,
+                 train_image_dir='/data/pyz/data/combine_dataset',
                  img_mean=(0.48145466, 0.4578275, 0.40821073),
                  img_std=(0.26862954, 0.26130258, 0.27577711)):
         super(ImageDataset, self).__init__()
@@ -159,7 +164,7 @@ class ImageDataset(Dataset):
             image_use = ['coco', 'data_256', 'imagenet']
 
         for i in image_use:
-            assert i in IMAGE_DATASET_NAME, logging.error(f'the {i} dataset name is not exists in {IMAGE_DATASET_NAME}')
+            assert i in IMAGE_DATASET_NAME, f'the {i} dataset name is not exists in {IMAGE_DATASET_NAME}'
         self.data_dir = Path(data_dir)
         self.train = train
         self.no_augment = no_augment
@@ -171,35 +176,54 @@ class ImageDataset(Dataset):
         self.path_list = None
         self.teacher_name = teacher_name
         if not train:
-            cache_path = self.cache_dir / f'cache-val-{self.teacher_name}.pth'
-            if not self.cache_dir.exists() or overwrite:
+            cache_path = self.cache_dir / f'cache-val-{self.teacher_name.replace("/", "-")}.pth'
+            if not cache_path.exists() or overwrite:
                 logging.info('the cache_dir not exists or you set overwrite')
                 from clip import tokenize
                 self.tokenizer = tokenize
                 self.val_image_file_list_path = self.data_dir / 'COCO' / 'val2017'
-                self.load_validation_data()
+                self.path_list = []
+                self.captions = []
+                self.annotations_dir = self.data_dir / 'COCO' / 'annotations'
+
+                with open((self.annotations_dir / 'captions_val2017.json'), 'r') as f:
+                    coco_data = json.load(f)
+                images = coco_data['images']
+                id2caption = {}
+                id2filename = {}
+                for image in images:
+                    id2filename[image['id']] = image['file_name']
+                for annotation in coco_data['annotations']:
+                    id2caption[annotation['image_id']] = annotation['caption']
+                for id, file_name in id2filename.items():
+                    caption = id2caption.get(id, None)
+                    if caption:
+                        self.captions.append(caption)
+                        self.path_list.append(self.val_image_file_list_path / file_name)
                 self.captions_rep = encode_texts(self.captions, self.teacher_name)
                 torch.save({
                     'data_set': [
-                        self.val_image_file_list_path,
-                        self.captions_rep
+                        self.path_list,
+                        self.captions_rep,
+                        self.captions
                     ]
                 }, cache_path)
                 logging.info(f'cache data saved in {str(cache_path)}')
             else:
                 logging.info(f'cache data exists in {str(cache_path)}')
-                self.val_image_file_list_path, self.captions_rep = torch.load(cache_path)['data_set']
+                self.path_list, self.captions_rep, self.captions = torch.load(cache_path)['data_set']
                 logging.info(f'load cache data successfully')
         else:
-            self.train_image_file_path = self.data_dir
+            self.train_image_file_path = Path(train_image_dir)
 
             def filter_dataset(x):
                 res = False
-                for prefix in image_use:
-                    res = res | x.startswith(prefix)
+                for name in image_use:
+                    prefix = IMAGE_PREFIX[name]
+                    res = res or x.startswith(prefix)
                 return res
 
-            self.path_list = [path for path in self.data_dir.iterdir() if filter_dataset(str(path))]
+            self.path_list = [path for path in self.train_image_file_path.iterdir() if filter_dataset(path.name)]
 
     def load_validation_data(self):
         self.path_list = []
