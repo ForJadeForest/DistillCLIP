@@ -220,16 +220,20 @@ class RepeatVisionTransformer(nn.Module):
 
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
 
-        assert depth % repeated_times == 0
-        depth //= repeated_times
-
-        blocks = []
-
         block_kwargs = dict(
             dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
             drop=drop_rate, attn_drop=attn_drop_rate,
             norm_layer=norm_layer, rpe_config=rpe_config,
             use_transform=use_transform)
+        self.hyper = {
+            'block_kwargs': block_kwargs,
+            'depth': depth,
+            'repeated_times': repeated_times
+        }
+        assert depth % repeated_times == 0
+        depth //= repeated_times
+
+        blocks = []
 
         for i in range(depth):
             if repeated_times > 1:
@@ -319,5 +323,6 @@ class RepeatVisionTransformer(nn.Module):
             x = torch.flatten(x, 1)
         x = self.head(x)
         return x, None, None, None, None, None
+
     def hyper_para(self):
-        return self.num_classes
+        return self.hyper

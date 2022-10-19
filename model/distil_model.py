@@ -78,7 +78,9 @@ class DistillModel(pl.LightningModule):
         loss, cal_res = self.loss_control.cal_one_tower_loss(student_outs, teacher_outs, self.layer_map, self.device)
         stu_logits, tea_logits = norm_and_logits(contrary_rep, student_outs[0], teacher_outs[0])[:2]
 
+        softmax_mean_score = torch.diagonal(torch.nn.functional.softmax(stu_logits, dim=1)).mean()
         mean_score = torch.diagonal(stu_logits).mean()
+        self.log('softmax_mean_score', softmax_mean_score, batch_size=len(inputs), sync_dist=True)
         self.log('mean_score', mean_score, batch_size=len(inputs), sync_dist=True)
         # log metric
         self.log('hp_metric', self.acc_metrics[0], metric_attribute='acc_metrics', batch_size=len(inputs))
@@ -91,6 +93,10 @@ class DistillModel(pl.LightningModule):
                 acc_tea = accuracy(tea_logits, label, top_k=self.k_list[i])
                 self.log('hp_metric/tea_acc_top{}'.format(self.k_list[i]), acc_tea, prog_bar=False, sync_dist=True,
                          batch_size=len(inputs))
+                tea_softmax_mean_score = torch.diagonal(torch.nn.functional.softmax(tea_logits, dim=1)).mean()
+                tea_mean_score = torch.diagonal(tea_logits).mean()
+                self.log('tea_softmax_mean_score', tea_softmax_mean_score, batch_size=len(inputs), sync_dist=True)
+                self.log('tea_mean_score', tea_mean_score, batch_size=len(inputs), sync_dist=True)
         # Logging to TensorBoard by default
         self.log_info('val', loss, cal_res, len(inputs))
         return loss

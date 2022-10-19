@@ -1,6 +1,7 @@
 model:
   class_path: DistillModel
   init_args:
+    weight_decay: 1.0e-2
     student_encoder:
       class_path: model.weight_share_model.RepeatVisionTransformer
       init_args:
@@ -12,7 +13,7 @@ model:
         depth: 4
         num_heads: 12
         mlp_ratio: 4.0
-        qkv_bias: False
+        qkv_bias: True
         drop_rate: 0.1
         attn_drop_rate: 0.1
         drop_path_rate: 0.1
@@ -22,6 +23,7 @@ model:
     teacher_name: ViT-B/32
     download_root: '/data/pyz/.cache'
     model_type: 'image'
+    total_steps: 300
     loss_control_para:
       loss_name: [ 'l1', 'cos' ]
 
@@ -33,7 +35,7 @@ data:
   init_args:
     num_workers: 12
     dataset: '_dataset'
-    train_batch_size: 1024
+    train_batch_size: 1560
     kwargs:
       data_dir: '/data/pyz/data'
       dataset_name: 'ImageDataset'
@@ -52,7 +54,7 @@ trainer:
   accumulate_grad_batches: 1
   accelerator: 'gpu'
   devices: [0, 1, 2, 3]
-  max_epochs: 200
+  max_epochs: 300
   strategy: 'ddp'
   log_every_n_steps: 50
   enable_progress_bar: True
