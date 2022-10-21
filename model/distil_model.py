@@ -3,21 +3,20 @@ from typing import *
 import pytorch_lightning as pl
 import torch
 import transformers
+import wandb
 from pytorch_lightning.loggers import WandbLogger, TensorBoardLogger
 from torch import nn, optim
 from torchmetrics import Accuracy
 from torchmetrics.functional import accuracy
 
-try:
-    from _utils import teacher_load, LayerMap, LossControl
-except ModuleNotFoundError:
-    from ._utils import teacher_load, LayerMap, LossControl
+from ._utils import teacher_load
+from ._loss import LossCalculator
 
 
 class DistillModel(pl.LightningModule):
     def __init__(self, student_encoder: nn.Module, teacher_name: str, loss_control_para: Dict, download_root: str,
-                 model_type: str = 'text', lr: float = 1e-3, map_type: str = 'mid', init_type=None, warm_steps=10,
-                 total_steps=200, weight_decay=1e-3):
+                 need_layers: Dict, model_type: str = 'text', map_type: str = 'mid', init_type=None,
+                 warm_steps=10, total_steps=200, weight_decay=1e-3, lr: float = 1e-3):
         super().__init__()
         self.__dict__.update(locals())
         self.save_hyperparameters(ignore=['student_encoder'])
@@ -25,16 +24,13 @@ class DistillModel(pl.LightningModule):
         # 定义模型
         self.student = student_encoder
         self.teacher_name = teacher_name
-        self.teacher, tea_layer_num = teacher_load(teacher_name, download_root, model_type)
+        self.teacher = teacher_load(teacher_name, download_root, model_type,
+                                    need_layers=need_layers['teacher'])
+        self.loss_control = LossCalculator(**loss_control_para)
+        self.need_return_para = self.loss_control.get_control_output()
         for p in self.teacher.parameters():
             p.requires_grad = False
-        if hasattr(student_encoder, 'layers'):
-            self.layer_map = LayerMap(student_encoder.layers, tea_layer_num, map_type)
-            self.student.init_layers_with_teacher(self.layer_map, self.teacher.state_dict(), init_type)
-        else:
-            self.layer_map = None
-        self.loss_control = LossControl(**loss_control_para)
-        self.need_return_para = self.loss_control.need_output()
+
         # 定义指标
         self.k_list = [i for i in [1, 2, 3, 4, 5, 10]]
         self.acc_metrics = []
@@ -46,6 +42,8 @@ class DistillModel(pl.LightningModule):
             # 多gpu会报错
             if isinstance(self.logger, WandbLogger):
                 self.logger.experiment.config.update({'student_para': self.student.hyper_para()})
+                wandb.save('./*.py')
+                wandb.save('../data/*.py')
             elif isinstance(self.logger, TensorBoardLogger):
                 self.logger.log_hyperparams(self.hparams, {"hp/stu_acc_top1": 0, "hp/stu_acc_top10": 0})
 
@@ -61,7 +59,7 @@ class DistillModel(pl.LightningModule):
         self.teacher.eval()
         student_outs, teacher_outs = self.forward(inputs)
 
-        loss, cal_res = self.loss_control.cal_one_tower_loss(student_outs, teacher_outs, self.layer_map, self.device)
+        loss, cal_res = self.loss_control.cal_one_tower_loss(student_outs, teacher_outs)
         # Logging to TensorBoard by default
         self.log_info('train', loss, cal_res, batch_size=len(inputs))
         return loss
@@ -75,7 +73,7 @@ class DistillModel(pl.LightningModule):
 
         student_outs, teacher_outs = self.forward(inputs)
         label = torch.arange(student_outs[0].shape[0], device=self.device)
-        loss, cal_res = self.loss_control.cal_one_tower_loss(student_outs, teacher_outs, self.layer_map, self.device)
+        loss, cal_res = self.loss_control.cal_one_tower_loss(student_outs, teacher_outs)
         stu_logits, tea_logits = norm_and_logits(contrary_rep, student_outs[0], teacher_outs[0])[:2]
 
         softmax_mean_score = torch.diagonal(torch.nn.functional.softmax(stu_logits, dim=1)).mean()

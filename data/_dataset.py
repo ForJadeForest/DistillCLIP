@@ -20,6 +20,7 @@ IMAGE_PREFIX = {
     'imagenet': 'imagenet'
 }
 
+
 def encode_images(path_list, teacher_name: str):
     from clip import load
     image_encode = []
