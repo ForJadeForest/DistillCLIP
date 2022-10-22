@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+
 from ._common import Transformer, LayerNorm
 from ._utils import ControlOutput, TransformerOutput, TextTransformerOutput
 
@@ -26,7 +27,6 @@ class TextEncoder(nn.Module):
             drop_out=drop_out,
             attn_mask=self.build_attention_mask(),
             need_layers=need_layers
-
         )
         self.transformer = Transformer(**self.transformer_para)
 
@@ -40,6 +40,10 @@ class TextEncoder(nn.Module):
             self.embedding_projection = nn.Linear(transformer_width, tea_transformer_width)
             self.hidden_projection = nn.Linear(transformer_width, tea_transformer_width)
         self.initialize_parameters()
+
+    @property
+    def need_layers(self):
+        return self.transformer_para['need_layers']
 
     def build_attention_mask(self):
         # lazily create causal attention mask, with full attention between the vision tokens
@@ -138,3 +142,7 @@ class TextEncoder(nn.Module):
                 my_model_state_dict[key] = tea_state_dict[tea_key]
         self.load_state_dict(my_model_state_dict)
         print('init with teacher weight success!')
+
+    @need_layers.setter
+    def need_layers(self, value):
+        self._need_layers = value

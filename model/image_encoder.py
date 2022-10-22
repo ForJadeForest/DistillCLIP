@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+
 from ._common import VisionTransformer
 from ._utils import ControlOutput, VisionTransformerOutput
 
@@ -7,12 +8,15 @@ from ._utils import ControlOutput, VisionTransformerOutput
 class ImageEncoder(nn.Module):
     def __init__(self, is_student, vit_paras, tea_transformer_width=None):
         super().__init__()
+        self.layers = vit_paras['layers']
+        if vit_paras['need_layers'] is None:
+            vit_paras['need_layers'] = tuple(range(self.layers))
         self.vit_paras = vit_paras
         self.visual = VisionTransformer(**vit_paras)
         self.is_student = is_student
         self.embedding_projection = None
         self.hidden_projection = None
-        self.layers = vit_paras['layers']
+
         self.no_trans = False
         if self.vit_paras['width'] == tea_transformer_width:
             self.no_trans = True
@@ -20,6 +24,10 @@ class ImageEncoder(nn.Module):
             self.embedding_projection = nn.Linear(vit_paras['width'], tea_transformer_width)
             self.hidden_projection = nn.Linear(vit_paras['width'], tea_transformer_width)
         self.initialize_parameters()
+
+    @property
+    def need_layers(self):
+        return self.vit_paras['need_layers']
 
     def initialize_parameters(self):
         nn.init.normal_(self.visual.class_embedding, std=0.02)
