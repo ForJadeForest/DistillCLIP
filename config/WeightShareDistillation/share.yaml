@@ -55,7 +55,7 @@ trainer:
   accelerator: 'gpu'
   devices: [0, 1, 2, 3]
   max_epochs: 300
-  strategy: 'ddp'
+  strategy: 'ddp_find_unused_parameters_false'
   log_every_n_steps: 50
   enable_progress_bar: True
   check_val_every_n_epoch: 1
