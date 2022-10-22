@@ -8,10 +8,8 @@ from torch import nn, optim
 from torchmetrics import Accuracy
 from torchmetrics.functional import accuracy
 
-try:
-    from _utils import teacher_load, LayerMap, LossControl
-except ModuleNotFoundError:
-    from ._utils import teacher_load, LayerMap, LossControl
+
+from ._utils import teacher_load, LayerMap, LossControl
 
 
 class DistillModel(pl.LightningModule):
@@ -37,7 +35,7 @@ class DistillModel(pl.LightningModule):
         self.need_return_para = self.loss_control.need_output()
         # 定义指标
         self.k_list = [i for i in [1, 2, 3, 4, 5, 10]]
-        self.acc_metrics = []
+        self.acc_metrics = nn.ModuleList()
         for k in self.k_list:
             self.acc_metrics.append(Accuracy(top_k=k))
 
@@ -85,7 +83,6 @@ class DistillModel(pl.LightningModule):
         # log metric
         self.log('hp_metric', self.acc_metrics[0], metric_attribute='acc_metrics', batch_size=len(inputs))
         for i, metric in enumerate(self.acc_metrics):
-            metric.to(self.device)
             metric(stu_logits, label)
             self.log('hp_metric/stu_acc_top{}'.format(self.k_list[i]), metric, metric_attribute='acc_metrics',
                      batch_size=len(inputs), sync_dist=True, )
@@ -103,9 +100,9 @@ class DistillModel(pl.LightningModule):
 
     def log_info(self, stage, loss, cal_res, batch_size):
 
-        self.log("{}/loss".format(stage), loss, batch_size=batch_size)
+        self.log("{}/loss".format(stage), loss, batch_size=batch_size, sync_dist=True)
         for loss_name, loss_res in cal_res.items():
-            self.log("{}/{}".format(stage, loss_name), loss_res, batch_size=batch_size)
+            self.log("{}/{}".format(stage, loss_name), loss_res, batch_size=batch_size, sync_dist=True)
 
     def configure_optimizers(self):
         optimizer = optim.AdamW(self.parameters(), lr=self.hparams.lr, weight_decay=self.hparams.weight_decay)
