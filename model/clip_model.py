@@ -2,14 +2,9 @@ from typing import Dict
 
 from torch import nn
 
-try:
-    from image_encoder import ImageEncoder
-    from text_encoder import TextEncoder
-    from _utils import output_filter, load, ControlOutput
-except ModuleNotFoundError:
-    from .image_encoder import ImageEncoder
-    from .text_encoder import TextEncoder
-    from ._utils import output_filter, load
+from ._utils import ControlOutput
+from .image_encoder import ImageEncoder
+from .text_encoder import TextEncoder
 
 
 class CLIPModel(nn.Module):
