@@ -9,13 +9,14 @@ from torch import nn, optim
 from torchmetrics import Accuracy
 from torchmetrics.functional import accuracy
 
-from ._utils import teacher_load
 from ._loss import LossCalculator
+from ._utils import teacher_load
+from .weight_share_model import RepeatVisionTransformer
 
 
 class DistillModel(pl.LightningModule):
     def __init__(self, student_encoder: nn.Module, teacher_name: str, loss_control_para: Dict, download_root: str,
-                 need_layers: Dict, model_type: str = 'text', map_type: str = 'mid', init_type=None,
+                 teacher_need_layers: List, model_type: str = 'text', map_type: str = 'mid', init_type=None,
                  warm_steps=10, total_steps=200, weight_decay=1e-3, lr: float = 1e-3):
         super().__init__()
         self.__dict__.update(locals())
@@ -24,8 +25,10 @@ class DistillModel(pl.LightningModule):
         # 定义模型
         self.student = student_encoder
         self.teacher_name = teacher_name
+        if len(teacher_need_layers) != len(self.student.need_layers):
+            raise ValueError('the teacher need_layers length is not equal to student need_layers length.')
         self.teacher = teacher_load(teacher_name, download_root, model_type,
-                                    need_layers=need_layers['teacher'])
+                                    need_layers=teacher_need_layers)
         self.loss_control = LossCalculator(**loss_control_para)
         self.need_return_para = self.loss_control.get_control_output()
         for p in self.teacher.parameters():
@@ -41,25 +44,25 @@ class DistillModel(pl.LightningModule):
         if self.global_rank == 0:
             # 多gpu会报错
             if isinstance(self.logger, WandbLogger):
-                self.logger.experiment.config.update({'student_para': self.student.hyper_para()})
+                self.logger.log_hyperparams({'student_para': self.student.hyper_para()})
                 wandb.save('./*.py')
-                wandb.save('../data/*.py')
+                wandb.save('./data/*.py')
             elif isinstance(self.logger, TensorBoardLogger):
                 self.logger.log_hyperparams(self.hparams, {"hp/stu_acc_top1": 0, "hp/stu_acc_top10": 0})
 
     def forward(self, inputs):
-        if self.layer_map is None:
+        if isinstance(self.student, RepeatVisionTransformer) is None:
             student_outs = self.student(inputs)
         else:
-            student_outs = self.student(inputs, only_last_state=False, **self.need_return_para)
-        teacher_outs = self.teacher(inputs, only_last_state=False, **self.need_return_para)
+            student_outs = self.student(inputs, self.need_return_para, only_last_state=False)
+        teacher_outs = self.teacher(inputs, self.need_return_para, only_last_state=False)
         return student_outs, teacher_outs
 
     def training_step(self, inputs, batch_idx):
         self.teacher.eval()
         student_outs, teacher_outs = self.forward(inputs)
 
-        loss, cal_res = self.loss_control.cal_one_tower_loss(student_outs, teacher_outs)
+        loss, cal_res = self.loss_control(student_outs, teacher_outs, self.hparams.model_type)
         # Logging to TensorBoard by default
         self.log_info('train', loss, cal_res, batch_size=len(inputs))
         return loss
@@ -72,9 +75,10 @@ class DistillModel(pl.LightningModule):
             inputs, contrary_rep = imgs, texts
 
         student_outs, teacher_outs = self.forward(inputs)
-        label = torch.arange(student_outs[0].shape[0], device=self.device)
-        loss, cal_res = self.loss_control.cal_one_tower_loss(student_outs, teacher_outs)
-        stu_logits, tea_logits = norm_and_logits(contrary_rep, student_outs[0], teacher_outs[0])[:2]
+        label = torch.arange(student_outs.last_representation.shape[0], device=self.device)
+        loss, cal_res = self.loss_control(student_outs, teacher_outs, self.hparams.model_type)
+        stu_logits, tea_logits = norm_and_logits(contrary_rep, student_outs.last_representation,
+                                                 teacher_outs.last_representation)[:2]
 
         softmax_mean_score = torch.diagonal(torch.nn.functional.softmax(stu_logits, dim=1)).mean()
         mean_score = torch.diagonal(stu_logits).mean()
