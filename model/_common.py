@@ -118,12 +118,13 @@ class ResidualAttentionBlock(nn.Module):
 
         :param control_output: Type: ControlOutput, For Control the Transformer output
         :param x: hidden state input
-        :return: a tuple. (x, attn_output_scores, attn_output_prob, value_map)
+        :return: a TransformerLayerOutput. (x, attn_output_scores, attn_output_prob, value_map)
         """
-        attn_output, attention_scores, attention_probs, value_map = self.attention(self.ln_1(x), control_output)
-        x = x + attn_output
+        attention_output: AttentionOutput = self.attention(self.ln_1(x), control_output)
+        x = x + attention_output.attention_output
         x = x + self.mlp(self.ln_2(x))
-        return TransformerLayerOutput(x, attention_scores, attention_probs, value_map)
+        return TransformerLayerOutput(x, attention_output.attention_scores,
+                                      attention_output.attention_probs, attention_output.value_map)
 
 
 class Transformer(nn.Module):
@@ -133,8 +134,7 @@ class Transformer(nn.Module):
         super().__init__()
         self.width = width
         self.layers = layers
-        if need_layers is None:
-            need_layers = tuple(range(self.layers))
+
         self.need_layers = need_layers
         self.resblocks = nn.Sequential(
             *[ResidualAttentionBlock(width, heads, attn_mask, drop_out) for _ in range(layers)])
@@ -201,10 +201,15 @@ class VisionTransformer(nn.Module):
         x = x + self.positional_embedding.to(x.dtype)
         embeddings = x
         x = self.ln_pre(x)
-        x, attention_scores, attention_probs, representations, value_maps = self.transformer(x, control_output)
-        x = self.ln_post(x[:, 0, :])
+        vision_output:VisionTransformerOutput = self.transformer(x, control_output)
+        x = self.ln_post(vision_output.last_representation[:, 0, :])
 
         if self.proj is not None:
             x = x @ self.proj
 
-        return VisionTransformerOutput(x, attention_scores, attention_probs, representations, value_maps, embeddings)
+        return VisionTransformerOutput(last_representation=x,
+                                       attention_scores=vision_output.attention_scores,
+                                       attention_probs=vision_output.attention_probs,
+                                       representations=vision_output.representations,
+                                       value_map=vision_output.value_map,
+                                       embedding=embeddings)
