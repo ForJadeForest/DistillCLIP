@@ -135,7 +135,7 @@ def teacher_load(teacher_name: str, download_root, model_type, need_layers=None)
         return teacher_model
     elif model_type == 'image':
         para = get_visual_transformer_para(state_dict)
-        para = para.update(dict(need_layers=need_layers))
+        para.update(dict(need_layers=need_layers))
         teacher_model = ImageEncoder(is_student=False, vit_paras=para)
         my_state_dict = teacher_model.state_dict()
         for k in my_state_dict:
