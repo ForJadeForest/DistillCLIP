@@ -15,7 +15,7 @@ LOSSNAME = ['out_l1', 'out_ce', 'out_kl', 'out_cos', 'embedding_mse', 'attention
 
 class LossCalculator(nn.Module):
     def __init__(self, loss_name, loss_scale: dict = None,
-                 temperature=None, percent=None, vit_kd_para: Dict = None, normlize=True):
+                 temperature=None, percent=None, vit_kd_para: Dict = None, normalize=True):
         super().__init__()
         self.loss_name = loss_name
         self.loss_scale = loss_scale
@@ -25,13 +25,13 @@ class LossCalculator(nn.Module):
         if self.percent is None:
             self.percent = {n: 1 / len(loss_name) for n in loss_name}
         self.temperature = temperature
-        if not 'low_layers_num' in vit_kd_para:
+        if 'low_layers_num' not in vit_kd_para:
             vit_kd_para['low_layers_num'] = 2
-        if not 'high_layers_num' in vit_kd_para:
+        if 'high_layers_num' not in vit_kd_para:
             vit_kd_para['high_layers_num'] = 1
         self.vit_kd_para = vit_kd_para
         self.loss = self._init_loss()
-        self.normlize = normlize
+        self.normalize = normalize
         assert abs(sum([v for v in self.percent.values()]) - 1) <= 1e-5
         print(self.percent)
         print(self.loss_scale)
@@ -158,7 +158,7 @@ class LossCalculator(nn.Module):
                 pred_s = [stu_low_rep, stu_high_rep]
                 pred_t = [tea_low_rep, tea_high_rep]
                 cal_res[loss_name] = loss(pred_s, pred_t)
-            if self.normlize:
+            if self.normalize:
                 cal_res[loss_name] /= cal_res[loss_name]
         loss = 0
         for (loss_name, scale) in self.loss_scale.items():
