@@ -5,17 +5,20 @@ import torch
 import transformers
 import wandb
 from pytorch_lightning.loggers import WandbLogger, TensorBoardLogger
-from torch import nn, optim
+from torch import optim
 from torchmetrics import Accuracy
 from torchmetrics.functional import accuracy
 
 from ._loss import LossCalculator
 from ._utils import teacher_load
+from .image_encoder import ImageEncoder
+from .text_encoder import TextEncoder
 from .weight_share_model import RepeatVisionTransformer
 
 
 class DistillModel(pl.LightningModule):
-    def __init__(self, student_encoder: nn.Module, teacher_name: str, loss_control_para: Dict, download_root: str,
+    def __init__(self, student_encoder: Optional[ImageEncoder, TextEncoder],
+                 teacher_name: str, loss_control_para: Dict, download_root: str,
                  teacher_need_layers: List, model_type: str = 'text', map_type: str = 'mid', init_type=None,
                  warm_steps=10, total_steps=200, weight_decay=1e-3, lr: float = 1e-3):
         super().__init__()
@@ -25,10 +28,12 @@ class DistillModel(pl.LightningModule):
         # 定义模型
         self.student = student_encoder
         self.teacher_name = teacher_name
-        if len(teacher_need_layers) != len(self.student.need_layers):
-            raise ValueError('the teacher need_layers length is not equal to student need_layers length.')
         self.teacher = teacher_load(teacher_name, download_root, model_type,
                                     need_layers=teacher_need_layers)
+        if len(self.teacher.need_layers) != len(self.student.need_layers):
+            raise ValueError(
+                f'the teacher need_layers length is not equal to student need_layers length. '
+                f'But get teacher: {self.teacher.need_layers}, student: {self.student.need_layers}')
         self.loss_control = LossCalculator(**loss_control_para)
         self.need_return_para = self.loss_control.get_control_output()
         for p in self.teacher.parameters():
