@@ -357,6 +357,36 @@ class SoftLabel(nn.Module):
         return logits_kl_loss
 
 
+def random_masking(x, mask_ratio):
+    """
+    Perform per-sample random masking by per-sample shuffling.
+    Per-sample shuffling is done by argsort random noise.
+    x: [N, L, D], sequence
+    """
+    N, L, D = x.shape  # batch, length, dim
+    len_keep = int(L * (1 - mask_ratio))
+
+    noise = torch.rand(N, L, device=x.device)  # noise in [0, 1]
+
+    # sort noise for each sample
+    ids_shuffle = torch.argsort(noise, dim=1)  # ascend: small is keep, large is remove
+    ids_restore = torch.argsort(ids_shuffle, dim=1)
+
+    # keep the first subset
+    ids_keep = ids_shuffle[:, :len_keep]
+    ids_masked = ids_shuffle[:, len_keep:L]
+
+    x_keep = torch.gather(x, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, D))
+
+    # generate the binary mask: 0 is keep, 1 is remove
+    mask = torch.ones([N, L], device=x.device)
+    mask[:, :len_keep] = 0
+    # unshuffle to get the binary mask
+    mask = torch.gather(mask, dim=1, index=ids_restore)
+
+    return x_keep, mask, ids_restore, ids_masked
+
+
 class ViTKDLoss(nn.Module):
     """PyTorch version of `ViTKD: Practical Guidelines for ViT feature knowledge distillation` """
 
@@ -410,14 +440,11 @@ class ViTKDLoss(nn.Module):
 
         '''ViTKD: Mimicking'''
         if self.align_low is not None:
-            if self.low_layers_num == 1:
-                low_x = self.align_high(low_s)
-            else:
-                for i in range(self.low_layers_num):
-                    if i == 0:
-                        low_x = self.align_low[i](low_s[:, i]).unsqueeze(1)
-                    else:
-                        low_x = torch.cat((low_x, self.align_low[i](low_s[:, i]).unsqueeze(1)), dim=1)
+            for i in range(self.low_layers_num):
+                if i == 0:
+                    low_x = self.align_low[i](low_s[:, i]).unsqueeze(1)
+                else:
+                    low_x = torch.cat((low_x, self.align_low[i](low_s[:, i]).unsqueeze(1)), dim=1)
 
         else:
             for i in range(self.low_layers_num):
@@ -430,32 +457,25 @@ class ViTKDLoss(nn.Module):
         loss_lr = loss_mse(xc, low_t) / B * self.alpha_vitkd
 
         '''ViTKD: Generation'''
-        # if self.align_high is not None:
-        #     if self.high_layers_num == 1:
-        #         high_x = self.align_high(high_s)
-        #     else:
-        #         for i in range(self.high_layers_num):
-        #             if i == 0:
-        #                 high_x = self.align_high[i](high_s[:, i]).unsqueeze(1)
-        #             else:
-        #                 high_x = torch.cat((high_x, self.align_high[i](high_s[:, i]).unsqueeze(1)), dim=1)
-        #
-        # else:
-        #     for i in range(self.high_layers_num):
-        #         if i == 0:
-        #             high_x = high_s[:, i].unsqueeze(1)
-        #         else:
-        #             high_x = torch.cat((high_x, high_s[:, i].unsqueeze(1)), dim=1)
-        # x = high_x
+        loss_gen = 0
+        for i in range(self.high_layers_num):
+            if i == 0:
+                loss_gen = self.generation_loss(high_s[:, i], self.align_high[i], high_t[:, i])
+            else:
+                loss_gen += self.generation_loss(high_s[:, i], self.align_high[i], high_t[:, i])
+        loss_gen /= self.high_layers_num
+        return loss_lr + loss_gen
+
+    def generation_loss(self, high_layer_output, align_linear, tea_output):
+        loss_mse = nn.MSELoss(reduction='sum')
         if self.align_high is not None:
-            x = self.align_high(high_s.squeeze())
-        else:
-            x = high_s.squeeze()
-        # Mask tokens
+            high_layer_output = align_linear(high_layer_output)
+
+        x = high_layer_output
         x = x[:, 1:, :]
-        high_t = high_t[:, 0, 1:, :]
+        tea_output = tea_output[:, 0, 1:, :]
         B, N, D = x.shape
-        x, mat, ids, ids_masked = self.random_masking(x, self.lambda_vitkd)
+        x, mat, ids, ids_masked = random_masking(x, self.lambda_vitkd)
         mask_tokens = self.mask_token.repeat(B, N - x.shape[1], 1)
         x_ = torch.cat([x, mask_tokens], dim=1)
         x = torch.gather(x_, dim=1, index=ids.unsqueeze(-1).repeat(1, 1, D))
@@ -466,39 +486,9 @@ class ViTKDLoss(nn.Module):
         x = x.reshape(B, hw, hw, D).permute(0, 3, 1, 2)
         x = self.generation(x).flatten(2).transpose(1, 2)
 
-        loss_gen = loss_mse(torch.mul(x, mask), torch.mul(high_t, mask))
+        loss_gen = loss_mse(torch.mul(x, mask), torch.mul(tea_output, mask))
         loss_gen = loss_gen / B * self.beta_vitkd / self.lambda_vitkd
-
-        return loss_lr + loss_gen
-
-    def random_masking(self, x, mask_ratio):
-        """
-        Perform per-sample random masking by per-sample shuffling.
-        Per-sample shuffling is done by argsort random noise.
-        x: [N, L, D], sequence
-        """
-        N, L, D = x.shape  # batch, length, dim
-        len_keep = int(L * (1 - mask_ratio))
-
-        noise = torch.rand(N, L, device=x.device)  # noise in [0, 1]
-
-        # sort noise for each sample
-        ids_shuffle = torch.argsort(noise, dim=1)  # ascend: small is keep, large is remove
-        ids_restore = torch.argsort(ids_shuffle, dim=1)
-
-        # keep the first subset
-        ids_keep = ids_shuffle[:, :len_keep]
-        ids_masked = ids_shuffle[:, len_keep:L]
-
-        x_keep = torch.gather(x, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, D))
-
-        # generate the binary mask: 0 is keep, 1 is remove
-        mask = torch.ones([N, L], device=x.device)
-        mask[:, :len_keep] = 0
-        # unshuffle to get the binary mask
-        mask = torch.gather(mask, dim=1, index=ids_restore)
-
-        return x_keep, mask, ids_restore, ids_masked
+        return loss_gen
 
 
 class NKDLoss(nn.Module):
