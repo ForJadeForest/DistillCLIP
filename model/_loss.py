@@ -439,22 +439,18 @@ class ViTKDLoss(nn.Module):
         loss_mse = nn.MSELoss(reduction='sum')
 
         '''ViTKD: Mimicking'''
-        if self.align_low is not None:
-            for i in range(self.low_layers_num):
-                if i == 0:
-                    low_x = self.align_low[i](low_s[:, i]).unsqueeze(1)
-                else:
-                    low_x = torch.cat((low_x, self.align_low[i](low_s[:, i]).unsqueeze(1)), dim=1)
+        low_x = None
+        for i in range(self.low_layers_num):
+            low_align_rep = low_s[:, i]
+            if self.align_low:
+                low_align_rep = self.align_low[i](low_s[:, i]).unsqueeze(1)
 
-        else:
-            for i in range(self.low_layers_num):
-                if i == 0:
-                    low_x = low_s[:, i].unsqueeze(1)
-                else:
-                    low_x = torch.cat((low_x, low_s[:, i].unsqueeze(1)), dim=1)
-        xc = low_x
+            if i == 0:
+                low_x = low_align_rep
+            else:
+                low_x = torch.cat((low_x, low_align_rep), dim=1)
 
-        loss_lr = loss_mse(xc, low_t) / B * self.alpha_vitkd
+        loss_lr = loss_mse(low_x, low_t) / B * self.alpha_vitkd
 
         '''ViTKD: Generation'''
         loss_gen = 0
@@ -489,51 +485,3 @@ class ViTKDLoss(nn.Module):
         loss_gen = loss_mse(torch.mul(x, mask), torch.mul(tea_output, mask))
         loss_gen = loss_gen / B * self.beta_vitkd / self.lambda_vitkd
         return loss_gen
-
-
-class NKDLoss(nn.Module):
-    """PyTorch version of NKD: `Rethinking Knowledge Distillation via Cross-Entropy` """
-
-    def __init__(self,
-                 name,
-                 use_this,
-                 temp=1.0,
-                 alpha=1.5,
-                 ):
-        super(NKDLoss, self).__init__()
-        self.temp = temp
-
-    def forward(self, logit_s, logit_t, gt_label):
-        if len(gt_label.size()) > 1:
-            label = torch.max(gt_label, dim=1, keepdim=True)[1]
-        else:
-            label = gt_label.view(len(gt_label), 1)
-
-        # N*class
-        y_i = f.softmax(logit_s, dim=1)
-        t_i = f.softmax(logit_t, dim=1)
-        # N*1
-        y_t = torch.gather(y_i, 1, label)
-        w_t = torch.gather(t_i, 1, label).detach()
-
-        mask = torch.zeros_like(logit_s).scatter_(1, label, 1).bool()
-        logit_s = logit_s - 1000 * mask
-        logit_t = logit_t - 1000 * mask
-
-        # N*class
-        T_i = f.softmax(logit_t / self.temp, dim=1)
-        S_i = f.softmax(logit_s / self.temp, dim=1)
-        # N*1
-        T_t = torch.gather(T_i, 1, label)
-        S_t = torch.gather(S_i, 1, label)
-        # N*class
-        np_t = T_i / (1 - T_t)
-        np_s = S_i / (1 - S_t)
-        np_t[T_i == T_t] = 0
-        np_s[T_i == T_t] = 1
-
-        soft_loss = - (w_t * torch.log(y_t)).mean()
-        distributed_loss = (np_t * torch.log(np_s)).sum(dim=1).mean()
-        distributed_loss = -  (self.temp ** 2) * distributed_loss
-
-        return soft_loss + distributed_loss
