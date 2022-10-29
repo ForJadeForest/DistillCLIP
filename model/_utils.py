@@ -2,13 +2,13 @@ import hashlib
 import os
 import urllib
 import warnings
+from dataclasses import dataclass
 from typing import List
 
 import torch
 from PIL import Image
 from torch import nn
 from torch.nn import functional as f
-from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize
 from tqdm import tqdm
 
 try:
@@ -63,19 +63,6 @@ def _download(url: str, root: str):
 
     return download_target
 
-
-def _convert_image_to_rgb(image):
-    return image.convert("RGB")
-
-
-def _transform(n_px):
-    return Compose([
-        Resize(n_px, interpolation=BICUBIC),
-        CenterCrop(n_px),
-        _convert_image_to_rgb,
-        ToTensor(),
-        Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
-    ])
 
 
 def available_models() -> List[str]:
@@ -133,28 +120,29 @@ def get_visual_transformer_para(state_dict):
     return image_encoder_para
 
 
-def teacher_load(teacher_name: str, download_root, model_type):
+def teacher_load(teacher_name: str, download_root, model_type, need_layers=None):
     from .text_encoder import TextEncoder
     from .image_encoder import ImageEncoder
     state_dict = load(teacher_name, download_root=download_root)
     if model_type == 'text':
         para = get_transformer_para(state_dict)
-        teacher_model = TextEncoder(is_student=False, **para)
+        teacher_model = TextEncoder(is_student=False, **para, need_layers=need_layers)
         my_state_dict = teacher_model.state_dict()
         for k in my_state_dict:
             if k in state_dict:
                 my_state_dict[k] = state_dict[k]
         teacher_model.load_state_dict(my_state_dict)
-        return teacher_model, para['transformer_layers']
+        return teacher_model
     elif model_type == 'image':
         para = get_visual_transformer_para(state_dict)
+        para.update(dict(need_layers=need_layers))
         teacher_model = ImageEncoder(is_student=False, vit_paras=para)
         my_state_dict = teacher_model.state_dict()
         for k in my_state_dict:
             if k in state_dict:
                 my_state_dict[k] = state_dict[k]
         teacher_model.load_state_dict(my_state_dict)
-        return teacher_model, para['layers']
+        return teacher_model
     elif model_type == 'all':
         from .clip_model import CLIPModel
         vit_para = get_visual_transformer_para(state_dict)
@@ -175,7 +163,7 @@ def teacher_load(teacher_name: str, download_root, model_type):
                 my_state_dict[k] = state_dict[k.replace('image_encoder.', '')]
                 map_d[k] = True
         teacher_model.load_state_dict(my_state_dict)
-        return teacher_model, vit_para['layers'], trans_para['transformer_layers']
+        return teacher_model
 
 
 def output_filter(is_student, representations, embedding_projection, embedding, attention_maps, last_state,
@@ -267,28 +255,22 @@ class LossControl:
         return losses
 
     def need_output(self):
-        need_para = {
-            'need_attn_score': False,
-            'need_value_map': False,
-            'need_attn_prob': False,
-            'need_rep': False,
-            'need_emb': False
-        }
+        need_para = ControlOutput()
         for n in self.loss_name:
             if n == 'emb':
-                need_para['need_emb'] = True
+                need_para.need_emb = True
             elif n == 'attn':
-                need_para['need_attn_score'] = True
+                need_para.need_attn_score = True
             elif n == 'attn_probs':
-                need_para['need_attn_prob'] = True
+                need_para.need_attn_prob = True
             elif n == 'hidden':
-                need_para['need_rep'] = True
+                need_para.need_rep = True
             elif n == 'last_attn':
-                need_para['need_attn_score'] = True
+                need_para.need_attn_score = True
             elif n == 'last_value_map':
-                need_para['need_value_map'] = True
+                need_para.need_value_map = True
             elif n == 'last_attn_probs':
-                need_para['need_attn_prob'] = True
+                need_para.need_attn_prob = True
 
         return need_para
 
@@ -414,3 +396,57 @@ class LossControl:
             loss += cal_res[loss_name] * self.percent[loss_name]
 
         return loss, cal_res
+
+
+@dataclass
+class ControlOutput:
+    need_emb: bool = False
+    need_attn_score: bool = False,
+    need_value_map: bool = False,
+    need_attn_prob: bool = False,
+    need_rep: bool = False,
+
+
+@dataclass
+class VisionTransformerOutput:
+    last_representation: torch.Tensor = None
+    attention_scores: List[torch.Tensor] = [],
+    attention_probs: List[torch.Tensor] = [],
+    representations: List[torch.Tensor] = [],
+    value_map: torch.Tensor = None,
+    embedding: torch.Tensor = None,
+
+
+@dataclass
+class TextTransformerOutput:
+    last_representation: torch.Tensor = None
+    attention_scores: List[torch.Tensor] = [],
+    attention_probs: List[torch.Tensor] = [],
+    representations: List[torch.Tensor] = [],
+    value_map: torch.Tensor = None,
+    embedding: torch.Tensor = None,
+
+
+@dataclass
+class AttentionOutput:
+    attention_output: torch.Tensor = None
+    attention_scores: torch.Tensor = None,
+    attention_probs: torch.Tensor = None,
+    value_map: torch.Tensor = None
+
+
+@dataclass
+class TransformerOutput:
+    last_representation: torch.Tensor = None
+    attention_scores: List[torch.Tensor] = [],
+    attention_probs: List[torch.Tensor] = [],
+    representations: List[torch.Tensor] = [],
+    value_map: torch.Tensor = None
+
+
+@dataclass
+class TransformerLayerOutput:
+    hidden_representation: torch.Tensor = None
+    attention_scores: torch.Tensor = None,
+    attention_probs: torch.Tensor = None,
+    value_map: torch.Tensor = None

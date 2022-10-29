@@ -3,19 +3,24 @@ from typing import *
 import pytorch_lightning as pl
 import torch
 import transformers
+import wandb
 from pytorch_lightning.loggers import WandbLogger, TensorBoardLogger
-from torch import nn, optim
+from torch import optim
 from torchmetrics import Accuracy
 from torchmetrics.functional import accuracy
 
-
-from ._utils import teacher_load, LayerMap, LossControl
+from ._loss import LossCalculator
+from ._utils import teacher_load
+from .image_encoder import ImageEncoder
+from .text_encoder import TextEncoder
+from .weight_share_model import RepeatVisionTransformer
 
 
 class DistillModel(pl.LightningModule):
-    def __init__(self, student_encoder: nn.Module, teacher_name: str, loss_control_para: Dict, download_root: str,
-                 model_type: str = 'text', lr: float = 1e-3, map_type: str = 'mid', init_type=None, warm_steps=10,
-                 total_steps=200, weight_decay=1e-3):
+    def __init__(self, student_encoder: Optional[ImageEncoder, TextEncoder],
+                 teacher_name: str, loss_control_para: Dict, download_root: str,
+                 teacher_need_layers: List, model_type: str = 'text', map_type: str = 'mid', init_type=None,
+                 warm_steps=10, total_steps=200, weight_decay=1e-3, lr: float = 1e-3):
         super().__init__()
         self.__dict__.update(locals())
         self.save_hyperparameters(ignore=['student_encoder'])
@@ -23,19 +28,20 @@ class DistillModel(pl.LightningModule):
         # 定义模型
         self.student = student_encoder
         self.teacher_name = teacher_name
-        self.teacher, tea_layer_num = teacher_load(teacher_name, download_root, model_type)
+        self.teacher = teacher_load(teacher_name, download_root, model_type,
+                                    need_layers=teacher_need_layers)
+        if len(self.teacher.need_layers) != len(self.student.need_layers):
+            raise ValueError(
+                f'the teacher need_layers length is not equal to student need_layers length. '
+                f'But get teacher: {self.teacher.need_layers}, student: {self.student.need_layers}')
+        self.loss_control = LossCalculator(**loss_control_para)
+        self.need_return_para = self.loss_control.get_control_output()
         for p in self.teacher.parameters():
             p.requires_grad = False
-        if hasattr(student_encoder, 'layers'):
-            self.layer_map = LayerMap(student_encoder.layers, tea_layer_num, map_type)
-            self.student.init_layers_with_teacher(self.layer_map, self.teacher.state_dict(), init_type)
-        else:
-            self.layer_map = None
-        self.loss_control = LossControl(**loss_control_para)
-        self.need_return_para = self.loss_control.need_output()
+
         # 定义指标
         self.k_list = [i for i in [1, 2, 3, 4, 5, 10]]
-        self.acc_metrics = nn.ModuleList()
+        self.acc_metrics = []
         for k in self.k_list:
             self.acc_metrics.append(Accuracy(top_k=k))
 
@@ -43,23 +49,25 @@ class DistillModel(pl.LightningModule):
         if self.global_rank == 0:
             # 多gpu会报错
             if isinstance(self.logger, WandbLogger):
-                self.logger.experiment.config.update({'student_para': self.student.hyper_para()})
+                self.logger.log_hyperparams({'student_para': self.student.hyper_para()})
+                wandb.save('./*.py')
+                wandb.save('./data/*.py')
             elif isinstance(self.logger, TensorBoardLogger):
                 self.logger.log_hyperparams(self.hparams, {"hp/stu_acc_top1": 0, "hp/stu_acc_top10": 0})
 
     def forward(self, inputs):
-        if self.layer_map is None:
+        if isinstance(self.student, RepeatVisionTransformer) is None:
             student_outs = self.student(inputs)
         else:
-            student_outs = self.student(inputs, only_last_state=False, **self.need_return_para)
-        teacher_outs = self.teacher(inputs, only_last_state=False, **self.need_return_para)
+            student_outs = self.student(inputs, self.need_return_para, only_last_state=False)
+        teacher_outs = self.teacher(inputs, self.need_return_para, only_last_state=False)
         return student_outs, teacher_outs
 
     def training_step(self, inputs, batch_idx):
         self.teacher.eval()
         student_outs, teacher_outs = self.forward(inputs)
 
-        loss, cal_res = self.loss_control.cal_one_tower_loss(student_outs, teacher_outs, self.layer_map, self.device)
+        loss, cal_res = self.loss_control(student_outs, teacher_outs, self.hparams.model_type)
         # Logging to TensorBoard by default
         self.log_info('train', loss, cal_res, batch_size=len(inputs))
         return loss
@@ -72,9 +80,10 @@ class DistillModel(pl.LightningModule):
             inputs, contrary_rep = imgs, texts
 
         student_outs, teacher_outs = self.forward(inputs)
-        label = torch.arange(student_outs[0].shape[0], device=self.device)
-        loss, cal_res = self.loss_control.cal_one_tower_loss(student_outs, teacher_outs, self.layer_map, self.device)
-        stu_logits, tea_logits = norm_and_logits(contrary_rep, student_outs[0], teacher_outs[0])[:2]
+        label = torch.arange(student_outs.last_representation.shape[0], device=self.device)
+        loss, cal_res = self.loss_control(student_outs, teacher_outs, self.hparams.model_type)
+        stu_logits, tea_logits = norm_and_logits(contrary_rep, student_outs.last_representation,
+                                                 teacher_outs.last_representation)[:2]
 
         softmax_mean_score = torch.diagonal(torch.nn.functional.softmax(stu_logits, dim=1)).mean()
         mean_score = torch.diagonal(stu_logits).mean()
@@ -83,6 +92,7 @@ class DistillModel(pl.LightningModule):
         # log metric
         self.log('hp_metric', self.acc_metrics[0], metric_attribute='acc_metrics', batch_size=len(inputs))
         for i, metric in enumerate(self.acc_metrics):
+            metric.to(self.device)
             metric(stu_logits, label)
             self.log('hp_metric/stu_acc_top{}'.format(self.k_list[i]), metric, metric_attribute='acc_metrics',
                      batch_size=len(inputs), sync_dist=True, )
@@ -100,9 +110,9 @@ class DistillModel(pl.LightningModule):
 
     def log_info(self, stage, loss, cal_res, batch_size):
 
-        self.log("{}/loss".format(stage), loss, batch_size=batch_size, sync_dist=True)
+        self.log("{}/loss".format(stage), loss, batch_size=batch_size)
         for loss_name, loss_res in cal_res.items():
-            self.log("{}/{}".format(stage, loss_name), loss_res, batch_size=batch_size, sync_dist=True)
+            self.log("{}/{}".format(stage, loss_name), loss_res, batch_size=batch_size)
 
     def configure_optimizers(self):
         optimizer = optim.AdamW(self.parameters(), lr=self.hparams.lr, weight_decay=self.hparams.weight_decay)
