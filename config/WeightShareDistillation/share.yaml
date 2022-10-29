@@ -62,11 +62,11 @@ trainer:
   precision: 16
 
   callbacks:
-    - class_path: LearningRateMonitor
-    - class_path: EarlyStopping
-      init_args:
-        monitor: 'val/loss'
-        patience: 15
+#    - class_path: LearningRateMonitor
+#    - class_path: EarlyStopping
+#      init_args:
+#        monitor: 'val/loss'
+#        patience: 15
 
     - class_path: ModelSummary
       init_args:

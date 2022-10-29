@@ -3,7 +3,7 @@ trainer:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
       dir: '/data/pyz/result/Dis_CLIP'
-      name : 'WeightShareDistillation_lr5e-3_384embed'
+      name : 'WeightShareDistillation_1layers'
       project: 'WeightShareDistillation'
       version: null
       log_model: false
@@ -20,15 +20,15 @@ model:
         patch_size: 32
         in_chans: 3
         out_dim: 512
-        embed_dim: 384
+        embed_dim: 768
         depth: 4
-        num_heads: 12
+        num_heads: 24
         mlp_ratio: 4.0
         qkv_bias: True
-        drop_rate: 0.1
-        attn_drop_rate: 0.1
-        drop_path_rate: 0.1
+        drop_rate: 0
+        attn_drop_rate: 0
+        drop_path_rate: 0
         use_cls_token: True
-        repeated_times: 2
+        repeated_times: 4
         use_transform: True
 
