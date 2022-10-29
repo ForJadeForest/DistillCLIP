@@ -1,0 +1,44 @@
+model:
+  class_path: DistillModel
+  init_args:
+#    init_type: 'mid'
+    teacher_name: ViT-B/32
+    download_root: '/data/pyz/.cache'
+    loss_control_para:
+      loss_name: ['l1', 'cos']
+    student_encoder:
+      class_path: model.image_encoder.ImageEncoder
+      init_args:
+        is_student: True
+        tea_transformer_width: 768
+        vit_paras:
+          input_resolution: 224
+          patch_size: 16
+          width: 768
+          layers: 4
+          heads: 24
+          output_dim: 512
+
+trainer:
+  logger:
+    class_path: pytorch_lightning.loggers.wandb.WandbLogger
+    init_args:
+      dir: '/data/pyz/result/Dis_CLIP'
+      name : 'ImageEncoderBaseLine_l1_cos_16_no_all_24head_16patch'
+      project: 'ImageEncoderDistillation'
+      version: null
+      log_model: false
+      sync_tensorboard: True
+
+data:
+  class_path: DistillationDataModule
+  init_args:
+    num_workers: 12
+    dataset: '_dataset'
+    train_batch_size: 1024
+    kwargs:
+      data_dir: '/data/pyz/data'
+      dataset_name: 'ImageDataset'
+      cache_dir: '/data/pyz/data/cache'
+      train_dir: '/home/pyz/combine_dataset/'
+      image_use: 'no_all'

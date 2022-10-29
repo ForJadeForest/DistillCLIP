@@ -1,0 +1,28 @@
+model:
+  class_path: DistillModel
+  init_args:
+    teacher_name: ViT-B/32
+    init_type: 'begin'
+    download_root: '/data/pyz/.cache'
+    loss_control_para:
+      loss_name: ['l1', 'cos', 'attn', 'emb', 'hidden']
+      loss_scale:
+        l1: 1
+        emb: 1
+        attn: 0.25
+        hidden: 0.8
+        cos: 1
+      need_reduce: False
+    lr: 1.0e-4
+
+trainer:
+  logger:
+    class_path: pytorch_lightning.loggers.wandb.WandbLogger
+    init_args:
+      dir: '/data/pyz/result/Dis_CLIP'
+      name : 'ImageEncoderBaseLine_l1_cos_tiny_16_init_begin '
+      project: 'ImageEncoderDistillation'
+      version: null
+      log_model: false
+      sync_tensorboard: True
+  precision: 16

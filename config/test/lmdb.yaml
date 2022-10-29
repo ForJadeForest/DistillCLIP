@@ -1,0 +1,113 @@
+model:
+  class_path: DistillModel
+  init_args:
+    student_encoder:
+      class_path: model._image_encoder.ImageEncoder
+      init_args:
+        is_student: True
+        tea_transformer_width: 768
+        vit_paras:
+          input_resolution: 224
+          patch_size: 32
+          width: 480
+          layers: 4
+          heads: 12
+          output_dim: 512
+    teacher_name: ViT-B/32
+    download_root: '/data/pyz/.cache'
+    loss_control_para:
+      loss_name: ['l1', 'kl', 'cos', 'attn', 'hidden', 'emb']
+      temperature: 2
+      loss_scale:
+        l1: 10
+        emb: 2.5
+        attn: 1.5
+        hidden: 20
+        cos: 10
+        kl: 50
+      percent:
+        l1: 0.2
+        emb: 0.05
+        attn: 0.2
+        hidden: 0.05
+        cos: 0.2
+        kl: 0.3
+    model_type: 'image'
+    map_type: 'begin'
+
+
+
+data:
+  class_path: DistillationDataModule
+  init_args:
+    num_workers: 16
+    dataset: '_dataset'
+    batch_size: 512
+    kwargs:
+      data_dir: '/data/pyz/data'
+      dataset_name: 'ImageDatasetLmdb'
+      cache_dir: '/data/pyz/data/cache3'
+      train_dir: '/home/pyz/combine_dataset/combine_dataset'
+      lmdb_root: '/data/pyz/data/ECSSD.lmdb'
+
+
+
+
+trainer:
+  auto_select_gpus: True # If enabled and gpus or devices is an integer, pick available gpus automatically.
+  accumulate_grad_batches: 1
+  accelerator: 'gpu'
+  precision: 16
+  devices: [ 1 ]
+  #  strategy: 'ddp'
+  max_epochs: 100
+
+
+
+  log_every_n_steps: 100
+  enable_progress_bar: True
+  check_val_every_n_epoch: 1
+  val_check_interval: 0.5
+
+  callbacks:
+    - class_path: LearningRateMonitor
+    - class_path: ModelSummary
+      init_args:
+        max_depth: 2
+    - class_path: ModelCheckpoint
+      init_args:
+        filename: '{epoch}-val_acc{val/acc_top1:.2f}-loss{val/loss}'
+        monitor: 'hp_metric/stu_acc_top1'
+        save_last: True
+        save_top_k: 2
+        mode: 'max'
+        auto_insert_metric_name: false
+#  auto_lr_find: True
+#  auto_scale_batch_size: 'binsearch'
+#  amp_backend: 'apex'  # or native
+#  resume_from_checkpoint: '/load/my/checkpoint'
+
+#  Debug
+#  limit_train_batches: 0.001
+#  limit_val_batches: 0.25 # or int 3 means 3 batches
+#  limit_test_batches:
+#  fast_dev_run: True
+#  limit_predict_batches
+#  overfit_batches: 1 # Overfit a fracion of training/validation data (float) or a set number of batches (int). Default: 0.0.t
+
+
+
+optimizer:
+  class_path: AdamW
+  init_args:
+    lr: 0.0003019951720402019
+    weight_decay: 0.00001
+
+
+lr_scheduler:
+  class_path: ReduceLROnPlateau
+  init_args:
+    mode: 'min'
+    factor: 0.5
+    patience: 3
+    monitor: 'val/loss'
