@@ -11,9 +11,9 @@ from torchmetrics.functional import accuracy
 
 from ._loss import LossCalculator
 from ._utils import teacher_load
-from .image_encoder import ImageEncoder
-from .text_encoder import TextEncoder
-from .weight_share_model import RepeatVisionTransformer
+from .component.image_encoder import ImageEncoder
+from .component.text_encoder import TextEncoder
+from .component.weight_share_model import RepeatVisionTransformer
 
 
 class DistillModel(pl.LightningModule):

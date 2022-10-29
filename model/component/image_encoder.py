@@ -2,7 +2,7 @@ import torch
 from torch import nn
 
 from ._common import VisionTransformer
-from ._utils import ControlOutput, VisionTransformerOutput
+from .output import ControlOutput, VisionTransformerOutput
 
 
 class ImageEncoder(nn.Module):

@@ -5,7 +5,7 @@ import torch
 from torch import nn
 from torch.nn import functional as f
 
-from model._utils import ControlOutput
+from .component.output import ControlOutput
 
 LOSSNAME = ['out_l1', 'out_ce', 'out_kl', 'out_cos', 'embedding_mse', 'attention_score_mse',
             'attention_probs_mse', 'hidden_rep_mse', 'attention_probs_kl', 'last_value_map_kl',
@@ -150,6 +150,8 @@ class LossCalculator(nn.Module):
             elif loss_name == 'last_value_map_kl':
                 cal_res[loss_name] = loss(stu_out.value_map, tea_out.value_map)
             elif loss_name == 'vit_kd':
+                assert self.vit_kd_para['low_layers_num'] + self.vit_kd_para['high_layers_num'] <= len(
+                    stu_out.representations)
                 stu_low_rep = torch.stack(stu_out.representations[:self.vit_kd_para['low_layers_num']], dim=1)
                 tea_low_rep = torch.stack(tea_out.representations[:self.vit_kd_para['low_layers_num']], dim=1)
                 stu_high_rep = torch.stack(stu_out.representations[-self.vit_kd_para['high_layers_num']:], dim=1)
@@ -158,8 +160,6 @@ class LossCalculator(nn.Module):
                 pred_s = [stu_low_rep, stu_high_rep]
                 pred_t = [tea_low_rep, tea_high_rep]
                 cal_res[loss_name] = loss(pred_s, pred_t)
-            if self.normalize:
-                cal_res[loss_name] /= cal_res[loss_name]
         loss = 0
         for (loss_name, scale) in self.loss_scale.items():
             if loss_name == 'label' or loss_name == 'soft_label':

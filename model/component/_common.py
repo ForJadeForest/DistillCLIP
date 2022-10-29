@@ -7,7 +7,7 @@ import torch.nn.functional as f
 from torch import nn
 from torch.nn.parameter import Parameter
 
-from model._utils import ControlOutput, AttentionOutput, TransformerOutput, VisionTransformerOutput, \
+from .output import ControlOutput, AttentionOutput, TransformerOutput, VisionTransformerOutput, \
     TransformerLayerOutput
 
 

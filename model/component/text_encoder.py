@@ -2,7 +2,7 @@ import torch
 from torch import nn
 
 from ._common import Transformer, LayerNorm
-from ._utils import ControlOutput, TransformerOutput, TextTransformerOutput
+from .output import ControlOutput, TransformerOutput, TextTransformerOutput
 
 
 class TextEncoder(nn.Module):

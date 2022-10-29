@@ -35,7 +35,7 @@ model:
           layers: 4
           heads: 12
           output_dim: 512
-          drop_out: 0.1
+          drop_out: 0
           need_layers: null
     loss_control_para:
       loss_name: [ 'out_l1', 'out_ce', 'out_kl', 'out_cos', 'embedding_mse', 'attention_score_mse',
@@ -45,6 +45,9 @@ model:
       vit_kd_para:
         student_dims: 768
         teacher_dims: 768
+        low_layers_num: 2
+        high_layers_num: 2
+      normalize: False
     teacher_name: ViT-B/32
     download_root: '/data/pyz/.cache'
     teacher_need_layers: [ 0, 1, 10, 11 ]
@@ -82,9 +85,9 @@ trainer:
   auto_select_gpus: True
   accumulate_grad_batches: 1
   accelerator: 'gpu'
-  devices: [ 0, 1, 2, 3]
+  devices: [ 0 ]
   max_epochs: 300
-#  strategy: 'ddp'
+
   log_every_n_steps: 50
   enable_progress_bar: True
   check_val_every_n_epoch: 1
