@@ -9,12 +9,10 @@ from torch import optim
 from torchmetrics import Accuracy
 from torchmetrics.functional import accuracy
 
-try:
-    from _utils import teacher_load, LayerMap, LossControl
-    from clip_model import CLIPModel
-except ModuleNotFoundError:
-    from ._utils import teacher_load, LayerMap, LossControl
-    from .clip_model import CLIPModel
+
+from ._utils import teacher_load
+from .component.clip_model import CLIPModel
+
 
 
 @pl_cli.MODEL_REGISTRY

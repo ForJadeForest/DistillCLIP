@@ -2,7 +2,7 @@ from typing import Dict
 
 from torch import nn
 
-from ._utils import ControlOutput
+from .output import ControlOutput
 from .image_encoder import ImageEncoder
 from .text_encoder import TextEncoder
 

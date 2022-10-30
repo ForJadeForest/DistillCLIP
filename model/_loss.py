@@ -443,8 +443,8 @@ class ViTKDLoss(nn.Module):
         for i in range(self.low_layers_num):
             low_align_rep = low_s[:, i]
             if self.align_low:
-                low_align_rep = self.align_low[i](low_s[:, i]).unsqueeze(1)
-
+                low_align_rep = self.align_low[i](low_s[:, i])
+            low_align_rep = low_align_rep.unsqueeze(1)
             if i == 0:
                 low_x = low_align_rep
             else:
@@ -455,10 +455,13 @@ class ViTKDLoss(nn.Module):
         '''ViTKD: Generation'''
         loss_gen = 0
         for i in range(self.high_layers_num):
+            align_layer = None
+            if self.align_high:
+                align_layer = self.align_high[i]
             if i == 0:
-                loss_gen = self.generation_loss(high_s[:, i], self.align_high[i], high_t[:, i])
+                loss_gen = self.generation_loss(high_s[:, i], align_layer, high_t[:, i])
             else:
-                loss_gen += self.generation_loss(high_s[:, i], self.align_high[i], high_t[:, i])
+                loss_gen += self.generation_loss(high_s[:, i], align_layer, high_t[:, i])
         loss_gen /= self.high_layers_num
         return loss_lr + loss_gen
 
@@ -469,7 +472,7 @@ class ViTKDLoss(nn.Module):
 
         x = high_layer_output
         x = x[:, 1:, :]
-        tea_output = tea_output[:, 0, 1:, :]
+        tea_output = tea_output[:, 1:, :]
         B, N, D = x.shape
         x, mat, ids, ids_masked = random_masking(x, self.lambda_vitkd)
         mask_tokens = self.mask_token.repeat(B, N - x.shape[1], 1)

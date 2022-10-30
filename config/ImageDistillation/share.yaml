@@ -24,7 +24,7 @@ model:
   class_path: DistillModel
   init_args:
     student_encoder:
-      class_path: model.image_encoder.ImageEncoder
+      class_path: model.component.image_encoder.ImageEncoder
       init_args:
         is_student: True
         tea_transformer_width: 768
@@ -111,7 +111,7 @@ trainer:
 
     - class_path: ModelSummary
       init_args:
-        max_depth: 2
+        max_depth: 3
     - class_path: ModelCheckpoint
       init_args:
         filename: '{epoch}-val_acc{hp_metric/stu_acc_top1:.2f}-loss{val/loss}'

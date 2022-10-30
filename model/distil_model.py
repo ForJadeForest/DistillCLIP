@@ -17,7 +17,7 @@ from .component.weight_share_model import RepeatVisionTransformer
 
 
 class DistillModel(pl.LightningModule):
-    def __init__(self, student_encoder: Optional[ImageEncoder, TextEncoder],
+    def __init__(self, student_encoder: Union[ImageEncoder, TextEncoder],
                  teacher_name: str, loss_control_para: Dict, download_root: str,
                  teacher_need_layers: List, model_type: str = 'text', map_type: str = 'mid', init_type=None,
                  warm_steps=10, total_steps=200, weight_decay=1e-3, lr: float = 1e-3):
@@ -52,6 +52,8 @@ class DistillModel(pl.LightningModule):
                 self.logger.log_hyperparams({'student_para': self.student.hyper_para()})
                 wandb.save('./*.py')
                 wandb.save('./data/*.py')
+                wandb.save('./model/*.py')
+                wandb.save('./model/component/*.py')
             elif isinstance(self.logger, TensorBoardLogger):
                 self.logger.log_hyperparams(self.hparams, {"hp/stu_acc_top1": 0, "hp/stu_acc_top10": 0})
 
