@@ -33,4 +33,5 @@ model:
         use_transform: True
     loss_control_para:
       loss_name: [ 'l1', 'cos', 'kl' ]
+      temperature: 1
 
