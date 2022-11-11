@@ -38,8 +38,10 @@ model:
           drop_out: 0
           need_layers: null
     loss_control_para:
-      loss_name: [ 'out_l1', 'out_ce', 'out_kl', 'out_cos', 'embedding_mse', 'attention_score_mse',
-                   'attention_probs_mse', 'hidden_rep_mse', 'attention_probs_kl', 'last_value_map_kl',
+#      loss_name: [ 'out_l1', 'out_ce', 'out_kl', 'out_cos', 'embedding_mse', 'attention_score_mse',
+#                   'attention_probs_mse', 'hidden_rep_mse', 'attention_probs_kl', 'last_value_map_kl',
+#                   'vit_kd' ]
+      loss_name: [ 'out_l1', 'out_cos',
                    'vit_kd' ]
       temperature: 1
       vit_kd_para:
@@ -57,7 +59,7 @@ model:
     warm_steps: 10
     total_steps: 300
     weight_decay: 1.0e-2
-    lr: 5.0e-3
+    lr: 1.0e-4
 
 
 
@@ -73,7 +75,7 @@ data:
       dataset_name: 'ImageDataset'
       cache_dir: '/data/pyz/data/cache'
       train_image_dir: '/home/pyz/combine_dataset/'
-      image_use: [ 'imagenet', 'coco' ]
+      image_use: [ 'coco', 'imagenet']
       cache_path: '/data/pyz/.cache/CLIPDistill'
       overwrite: False
 
@@ -98,16 +100,17 @@ trainer:
       dir: '/data/pyz/result/Dis_CLIP'
       name : 'Image_test'
       project: 'ImageDistillation'
-      log_model: false
+#      log_model: false
       sync_tensorboard: True
-      group:
+      group: test
+      log_model: True
 
   callbacks:
     - class_path: LearningRateMonitor
-    - class_path: EarlyStopping
-      init_args:
-        monitor: 'val/loss'
-        patience: 15
+#    - class_path: EarlyStopping
+#      init_args:
+#        monitor: 'val/loss'
+#        patience: 15
 
     - class_path: ModelSummary
       init_args:

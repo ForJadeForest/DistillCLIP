@@ -54,6 +54,7 @@ class DistillModel(pl.LightningModule):
                 wandb.save('./data/*.py')
                 wandb.save('./model/*.py')
                 wandb.save('./model/component/*.py')
+                self.logger.watch(self)
             elif isinstance(self.logger, TensorBoardLogger):
                 self.logger.log_hyperparams(self.hparams, {"hp/stu_acc_top1": 0, "hp/stu_acc_top10": 0})
 
