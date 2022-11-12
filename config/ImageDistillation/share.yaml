@@ -24,25 +24,46 @@ model:
   class_path: DistillModel
   init_args:
     student_encoder:
-      class_path: model.component.image_encoder.ImageEncoder
+#      class_path: model.component.image_encoder.ImageEncoder
+#      init_args:
+#        is_student: True
+#        tea_transformer_width: 768
+#        vit_paras:
+#          input_resolution: 224
+#          patch_size: 32
+#          width: 768
+#          layers: 4
+#          heads: 12
+#          output_dim: 512
+#          drop_out: 0
+#          need_layers: null
+      class_path: model.component.weight_share_model.RepeatVisionTransformer
       init_args:
-        is_student: True
-        tea_transformer_width: 768
-        vit_paras:
-          input_resolution: 224
-          patch_size: 32
-          width: 768
-          layers: 4
-          heads: 12
-          output_dim: 512
-          drop_out: 0
-          need_layers: null
+        img_size: 224
+        patch_size: 32
+        in_chans: 3
+        out_dim: 512
+        embed_dim: 768
+        depth: 4
+        num_heads: 12
+        mlp_ratio: 4.0
+        qkv_bias: True
+        qk_scale: null
+        drop_rate: 0.
+        attn_drop_rate: 0.
+        drop_path_rate: 0.
+        hybrid_backbone: null
+        rpe_config: null
+        use_cls_token: True
+        repeated_times: 2
+        use_transform: True
+
     loss_control_para:
-#      loss_name: [ 'out_l1', 'out_ce', 'out_kl', 'out_cos', 'embedding_mse', 'attention_score_mse',
-#                   'attention_probs_mse', 'hidden_rep_mse', 'attention_probs_kl', 'last_value_map_kl',
-#                   'vit_kd' ]
-      loss_name: [ 'out_l1', 'out_cos',
+      loss_name: [ 'out_l1', 'out_ce', 'out_kl', 'out_cos', 'embedding_mse', 'attention_score_mse',
+                   'attention_probs_mse', 'hidden_rep_mse', 'attention_probs_kl', 'last_value_map_kl',
                    'vit_kd' ]
+#      loss_name: [ 'out_l1', 'out_cos',
+#                   'vit_kd' ]
       temperature: 1
       vit_kd_para:
         student_dims: 768
@@ -69,7 +90,8 @@ data:
   init_args:
     num_workers: 12
     dataset: '_dataset'
-    train_batch_size: 1024
+    train_batch_size: 512
+
     kwargs:
       data_dir: '/data/pyz/data'
       dataset_name: 'ImageDataset'
@@ -87,7 +109,7 @@ trainer:
   auto_select_gpus: True
   accumulate_grad_batches: 1
   accelerator: 'gpu'
-  devices: [ 0 ]
+  devices: [ 1 ]
   max_epochs: 300
 
   log_every_n_steps: 50
@@ -114,7 +136,7 @@ trainer:
 
     - class_path: ModelSummary
       init_args:
-        max_depth: 3
+        max_depth: 2
     - class_path: ModelCheckpoint
       init_args:
         filename: '{epoch}-val_acc{hp_metric/stu_acc_top1:.2f}-loss{val/loss}'

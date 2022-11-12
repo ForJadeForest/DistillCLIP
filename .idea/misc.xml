@@ -5,27 +5,11 @@
     <option name="openedFilesInfos">
       <list>
         <OpenedFileInfo>
-          <option name="caretOffset" value="2411" />
-          <option name="fileUrl" value="file://$PROJECT_DIR$/model/distil_model.py" />
-        </OpenedFileInfo>
-        <OpenedFileInfo>
-          <option name="caretOffset" value="23" />
-          <option name="fileUrl" value="file://$PROJECT_DIR$/model/_metrics.py" />
-        </OpenedFileInfo>
-        <OpenedFileInfo>
-          <option name="caretOffset" value="262" />
-          <option name="fileUrl" value="file://$PROJECT_DIR$/main.py" />
-        </OpenedFileInfo>
-        <OpenedFileInfo>
-          <option name="caretOffset" value="839" />
+          <option name="caretOffset" value="5174" />
           <option name="fileUrl" value="file://$PROJECT_DIR$/model/_loss.py" />
         </OpenedFileInfo>
         <OpenedFileInfo>
-          <option name="caretOffset" value="0" />
-          <option name="fileUrl" value="file://$PROJECT_DIR$/model/component/image_encoder.py" />
-        </OpenedFileInfo>
-        <OpenedFileInfo>
-          <option name="caretOffset" value="0" />
+          <option name="caretOffset" value="8342" />
           <option name="fileUrl" value="file://$PROJECT_DIR$/model/component/weight_share_model.py" />
         </OpenedFileInfo>
       </list>
