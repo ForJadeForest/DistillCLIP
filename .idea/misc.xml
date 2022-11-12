@@ -12,6 +12,13 @@
           <option name="caretOffset" value="8342" />
           <option name="fileUrl" value="file://$PROJECT_DIR$/model/component/weight_share_model.py" />
         </OpenedFileInfo>
+        <OpenedFileInfo>
+          <option name="fileUrl" value="mock:///Diff" />
+        </OpenedFileInfo>
+        <OpenedFileInfo>
+          <option name="caretOffset" value="0" />
+          <option name="fileUrl" value="file://$PROJECT_DIR$/.gitignore" />
+        </OpenedFileInfo>
       </list>
     </option>
   </component>
