@@ -11,14 +11,12 @@ from torchmetrics.functional import accuracy
 
 from ._loss import LossCalculator
 from ._utils import teacher_load
-from .component.image_encoder import ImageEncoder
-from .component.text_encoder import TextEncoder
 from .component.weight_share_model import RepeatVisionTransformer
 
 
 class DistillModel(pl.LightningModule):
     def __init__(self, student_encoder: torch.nn.Module,
-                 teacher_name: str, loss_control_para: Dict, download_root: str,
+                 teacher_name: str, loss_control_para: Dict, download_root: str, norm: bool,
                  teacher_need_layers: List, model_type: str = 'text', map_type: str = 'mid', init_type=None,
                  warm_steps=10, total_steps=200, weight_decay=1e-3, lr: float = 1e-3):
         super().__init__()
@@ -30,10 +28,10 @@ class DistillModel(pl.LightningModule):
         self.teacher_name = teacher_name
         self.teacher = teacher_load(teacher_name, download_root, model_type,
                                     need_layers=teacher_need_layers)
-        # if len(self.teacher.need_layers) != len(self.student.need_layers):
-        #     raise ValueError(
-        #         f'the teacher need_layers length is not equal to student need_layers length. '
-        #         f'But get teacher: {self.teacher.need_layers}, student: {self.student.need_layers}')
+        if len(self.teacher.need_layers) != len(self.student.need_layers):
+            raise ValueError(
+                f'the teacher need_layers length is not equal to student need_layers length. '
+                f'But get teacher: {self.teacher.need_layers}, student: {self.student.need_layers}')
         self.loss_control = LossCalculator(**loss_control_para)
         self.need_return_para = self.loss_control.get_control_output()
         for p in self.teacher.parameters():
@@ -64,6 +62,9 @@ class DistillModel(pl.LightningModule):
         else:
             student_outs = self.student(inputs, self.need_return_para, only_last_state=False)
         teacher_outs = self.teacher(inputs, self.need_return_para, only_last_state=False)
+        if self.norm:
+            student_outs.last_representation /= student_outs.last_representation.norm(dim=-1, keepdim=True)
+            teacher_outs.last_representation /= teacher_outs.last_representation.norm(dim=-1, keepdim=True)
         return student_outs, teacher_outs
 
     def training_step(self, inputs, batch_idx):

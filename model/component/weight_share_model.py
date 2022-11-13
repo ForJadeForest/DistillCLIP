@@ -1,9 +1,8 @@
 import math
-from typing import List
+from typing import List, Optional
 
 import torch
 import torch.nn as nn
-
 from timm.models.layers import DropPath, trunc_normal_
 from timm.models.vision_transformer import Mlp, PatchEmbed
 
@@ -226,7 +225,7 @@ class RepeatVisionTransformer(nn.Module):
                            and image relative position encoding
     """
 
-    def __init__(self, img_size=224, patch_size=16, in_chans=3, out_dim=1000, embed_dim=768, depth=12,
+    def __init__(self, need_layers: Optional[List]=None, img_size=224, patch_size=16, in_chans=3, out_dim=1000, embed_dim=768, depth=12,
                  num_heads=12, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop_rate=0., attn_drop_rate=0.,
                  drop_path_rate=0., hybrid_backbone=None, rpe_config=None,
                  use_cls_token=True,
@@ -235,6 +234,9 @@ class RepeatVisionTransformer(nn.Module):
                  ):
         super().__init__()
         norm_layer = nn.LayerNorm
+        if need_layers is None:
+            need_layers = [i for i in range(depth)]
+        self.need_layers = need_layers
         self.num_classes = out_dim
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
 
@@ -366,7 +368,6 @@ class RepeatVisionTransformer(nn.Module):
                                        value_map=value_map,
                                        embedding=embedding)
 
-
     def forward(self, x, control_output: ControlOutput):
         vit_output: VisionTransformerOutput = self.forward_features(x, control_output)
         x = vit_output.last_representation
@@ -376,7 +377,6 @@ class RepeatVisionTransformer(nn.Module):
         x = self.head(x)
         vit_output.last_representation = x[:, 0]
         return vit_output
-
 
     def hyper_para(self):
         return self.hyper
