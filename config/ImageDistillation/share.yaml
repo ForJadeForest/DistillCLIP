@@ -109,7 +109,7 @@ trainer:
   auto_select_gpus: True
   accumulate_grad_batches: 1
   accelerator: 'gpu'
-  devices: [ 0, 1, 2, 3 ]
+  devices: [ 0, 1 ]
   strategy: 'ddp'
   max_epochs: 300
   limit_train_batches: 3

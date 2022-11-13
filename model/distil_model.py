@@ -84,33 +84,63 @@ class DistillModel(pl.LightningModule):
             inputs, contrary_rep = imgs, texts
 
         student_outs, teacher_outs = self.forward(inputs)
-        label = torch.arange(student_outs.last_representation.shape[0], device=self.device)
         loss, cal_res = self.loss_control(student_outs, teacher_outs, self.hparams.model_type)
-        stu_logits, tea_logits = norm_and_logits(contrary_rep, student_outs.last_representation,
-                                                 teacher_outs.last_representation)[:2]
-
-        softmax_mean_score = torch.diagonal(torch.nn.functional.softmax(stu_logits, dim=1)).mean()
-        mean_score = torch.diagonal(stu_logits).mean()
-        self.log('softmax_mean_score', softmax_mean_score, batch_size=len(inputs), sync_dist=True)
-        self.log('mean_score', mean_score, batch_size=len(inputs), sync_dist=True)
-        # log metric
-        self.log('hp_metric', self.acc_metrics[0], metric_attribute='acc_metrics', batch_size=len(inputs))
-        for i, metric in enumerate(self.acc_metrics):
-            metric.to(self.device)
-            metric(stu_logits, label)
-            self.log('hp_metric/stu_acc_top{}'.format(self.k_list[i]), metric, metric_attribute='acc_metrics',
-                     batch_size=len(inputs), sync_dist=True, )
-            if self.current_epoch == 0:
-                acc_tea = accuracy(tea_logits, label, top_k=self.k_list[i])
-                self.log('hp_metric/tea_acc_top{}'.format(self.k_list[i]), acc_tea, prog_bar=False, sync_dist=True,
-                         batch_size=len(inputs))
-                tea_softmax_mean_score = torch.diagonal(torch.nn.functional.softmax(tea_logits, dim=1)).mean()
-                tea_mean_score = torch.diagonal(tea_logits).mean()
-                self.log('tea_softmax_mean_score', tea_softmax_mean_score, batch_size=len(inputs), sync_dist=True)
-                self.log('tea_mean_score', tea_mean_score, batch_size=len(inputs), sync_dist=True)
-        # Logging to TensorBoard by default
         self.log_info('val', loss, cal_res, len(inputs))
-        return loss
+        return {
+            'student': student_outs.last_representation,
+            'teacher': teacher_outs.last_representation
+        }
+
+
+        # stu_logits, tea_logits = norm_and_logits(contrary_rep, student_outs.last_representation,
+        #                                          teacher_outs.last_representation)[:2]
+
+        # softmax_mean_score = torch.diagonal(torch.nn.functional.softmax(stu_logits, dim=1)).mean()
+        # mean_score = torch.diagonal(stu_logits).mean()
+        # self.log('softmax_mean_score', softmax_mean_score, batch_size=len(inputs), sync_dist=True)
+        # self.log('mean_score', mean_score, batch_size=len(inputs), sync_dist=True)
+        # # log metric
+        # self.log('hp_metric', self.acc_metrics[0], metric_attribute='acc_metrics', batch_size=len(inputs))
+        # for i, metric in enumerate(self.acc_metrics):
+        #     metric.to(self.device)
+        #     metric(stu_logits, label)
+        #     self.log('hp_metric/stu_acc_top{}'.format(self.k_list[i]), metric, metric_attribute='acc_metrics',
+        #              batch_size=len(inputs), sync_dist=True, )
+        #     if self.current_epoch == 0:
+        #         acc_tea = accuracy(tea_logits, label, top_k=self.k_list[i])
+        #         self.log('hp_metric/tea_acc_top{}'.format(self.k_list[i]), acc_tea, prog_bar=False, sync_dist=True,
+        #                  batch_size=len(inputs))
+        #         tea_softmax_mean_score = torch.diagonal(torch.nn.functional.softmax(tea_logits, dim=1)).mean()
+        #         tea_mean_score = torch.diagonal(tea_logits).mean()
+        #         self.log('tea_softmax_mean_score', tea_softmax_mean_score, batch_size=len(inputs), sync_dist=True)
+        #         self.log('tea_mean_score', tea_mean_score, batch_size=len(inputs), sync_dist=True)
+        # Logging to TensorBoard by default
+
+        # return loss
+
+    def validation_step_end(self, step_out):
+        student_out = step_out['student']
+        teacher_out = step_out['teacher']
+
+        #
+        # # predictions from each GPU
+        # predictions = batch_parts["pred"]
+        # # losses from each GPU
+        # losses = batch_parts["loss"]
+        #
+        # gpu_0_prediction = predictions[0]
+        # gpu_1_prediction = predictions[1]
+        #
+        # # do something with both outputs
+        # return (losses[0] + losses[1]) / 2
+        return {
+            'student': student_out,
+            'teacher': teacher_out
+        }
+
+    def validation_epoch_end(self, outputs) -> None:
+        a = 1
+        # student_outs = torch.stack(outputs['student'])
 
     def log_info(self, stage, loss, cal_res, batch_size):
 
