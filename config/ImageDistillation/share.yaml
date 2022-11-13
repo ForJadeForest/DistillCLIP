@@ -57,7 +57,7 @@ model:
         use_cls_token: True
         repeated_times: 2
         use_transform: True
-
+    norm: False
     loss_control_para:
       loss_name: [ 'out_l1', 'out_ce', 'out_kl', 'out_cos', 'embedding_mse', 'attention_score_mse',
                    'attention_probs_mse', 'hidden_rep_mse', 'attention_probs_kl', 'last_value_map_kl',
@@ -90,8 +90,8 @@ data:
   init_args:
     num_workers: 12
     dataset: '_dataset'
-    train_batch_size: 512
-
+    train_batch_size: 1024
+    val_batch_size: 2500
     kwargs:
       data_dir: '/data/pyz/data'
       dataset_name: 'ImageDataset'
@@ -109,9 +109,10 @@ trainer:
   auto_select_gpus: True
   accumulate_grad_batches: 1
   accelerator: 'gpu'
-  devices: [ 1 ]
+  devices: [ 0, 1, 2, 3 ]
+  strategy: 'ddp'
   max_epochs: 300
-
+  limit_train_batches: 3
   log_every_n_steps: 50
   enable_progress_bar: True
   check_val_every_n_epoch: 1
