@@ -39,7 +39,7 @@ class DistillModel(pl.LightningModule):
 
         # 定义指标
         self.k_list = [i for i in [1, 2, 3, 4, 5, 10]]
-        self.acc_metrics = []
+        self.acc_metrics = torch.nn.ModuleList()
         for k in self.k_list:
             self.acc_metrics.append(Accuracy(top_k=k))
 
@@ -84,39 +84,59 @@ class DistillModel(pl.LightningModule):
             inputs, contrary_rep = imgs, texts
 
         student_outs, teacher_outs = self.forward(inputs)
-        label = torch.arange(student_outs.last_representation.shape[0], device=self.device)
         loss, cal_res = self.loss_control(student_outs, teacher_outs, self.hparams.model_type)
-        stu_logits, tea_logits = norm_and_logits(contrary_rep, student_outs.last_representation,
-                                                 teacher_outs.last_representation)[:2]
+        self.log_info('val', loss, cal_res, len(inputs))
+        return {
+            'student': self.all_gather(student_outs.last_representation),
+            'teacher': self.all_gather(teacher_outs.last_representation),
+            'contrary_rep': self.all_gather(contrary_rep)
+        }
 
+    def validation_step_end(self, step_out):
+        return step_out
+
+    def validation_epoch_end(self, outputs) -> None:
+        stu_outs = []
+        tea_outs = []
+        contrary_reps = []
+        for batch in outputs:
+            student_out, teacher_out, contrary_rep = batch['student'], batch['teacher'], batch['contrary_rep']
+            embedding = student_out.shape[-1]
+            stu_outs.append(student_out.reshape(-1, embedding))
+            tea_outs.append(teacher_out.reshape(-1, embedding))
+            contrary_reps.append(contrary_rep.reshape(-1, embedding))
+        stu_outs = torch.cat(stu_outs, dim=0).float()
+        tea_outs = torch.cat(tea_outs, dim=0).float()
+        contrary_reps = torch.cat(contrary_reps, dim=0).float()
+        stu_logits, tea_logits = norm_and_logits(contrary_reps, stu_outs, tea_outs)[:2]
+        label = torch.arange(stu_logits.shape[0], device=self.device)
         softmax_mean_score = torch.diagonal(torch.nn.functional.softmax(stu_logits, dim=1)).mean()
         mean_score = torch.diagonal(stu_logits).mean()
-        self.log('softmax_mean_score', softmax_mean_score, batch_size=len(inputs), sync_dist=True)
-        self.log('mean_score', mean_score, batch_size=len(inputs), sync_dist=True)
+        self.log('softmax_mean_score', softmax_mean_score, batch_size=stu_logits.shape[0], sync_dist=True)
+        self.log('mean_score', mean_score, batch_size=stu_logits.shape[0], sync_dist=True)
         # log metric
-        self.log('hp_metric', self.acc_metrics[0], metric_attribute='acc_metrics', batch_size=len(inputs))
+        self.log('hp_metric', self.acc_metrics[0], metric_attribute='acc_metrics', batch_size=stu_logits.shape[0],
+                 rank_zero_only=True)
+
         for i, metric in enumerate(self.acc_metrics):
-            metric.to(self.device)
             metric(stu_logits, label)
             self.log('hp_metric/stu_acc_top{}'.format(self.k_list[i]), metric, metric_attribute='acc_metrics',
-                     batch_size=len(inputs), sync_dist=True, )
+                     batch_size=stu_logits.shape[0], rank_zero_only=True, prog_bar=True)
             if self.current_epoch == 0:
                 acc_tea = accuracy(tea_logits, label, top_k=self.k_list[i])
-                self.log('hp_metric/tea_acc_top{}'.format(self.k_list[i]), acc_tea, prog_bar=False, sync_dist=True,
-                         batch_size=len(inputs))
+                self.log('hp_metric/tea_acc_top{}'.format(self.k_list[i]), acc_tea, batch_size=tea_logits.shape[0],
+                         rank_zero_only=True)
                 tea_softmax_mean_score = torch.diagonal(torch.nn.functional.softmax(tea_logits, dim=1)).mean()
                 tea_mean_score = torch.diagonal(tea_logits).mean()
-                self.log('tea_softmax_mean_score', tea_softmax_mean_score, batch_size=len(inputs), sync_dist=True)
-                self.log('tea_mean_score', tea_mean_score, batch_size=len(inputs), sync_dist=True)
-        # Logging to TensorBoard by default
-        self.log_info('val', loss, cal_res, len(inputs))
-        return loss
+                self.log('tea_softmax_mean_score', tea_softmax_mean_score, batch_size=stu_logits.shape[0],
+                         rank_zero_only=True)
+                self.log('tea_mean_score', tea_mean_score, batch_size=stu_logits.shape[0], rank_zero_only=True)
 
     def log_info(self, stage, loss, cal_res, batch_size):
 
-        self.log("{}/loss".format(stage), loss, batch_size=batch_size)
+        self.log("{}/loss".format(stage), loss, batch_size=batch_size, sync_dist=True)
         for loss_name, loss_res in cal_res.items():
-            self.log("{}/{}".format(stage, loss_name), loss_res, batch_size=batch_size)
+            self.log("{}/{}".format(stage, loss_name), loss_res, batch_size=batch_size, sync_dist=True)
 
     def configure_optimizers(self):
         optimizer = optim.AdamW(self.parameters(), lr=self.hparams.lr, weight_decay=self.hparams.weight_decay)

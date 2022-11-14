@@ -57,13 +57,12 @@ model:
         use_cls_token: True
         repeated_times: 2
         use_transform: True
-
+    norm: False
     loss_control_para:
-      loss_name: [ 'out_l1', 'out_ce', 'out_kl', 'out_cos', 'embedding_mse', 'attention_score_mse',
-                   'attention_probs_mse', 'hidden_rep_mse', 'attention_probs_kl', 'last_value_map_kl',
-                   'vit_kd' ]
-#      loss_name: [ 'out_l1', 'out_cos',
+#      loss_name: [ 'out_l1', 'out_ce', 'out_kl', 'out_cos', 'embedding_mse', 'attention_score_mse',
+#                   'attention_probs_mse', 'hidden_rep_mse', 'attention_probs_kl', 'last_value_map_kl',
 #                   'vit_kd' ]
+      loss_name: [ 'out_l1', 'out_cos',]
       temperature: 1
       vit_kd_para:
         student_dims: 768
@@ -77,10 +76,10 @@ model:
     model_type: 'image'
     map_type: 'begin'
     init_type: null
-    warm_steps: 10
+    warm_steps: 15
     total_steps: 300
     weight_decay: 1.0e-2
-    lr: 1.0e-4
+    lr: 3.0e-5
 
 
 
@@ -90,8 +89,8 @@ data:
   init_args:
     num_workers: 12
     dataset: '_dataset'
-    train_batch_size: 512
-
+    train_batch_size: 1024
+    val_batch_size: 1250
     kwargs:
       data_dir: '/data/pyz/data'
       dataset_name: 'ImageDataset'
@@ -109,9 +108,10 @@ trainer:
   auto_select_gpus: True
   accumulate_grad_batches: 1
   accelerator: 'gpu'
-  devices: [ 1 ]
+  devices: [ 0, 1, 2, 3]
+  strategy: 'ddp'
   max_epochs: 300
-
+#  limit_train_batches: 1
   log_every_n_steps: 50
   enable_progress_bar: True
   check_val_every_n_epoch: 1
@@ -119,13 +119,14 @@ trainer:
   logger:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
-      dir: '/data/pyz/result/Dis_CLIP'
-      name : 'Image_test'
+      save_dir: '/data/pyz/result/Dis_CLIP'
+      name: 'baseline-weight share'
       project: 'ImageDistillation'
-#      log_model: false
-      sync_tensorboard: True
-      group: test
-      log_model: True
+      log_model: false
+      group: weight_share
+      version: 'baseline-weight share'
+      tag: ['baseline', 'weight share']
+      mode: 'online'
 
   callbacks:
     - class_path: LearningRateMonitor
