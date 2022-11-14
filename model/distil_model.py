@@ -95,6 +95,7 @@ class DistillModel(pl.LightningModule):
     def validation_step_end(self, step_out):
         return step_out
 
+    # @pytorch_lightning.utilities.rank_zero_only
     def validation_epoch_end(self, outputs) -> None:
         stu_outs = []
         tea_outs = []
@@ -112,30 +113,34 @@ class DistillModel(pl.LightningModule):
         label = torch.arange(stu_logits.shape[0], device=self.device)
         softmax_mean_score = torch.diagonal(torch.nn.functional.softmax(stu_logits, dim=1)).mean()
         mean_score = torch.diagonal(stu_logits).mean()
-        self.log('softmax_mean_score', softmax_mean_score, batch_size=stu_logits.shape[0])
-        self.log('mean_score', mean_score, batch_size=stu_logits.shape[0])
+        self.log('softmax_mean_score', softmax_mean_score, batch_size=stu_logits.shape[0], sync_dist=True)
+        self.log('mean_score', mean_score, batch_size=stu_logits.shape[0], sync_dist=True)
         # log metric
-        self.log('hp_metric', self.acc_metrics[0], metric_attribute='acc_metrics', batch_size=stu_logits.shape[0])
+        self.log('hp_metric', self.acc_metrics[0], metric_attribute='acc_metrics', batch_size=stu_logits.shape[0],
+                 sync_dist=True)
+
         for i, metric in enumerate(self.acc_metrics):
             metric(stu_logits, label)
             self.log('hp_metric/stu_acc_top{}'.format(self.k_list[i]), metric, metric_attribute='acc_metrics',
-                     batch_size=stu_logits.shape[0])
+                     batch_size=stu_logits.shape[0], sync_dist=True)
             if self.current_epoch == 0:
                 acc_tea = accuracy(tea_logits, label, top_k=self.k_list[i])
-                self.log('hp_metric/tea_acc_top{}'.format(self.k_list[i]), acc_tea, batch_size=tea_logits.shape[0])
+                self.log('hp_metric/tea_acc_top{}'.format(self.k_list[i]), acc_tea, batch_size=tea_logits.shape[0],
+                         sync_dist=True)
                 tea_softmax_mean_score = torch.diagonal(torch.nn.functional.softmax(tea_logits, dim=1)).mean()
                 tea_mean_score = torch.diagonal(tea_logits).mean()
-                self.log('tea_softmax_mean_score', tea_softmax_mean_score, batch_size=stu_logits.shape[0])
-                self.log('tea_mean_score', tea_mean_score, batch_size=stu_logits.shape[0])
+                self.log('tea_softmax_mean_score', tea_softmax_mean_score, batch_size=stu_logits.shape[0],
+                         sync_dist=True)
+                self.log('tea_mean_score', tea_mean_score, batch_size=stu_logits.shape[0], sync_dist=True)
         # Logging to TensorBoard by default
 
         # return loss
 
     def log_info(self, stage, loss, cal_res, batch_size):
 
-        self.log("{}/loss".format(stage), loss, batch_size=batch_size)
+        self.log("{}/loss".format(stage), loss, batch_size=batch_size, sync_dist=True)
         for loss_name, loss_res in cal_res.items():
-            self.log("{}/{}".format(stage, loss_name), loss_res, batch_size=batch_size)
+            self.log("{}/{}".format(stage, loss_name), loss_res, batch_size=batch_size, sync_dist=True)
 
     def configure_optimizers(self):
         optimizer = optim.AdamW(self.parameters(), lr=self.hparams.lr, weight_decay=self.hparams.weight_decay)
