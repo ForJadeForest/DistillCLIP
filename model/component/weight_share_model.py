@@ -13,7 +13,8 @@ except ImportError:
     from timm.models.vision_transformer_hybrid import HybridEmbed
 
 from ._irpe import build_rpe
-from .output import AttentionOutput, VisionTransformerOutput, TransformerOutput, TransformerLayerOutput, ControlOutput
+from .output import AttentionOutput, VisionTransformerOutput, TransformerOutput, TransformerLayerOutput, ControlOutput, \
+    TextTransformerOutput
 
 
 class RepeatedModuleList(nn.Module):
@@ -161,7 +162,9 @@ class MiniBlock(nn.Module):
         if repeated_times > 1:
             self.norm1 = RepeatedModuleList([norm_layer(dim) for _ in range(repeated_times)], repeated_times)
             self.norm2 = RepeatedModuleList([norm_layer(dim) for _ in range(repeated_times)], repeated_times)
-
+        else:
+            self.norm1 = norm_layer(dim)
+            self.norm2 = norm_layer(dim)
         self.attn = MiniAttention(
             dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop,
             rpe_config=rpe_config,
@@ -225,10 +228,10 @@ class RepeatVisionTransformer(nn.Module):
                            and image relative position encoding
     """
 
-    def __init__(self, need_layers: Optional[List]=None, img_size=224, patch_size=16, in_chans=3, out_dim=1000, embed_dim=768, depth=12,
+    def __init__(self, need_layers: Optional[List] = None, img_size=224, patch_size=16, in_chans=3, out_dim=1000,
+                 embed_dim=768, depth=12,
                  num_heads=12, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop_rate=0., attn_drop_rate=0.,
                  drop_path_rate=0., hybrid_backbone=None, rpe_config=None,
-                 use_cls_token=True,
                  repeated_times=1,
                  use_transform=False,
                  ):
@@ -248,11 +251,8 @@ class RepeatVisionTransformer(nn.Module):
                 img_size=img_size, patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim)
         num_patches = self.patch_embed.num_patches
 
-        if use_cls_token:
-            self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
-        else:
-            self.cls_token = None
-        pos_embed_len = 1 + num_patches if use_cls_token else num_patches
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
+        pos_embed_len = 1 + num_patches
         self.pos_embed = nn.Parameter(torch.zeros(1, pos_embed_len, embed_dim))
         self.pos_drop = nn.Dropout(p=drop_rate)
 
@@ -293,11 +293,6 @@ class RepeatVisionTransformer(nn.Module):
 
         # Classifier head
         self.head = nn.Linear(embed_dim, out_dim) if out_dim > 0 else nn.Identity()
-
-        if not use_cls_token:
-            self.avgpool = nn.AdaptiveAvgPool1d(1)
-        else:
-            self.avgpool = None
 
         trunc_normal_(self.pos_embed, std=.02)
         if self.cls_token is not None:
@@ -342,9 +337,8 @@ class RepeatVisionTransformer(nn.Module):
         B = x.shape[0]
         x = self.patch_embed(x)
 
-        if self.cls_token is not None:
-            cls_tokens = self.cls_token.expand(B, -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
-            x = torch.cat((cls_tokens, x), dim=1)
+        cls_tokens = self.cls_token.expand(B, -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
+        x = torch.cat((cls_tokens, x), dim=1)
 
         x = x + self.pos_embed
         embedding = x
@@ -373,6 +367,149 @@ class RepeatVisionTransformer(nn.Module):
         x = vit_output.last_representation
         vit_output.last_representation = self.head(x)
         return vit_output
+
+    def hyper_para(self):
+        return self.hyper
+
+
+class RepeatTextTransformer(nn.Module):
+    """
+    Text Transformer with support for patch or hybrid CNN input stage
+                           and image relative position encoding
+    """
+
+    def __init__(self, need_layers: Optional[List] = None, vocab_size=49408, context_length=77, out_dim=512,
+                 embed_dim=768, depth=12,
+                 num_heads=12, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop_rate=0., attn_drop_rate=0.,
+                 drop_path_rate=0., rpe_config=None,
+                 repeated_times=1,
+                 use_transform=False,
+                 ):
+        super().__init__()
+        norm_layer = nn.LayerNorm
+        if need_layers is None:
+            need_layers = [i for i in range(depth)]
+        self.need_layers = need_layers
+        self.num_classes = out_dim
+        self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
+        self.context_length = context_length
+        self.patch_embed = nn.Embedding(vocab_size, embed_dim)
+
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
+        self.pos_embed = nn.Parameter(torch.empty(self.context_length, embed_dim))
+        self.pos_drop = nn.Dropout(p=drop_rate)
+
+        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
+
+        block_kwargs = dict(
+            dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
+            drop=drop_rate, attn_drop=attn_drop_rate,
+            norm_layer=norm_layer, rpe_config=rpe_config,
+            use_transform=use_transform)
+        self.hyper = {
+            'block_kwargs': block_kwargs,
+            'depth': depth,
+            'repeated_times': repeated_times
+        }
+        assert depth % repeated_times == 0
+        depth //= repeated_times
+
+        blocks = []
+
+        for i in range(depth):
+            if repeated_times > 1:
+                block = RepeatedMiniBlock(
+                    repeated_times=repeated_times,
+                    drop_paths=dpr[i * repeated_times: (i + 1) * repeated_times],
+                    **block_kwargs,
+                )
+            else:
+                block = MiniBlock(drop_paths=[dpr[i]], **block_kwargs)
+            blocks.append(block)
+        self.blocks = nn.ModuleList(blocks)
+
+        self.norm = norm_layer(embed_dim)
+
+        # NOTE as per official impl, we could have a pre-logits representation dense layer + tanh here
+        # self.repr = nn.Linear(embed_dim, representation_size)
+        # self.repr_act = nn.Tanh()
+
+        # Classifier head
+        self.head = nn.Linear(embed_dim, out_dim) if out_dim > 0 else nn.Identity()
+
+        trunc_normal_(self.pos_embed, std=.02)
+        if self.cls_token is not None:
+            trunc_normal_(self.cls_token, std=.02)
+        self.apply(self._init_weights)
+        self.apply(self._init_custom_weights)
+
+        def set_repeated_id(m):
+            m._repeated_id = 0
+
+        self.apply(set_repeated_id)
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            trunc_normal_(m.weight, std=.02)
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.LayerNorm):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
+
+    def _init_custom_weights(self, m):
+        if hasattr(m, 'init_weights'):
+            m.init_weights()
+
+    @torch.jit.ignore
+    def no_weight_decay(self):
+        return {'pos_embed', 'cls_token'}
+
+    def get_classifier(self):
+        return self.head
+
+    def reset_classifier(self, num_classes, global_pool=''):
+        self.num_classes = num_classes
+        self.head = nn.Linear(self.embed_dim, num_classes) if num_classes > 0 else nn.Identity()
+
+    def forward_features(self, x, control_output: ControlOutput):
+        value_map = None
+        attention_scores = []
+        representations = []
+        attention_probs = []
+        B = x.shape[0]
+        x = self.patch_embed(x)
+
+        cls_tokens = self.cls_token.expand(B, -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
+        x = torch.cat((cls_tokens, x), dim=1)
+
+        x = x + self.pos_embed
+        embedding = x
+        x = self.pos_drop(x)
+
+        for blk in self.blocks:
+            repeat_block_out: TransformerOutput = blk(x, control_output)
+            x = repeat_block_out.last_representation
+            for i in repeat_block_out.representations:
+                representations.append(i)
+            for i in repeat_block_out.attention_scores:
+                attention_scores.append(i)
+            for i in repeat_block_out.attention_probs:
+                attention_probs.append(i)
+            value_map = repeat_block_out.value_map
+        x = self.norm(x)
+        return TextTransformerOutput(last_representation=x[:, 0],
+                                     attention_scores=attention_scores,
+                                     attention_probs=attention_probs,
+                                     representations=representations,
+                                     value_map=value_map,
+                                     embedding=embedding)
+
+    def forward(self, x, control_output: ControlOutput):
+        text_output: TextTransformerOutput = self.forward_features(x, control_output)
+        x = text_output.last_representation
+        text_output.last_representation = self.head(x)
+        return text_output
 
     def hyper_para(self):
         return self.hyper
