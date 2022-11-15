@@ -79,7 +79,7 @@ model:
     warm_steps: 15
     total_steps: 300
     weight_decay: 1.0e-2
-    lr: 3.0e-5
+    lr: 5.0e-3
 
 
 
@@ -89,7 +89,7 @@ data:
   init_args:
     num_workers: 12
     dataset: '_dataset'
-    train_batch_size: 1024
+    train_batch_size: 1600
     val_batch_size: 1250
     kwargs:
       data_dir: '/data/pyz/data'
@@ -109,7 +109,7 @@ trainer:
   accumulate_grad_batches: 1
   accelerator: 'gpu'
   devices: [ 0, 1, 2, 3]
-  strategy: 'ddp'
+  strategy: 'ddp_find_unused_parameters_false'
   max_epochs: 300
 #  limit_train_batches: 1
   log_every_n_steps: 50
@@ -125,8 +125,8 @@ trainer:
       log_model: false
       group: weight_share
       version: 'baseline-weight share'
-      tag: ['baseline', 'weight share']
-      mode: 'online'
+      tags: ['baseline', 'weight share']
+#      mode: 'online'
 
   callbacks:
     - class_path: LearningRateMonitor
