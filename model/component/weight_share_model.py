@@ -361,7 +361,7 @@ class RepeatVisionTransformer(nn.Module):
                 attention_probs.append(i)
             value_map = repeat_block_out.value_map
         x = self.norm(x)
-        return VisionTransformerOutput(last_representation=x,
+        return VisionTransformerOutput(last_representation=x[:, 0],
                                        attention_scores=attention_scores,
                                        attention_probs=attention_probs,
                                        representations=representations,
@@ -371,11 +371,7 @@ class RepeatVisionTransformer(nn.Module):
     def forward(self, x, control_output: ControlOutput):
         vit_output: VisionTransformerOutput = self.forward_features(x, control_output)
         x = vit_output.last_representation
-        if self.avgpool is not None:
-            x = self.avgpool(x.transpose(1, 2))  # (B, C, 1)
-            x = torch.flatten(x, 1)
-        x = self.head(x)
-        vit_output.last_representation = x[:, 0]
+        vit_output.last_representation = self.head(x)
         return vit_output
 
     def hyper_para(self):
