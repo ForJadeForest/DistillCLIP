@@ -25,11 +25,12 @@ class LossCalculator(nn.Module):
         if self.percent is None:
             self.percent = {n: 1 / len(loss_name) for n in loss_name}
         self.temperature = temperature
-        if 'low_layers_num' not in vit_kd_para:
-            vit_kd_para['low_layers_num'] = 2
-        if 'high_layers_num' not in vit_kd_para:
-            vit_kd_para['high_layers_num'] = 1
-        self.vit_kd_para = vit_kd_para
+        if vit_kd_para is not None:
+            if 'low_layers_num' not in vit_kd_para:
+                vit_kd_para['low_layers_num'] = 2
+            if 'high_layers_num' not in vit_kd_para:
+                vit_kd_para['high_layers_num'] = 1
+            self.vit_kd_para = vit_kd_para
         self.loss = self._init_loss()
         self.normalize = normalize
         assert abs(sum([v for v in self.percent.values()]) - 1) <= 1e-5
