@@ -1,0 +1,51 @@
+model:
+  class_path: Resnet
+  init_args:
+    in_channel: 1
+
+
+data:
+  class_path: MNISTDataModule
+  init_args:
+    data_dir: './data'
+    batch_size: 5000
+
+
+trainer:
+#  profiler:
+#    class_path: pytorch_lightning.profiler.AdvancedProfiler
+#    init_args:
+#      dirpath: './'
+#      filename: 'profile.log'
+  accelerator: 'gpu'
+  profiler:
+    class_path: pytorch_lightning.profiler.SimpleProfiler
+    init_args:
+      dirpath: './'
+      filename: 'profile.log'
+  auto_select_gpus: True
+  devices: 1
+  auto_scale_batch_size: 'binsearch'
+  logger:
+    class_path: pytorch_lightning.loggers.tensorboard.TensorBoardLogger
+    init_args:
+      save_dir: 'res'
+      name: 'resnet18_profile'
+      version: null
+  auto_lr_find: True
+  callbacks:
+    - class_path: DeviceStatsMonitor
+
+    - class_path: LearningRateMonitor
+
+
+
+optimizer:
+  class_path: Adam
+  init_args:
+    lr: 1.0e-3
+
+lr_scheduler:
+  class_path: CosineAnnealingLR
+  init_args:
+    T_max: 20

@@ -1,0 +1,106 @@
+model:
+  class_path: DualDistillModel
+  init_args:
+    text_encoder_para:
+      embed_dim: 512
+      context_length: 77
+      vocab_size: 49408
+      transformer_width: 512
+      transformer_heads: 8
+      transformer_layers: 4
+    vit_paras:
+      input_resolution: 224
+      patch_size: 32
+      width: 768
+      layers: 4
+      heads: 12
+      output_dim: 512
+    loss_control_para:
+      loss_name: [ 'l1', 'cos', 'label']
+      loss_scale:
+        l1: 1
+        cos: 1
+        label: 0.1
+
+    teacher_name: ViT-B/32
+    download_root: '/data/pyz/.cache'
+    map_type: 'begin'
+    lr: 1e-3
+
+
+
+
+data:
+  class_path: TextImageDataModule
+  init_args:
+    image_path: '/data/pyz/CC/cc3m_train'
+    batch_size: 1024
+    workers: 12
+
+
+
+
+trainer:
+  auto_select_gpus: True
+  accumulate_grad_batches: 1
+  accelerator: 'gpu'
+  devices: [0, 2]
+  max_epochs: 200
+  strategy: 'ddp'
+  log_every_n_steps: 50
+  enable_progress_bar: True
+  check_val_every_n_epoch: 1
+  precision: 16
+
+
+  logger:
+    class_path: pytorch_lightning.loggers.wandb.WandbLogger
+    init_args:
+      dir: '/data/pyz/result/Dis_CLIP'
+      name : 'CLIPDistillation_baseline'
+      project: 'CLIPDistillation'
+      version: null
+      log_model: false
+      sync_tensorboard: True
+
+
+  callbacks:
+    - class_path: LearningRateMonitor
+    - class_path: EarlyStopping
+      init_args:
+        monitor: 'val/loss'
+        patience: 15
+    - class_path: ModelSummary
+      init_args:
+        max_depth: 2
+    - class_path: ModelCheckpoint
+      init_args:
+        filename: '{epoch}-val_acc{hp_metric/stu_acc_top1:.2f}-loss{val/loss}'
+        monitor: 'hp_metric/stu_acc_top1'
+        save_last: True
+        save_top_k: 4
+        mode: 'max'
+        auto_insert_metric_name: false
+    - class_path: ModelCheckpoint
+      init_args:
+        filename: '{epoch}-val_acc{hp_metric/stu_acc_top1:.2f}-loss{val/loss}'
+        monitor: 'val/loss'
+        save_last: True
+        save_top_k: 4
+        mode: 'max'
+        auto_insert_metric_name: false
+
+
+#optimizer:
+#  class_path: AdamW
+#  init_args:
+#    lr: 1.0e-3
+#    weight_decay: 0.0001
+#    eps: 1.0e-8
+#
+#
+#lr_scheduler:
+#  class_path: get_cosine_schedule_with_warmup
+#  init_args:
+#    num_warmup_steps: 5
+#    num_training_steps: 200

@@ -1,0 +1,119 @@
+model:
+  class_path: DistillModel
+  init_args:
+    student_encoder:
+      class_path: model.text_encoder.TextEncoder
+      init_args:
+        transformer_width: 512
+        transformer_layers: 4
+        transformer_heads: 8
+        context_length: 77
+        vocab_size: 49408
+        embed_dim: 512
+        tea_transformer_width: 512
+        is_student: True
+    teacher_name: ViT-B/32
+    download_root: '/data/pyz/.cache'
+    loss_control_para:
+      loss_name: [ 'l1', 'cos', 'attn', 'emb', 'hidden']
+      loss_scale:
+        l1: 1
+        emb: 1
+        attn: 0.25
+        hidden: 0.8
+        cos: 1
+      percent:
+        l1: 0.4
+        emb: 0
+        attn: 0.1
+        hidden: 0.1
+        cos: 0.4
+      need_reduce: False
+
+  # attn + emb + hidden + l1 + cos
+  # l1 + cos
+  # last_attn + last_value_map + l1 + cos
+
+
+data:
+  class_path: DistillationDataModule
+  init_args:
+    num_workers: 8
+    dataset: '_dataset'
+    train_batch_size: 128,
+    val_batch_size: 1024
+    kwargs:
+      data_dir: '/data/pyz/data'
+      dataset_name: 'TextDataset'
+      cache_dir: '/data/pyz/data/cache'
+      overwrite: false
+
+
+trainer:
+  auto_select_gpus: True
+  accelerator: 'gpu'
+  devices: [0, 2]
+#  strategy: 'ddp'
+  precision: 16
+
+  accumulate_grad_batches: 1
+  max_epochs: 50
+  min_epochs: 3
+  max_steps: -1
+
+#  log
+  log_every_n_steps: 100
+#  logger:
+#    class_path: pytorch_lightning.loggers.tensorboard.TensorBoardLogger
+#    init_args:
+#      save_dir: '/data/pyz/res'
+#      name: 'TextEncoder'
+#      version: null
+  logger:
+    class_path: pytorch_lightning.loggers.wandb.WandbLogger
+    init_args:
+      dir: '/data/pyz/result/Dis_CLIP'
+      name: 'ImageEncoderBaseLine_l1_cos_16'
+      project: 'TextEncoderDistillation'
+      version: null
+      log_model: false
+      sync_tensorboard: True
+  enable_progress_bar: True
+  check_val_every_n_epoch: 1
+#  callbacks:
+  callbacks:
+      - class_path: LearningRateMonitor
+      - class_path: EarlyStopping
+        init_args:
+          monitor: 'val/loss'
+          patience: 15
+      - class_path: ModelSummary
+        init_args:
+          max_depth: 2
+      - class_path: ModelCheckpoint
+        init_args:
+          filename: '{epoch}-val_acc{hp_metric/stu_acc_top1:.2f}-loss{val/loss}'
+          monitor: 'hp_metric/stu_acc_top1'
+          save_last: True
+          save_top_k: 4
+          mode: 'max'
+          auto_insert_metric_name: false
+      - class_path: ModelCheckpoint
+        init_args:
+          filename: '{epoch}-val_acc{hp_metric/stu_acc_top1:.2f}-loss{val/loss}'
+          monitor: 'val/loss'
+          save_last: True
+          save_top_k: 4
+          mode: 'min'
+          auto_insert_metric_name: false
+  auto_lr_find: True
+#  resume_from_checkpoint: '/load/my/checkpoint'
+
+#  Debug
+#  limit_train_batches: 0.01, 3
+#  limit_val_batches: 0.25 # or int 3 means 3 batches
+#  fast_dev_run: True
+#  overfit_batches: 1 # Overfit a fracion of training/validation data (float) or a set number of batches (int). Default: 0.0.t
+
+
+

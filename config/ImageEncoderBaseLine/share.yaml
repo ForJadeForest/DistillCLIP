@@ -1,0 +1,94 @@
+model:
+  class_path: DistillModel
+  init_args:
+    student_encoder:
+      class_path: model.image_encoder.ImageEncoder
+      init_args:
+        is_student: True
+        tea_transformer_width: 768
+        vit_paras:
+          input_resolution: 224
+          patch_size: 32
+          width: 768
+          layers: 4
+          heads: 12
+          output_dim: 512
+    teacher_name: ViT-B/16
+    download_root: '/data/pyz/.cache'
+    model_type: 'image'
+    map_type: 'begin'
+
+
+
+data:
+  class_path: DistillationDataModule
+  init_args:
+    num_workers: 12
+    dataset: '_dataset'
+    train_batch_size: 1024
+    kwargs:
+      data_dir: '/data/pyz/data'
+      dataset_name: 'ImageDataset'
+      cache_dir: '/data/pyz/data/cache'
+      train_image_dir: '/home/pyz/combine_dataset/'
+      image_use: ['imagenet', 'coco']
+      cache_path: '/data/pyz/.cache/CLIPDistill'
+      overwrite: False
+
+
+
+
+
+trainer:
+  auto_select_gpus: True
+  accumulate_grad_batches: 1
+  accelerator: 'gpu'
+  devices: [0, 1, 2, 3]
+  max_epochs: 200
+  strategy: 'ddp'
+  log_every_n_steps: 50
+  enable_progress_bar: True
+  check_val_every_n_epoch: 1
+  precision: 16
+
+  callbacks:
+    - class_path: LearningRateMonitor
+    - class_path: EarlyStopping
+      init_args:
+        monitor: 'val/loss'
+        patience: 15
+
+    - class_path: ModelSummary
+      init_args:
+        max_depth: 2
+    - class_path: ModelCheckpoint
+      init_args:
+        filename: '{epoch}-val_acc{hp_metric/stu_acc_top1:.2f}-loss{val/loss}'
+        monitor: 'hp_metric/stu_acc_top1'
+        save_last: True
+        save_top_k: 4
+        mode: 'max'
+        auto_insert_metric_name: false
+    - class_path: ModelCheckpoint
+      init_args:
+        filename: '{epoch}-val_acc{hp_metric/stu_acc_top1:.2f}-loss{val/loss}'
+        monitor: 'val/loss'
+        save_last: True
+        save_top_k: 4
+        mode: 'max'
+        auto_insert_metric_name: false
+
+
+#optimizer:
+#  class_path: AdamW
+#  init_args:
+#    lr: 1.0e-3
+#    weight_decay: 0.0001
+#    eps: 1.0e-8
+#
+#
+#lr_scheduler:
+#  class_path: get_cosine_schedule_with_warmup
+#  init_args:
+#    num_warmup_steps: 5
+#    num_training_steps: 200
