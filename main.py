@@ -20,4 +20,4 @@ class MyLightningCLI(pl_cli.LightningCLI):
         }
 
 
-cli = MyLightningCLI(seed_everything_default=2022)
+cli = MyLightningCLI(seed_everything_default=2022, save_config_overwrite=True)
