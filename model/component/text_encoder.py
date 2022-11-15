@@ -1,37 +1,35 @@
 import torch
 from torch import nn
 
-try:
-    from _common import Transformer, LayerNorm
-    from _utils import output_filter
-except ModuleNotFoundError:
-    from ._common import Transformer, LayerNorm
-    from ._utils import output_filter
+from ._common import Transformer, LayerNorm
+from .output import ControlOutput, TransformerOutput, TextTransformerOutput
 
 
 class TextEncoder(nn.Module):
-    def __init__(self, transformer_width, transformer_layers, transformer_heads, context_length, vocab_size, embed_dim,
-                 tea_transformer_width=None, is_student=True, drop_out=0.1):
+    def __init__(self, transformer_width, transformer_layers, transformer_heads, context_length, need_layers,
+                 vocab_size, embed_dim, tea_transformer_width=None, is_student=True, drop_out=0.1):
         super().__init__()
         self.context_length = context_length
         self.transformer_width = transformer_width
-        self.transformer_layers = transformer_layers
         self.transformer_heads = transformer_heads
         self.vocab_size = vocab_size
         self.embed_dim = embed_dim
+        self.layers = transformer_layers
 
         self.token_embedding = nn.Embedding(vocab_size, transformer_width)
         self.positional_embedding = nn.Parameter(torch.empty(self.context_length, transformer_width))
         self.ln_final = LayerNorm(transformer_width)
         self.text_projection = nn.Parameter(torch.empty(transformer_width, embed_dim))
-        self.transformer = Transformer(
-            width=transformer_width,
-            layers=transformer_layers,
-            heads=transformer_heads,
+        self.transformer_para = dict(
+            width=self.transformer_width,
+            layers=self.layers,
+            heads=self.transformer_heads,
+            drop_out=drop_out,
             attn_mask=self.build_attention_mask(),
-            drop_out=drop_out
+            need_layers=need_layers
         )
-        self.layers = transformer_layers
+        self.transformer = Transformer(**self.transformer_para)
+
         self.embedding_projection = None
         self.hidden_projection = None
         self.is_student = is_student
@@ -43,6 +41,10 @@ class TextEncoder(nn.Module):
             self.hidden_projection = nn.Linear(transformer_width, tea_transformer_width)
         self.initialize_parameters()
 
+    @property
+    def need_layers(self):
+        return self.transformer_para['need_layers']
+
     def build_attention_mask(self):
         # lazily create causal attention mask, with full attention between the vision tokens
         # pytorch uses additive attention mask; fill with -inf
@@ -51,25 +53,35 @@ class TextEncoder(nn.Module):
         mask.triu_(1)  # zero out the lower diagonal
         return mask
 
-    def encode_text(self, text, only_last_state=True, need_attn_score=False, need_value_map=False, need_attn_prob=False,
-                    need_rep=False, need_emb=False):
+    def encode_text(self, text, control_output: ControlOutput, only_last_state=True):
         embedding = self.token_embedding(text)  # [batch_size, n_ctx, d_model]
         x = embedding + self.positional_embedding
-        x, attention_maps, attention_probs, representations, value_map = self.transformer(x, need_attn_score,
-                                                                                          need_value_map,
-                                                                                          need_attn_prob,
-                                                                                          need_rep)
-        x = self.ln_final(x)
+        embedding_res = x
+        transformer_output: TransformerOutput = self.transformer(x, control_output)
+        x = self.ln_final(transformer_output.last_representation)
         # x.shape = [batch_size, n_ctx, transformer.width]
         # take features from the eot embedding (eot_token is the highest number in each sequence)
         x = x[torch.arange(x.shape[0]), text.argmax(dim=-1)] @ self.text_projection
 
         if only_last_state:
             return x
-
-        return output_filter(self.is_student, representations, self.embedding_projection, embedding, attention_maps, x,
-                             self.hidden_projection, attention_probs, value_map, need_emb, need_rep, need_attn_score,
-                             self.no_trans)
+        if self.is_student and not self.no_trans:
+            if control_output.need_rep:
+                transformer_output.representations = [self.hidden_projection(layer_rep) for layer_rep in
+                                                      transformer_output.representations]
+            if control_output.need_emb:
+                embedding_res = self.embedding_projection(embedding_res)
+        if control_output.need_attn_score:
+            transformer_output.attention_scores = [torch.where(attn_score == float('-inf'),
+                                                               torch.zeros_like(attn_score),
+                                                               attn_score) for attn_score in
+                                                   transformer_output.attention_scores]
+        return TextTransformerOutput(last_representation=x,
+                                     attention_scores=transformer_output.attention_scores,
+                                     attention_probs=transformer_output.attention_probs,
+                                     representations=transformer_output.representations,
+                                     value_map=transformer_output.value_map,
+                                     embedding=embedding_res)
 
     def initialize_parameters(self):
         nn.init.normal_(self.token_embedding.weight, std=0.02)
@@ -88,8 +100,8 @@ class TextEncoder(nn.Module):
         if self.text_projection is not None:
             nn.init.normal_(self.text_projection, std=self.transformer.width ** -0.5)
 
-    def forward(self, text, only_last_state=True, **need_para):
-        return self.encode_text(text, only_last_state, **need_para)
+    def forward(self, text, control_output: ControlOutput, only_last_state=True):
+        return self.encode_text(text, control_output, only_last_state)
 
     def hyper_para(self):
         return {
@@ -131,32 +143,6 @@ class TextEncoder(nn.Module):
         self.load_state_dict(my_model_state_dict)
         print('init with teacher weight success!')
 
-
-if __name__ == '__main__':
-    m = TextEncoder(512, 6, 8, 77, 49408, 512, 768, True)
-    # inputs = torch.randint(low=0, high=300, size=(64, 77))
-    # outputs = m(inputs, False)
-    # print(len(outputs), outputs[0].shape)
-    from _utils import LayerMap
-    layer_map = LayerMap(6, 12, 'mid')
-    from _utils import load
-    state_dict = load('ViT-B/32', download_root='D:/data/cache')
-    para = {
-        'embed_dim': state_dict["text_projection"].shape[1],
-        'context_length': state_dict["positional_embedding"].shape[0],
-        'vocab_size': state_dict["token_embedding.weight"].shape[0],
-        'transformer_width': state_dict["ln_final.weight"].shape[0],
-        'transformer_heads': state_dict["ln_final.weight"].shape[0] // 64,
-        'transformer_layers': len(set(k.split(".")[2] for k in state_dict if k.startswith(f"transformer.resblocks"))),
-    }
-    teacher_model = TextEncoder(is_student=False, **para)
-    my_state_dict = teacher_model.state_dict()
-    for k in my_state_dict:
-        if k in state_dict:
-            my_state_dict[k] = state_dict[k]
-    teacher_model.load_state_dict(my_state_dict)
-
-    m.init_layers_with_teacher(layer_map, teacher_model.state_dict(), 'begin')
-    m.init_layers_with_teacher(layer_map, teacher_model.state_dict(), 'mid')
-    m.init_layers_with_teacher(layer_map, teacher_model.state_dict(), 'end')
-
+    @need_layers.setter
+    def need_layers(self, value):
+        self._need_layers = value

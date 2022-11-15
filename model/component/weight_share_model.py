@@ -1,6 +1,8 @@
+import math
+from typing import List, Optional
+
 import torch
 import torch.nn as nn
-
 from timm.models.layers import DropPath, trunc_normal_
 from timm.models.vision_transformer import Mlp, PatchEmbed
 
@@ -11,6 +13,7 @@ except ImportError:
     from timm.models.vision_transformer_hybrid import HybridEmbed
 
 from ._irpe import build_rpe
+from .output import AttentionOutput, VisionTransformerOutput, TransformerOutput, TransformerLayerOutput, ControlOutput
 
 
 class RepeatedModuleList(nn.Module):
@@ -40,6 +43,7 @@ class MiniAttention(nn.Module):
         super().__init__()
         self.num_heads = num_heads
         head_dim = dim // num_heads
+        self.attention_head_size = head_dim
         # NOTE scale factor was wrong in my original version, can set manually to be compat with prev weights
         self.scale = qk_scale or head_dim ** -0.5
 
@@ -80,15 +84,24 @@ class MiniAttention(nn.Module):
         else:
             self.conv_l = self.conv_w = None
 
-    def forward(self, x):
+    def forward(self, x, control_output: ControlOutput):
         B, N, C = x.shape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
         q, k, v = qkv[0], qkv[1], qkv[2]  # make torchscript happy (cannot use tensor as tuple)
 
+        value_map = None
+        attention_scores = None
+        attention_probs = None
+
+        if control_output.need_value_map:
+            value_map = torch.matmul(v, v.transpose(-1, -2))
+            value_map = value_map / math.sqrt(self.attention_head_size)
+            value_map = nn.Softmax(dim=-1)(value_map)
         q *= self.scale
 
         attn = (q @ k.transpose(-2, -1))
-
+        if control_output.need_attn_score:
+            attention_scores = attn
         # image relative position on keys
         if self.rpe_k is not None:
             attn += self.rpe_k(q)
@@ -101,7 +114,8 @@ class MiniAttention(nn.Module):
             attn = self.conv_l(attn)
 
         attn = attn.softmax(dim=-1)
-
+        if control_output.need_attn_prob:
+            attention_probs = attn
         if self.conv_w is not None:
             attn = self.conv_w(attn)
 
@@ -116,7 +130,13 @@ class MiniAttention(nn.Module):
         x = out.transpose(1, 2).reshape(B, N, C)
         x = self.proj(x)
         x = self.proj_drop(x)
-        return x
+
+        return AttentionOutput(
+            attention_output=x,
+            attention_scores=attention_scores,
+            attention_probs=attention_probs,
+            value_map=value_map
+        )
 
     def init_weights(self):
         def _init_weights(m):
@@ -153,11 +173,13 @@ class MiniBlock(nn.Module):
         mlp_hidden_dim = int(dim * mlp_ratio)
         self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
 
-    def forward(self, x):
+    def forward(self, x, control_output: ControlOutput):
         drop_path = self.drop_paths[self._repeated_id]
-        x = x + drop_path(self.attn(self.norm1(x)))
+        attention_output: AttentionOutput = self.attn(self.norm1(x), control_output)
+        x = x + drop_path(attention_output.attention_output)
         x = x + drop_path(self.mlp(self.norm2(x)))
-        return x
+        return TransformerLayerOutput(x, attention_output.attention_scores,
+                                      attention_output.attention_probs, attention_output.value_map)
 
 
 class RepeatedMiniBlock(nn.Module):
@@ -171,14 +193,26 @@ class RepeatedMiniBlock(nn.Module):
 
         self.apply(set_repeated_times_fn)
 
-    def forward(self, x):
+    def forward(self, x, control_output: ControlOutput):
+        value_map = None
+        attention_scores = []
+        representations = []
+        attention_probs = []
         for i, t in enumerate(range(self.repeated_times)):
             def set_repeated_id(m):
                 m._repeated_id = i
 
             self.block.apply(set_repeated_id)
-            x = self.block(x)
-        return x
+            layers_output: TransformerLayerOutput = self.block(x, control_output)
+            x = layers_output.hidden_representation
+            if control_output.need_rep:
+                representations.append(layers_output.hidden_representation)
+            if control_output.need_attn_score:
+                attention_scores.append(layers_output.attention_scores)
+            if control_output.need_attn_prob:
+                attention_probs.append(layers_output.attention_probs)
+            value_map = layers_output.value_map
+        return TransformerOutput(x, attention_scores, attention_probs, representations, value_map)
 
     def __repr__(self):
         msg = super().__repr__()
@@ -191,14 +225,18 @@ class RepeatVisionTransformer(nn.Module):
                            and image relative position encoding
     """
 
-    def __init__(self, img_size=224, patch_size=16, in_chans=3, out_dim=1000, embed_dim=768, depth=12,
+    def __init__(self, need_layers: Optional[List]=None, img_size=224, patch_size=16, in_chans=3, out_dim=1000, embed_dim=768, depth=12,
                  num_heads=12, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop_rate=0., attn_drop_rate=0.,
                  drop_path_rate=0., hybrid_backbone=None, rpe_config=None,
                  use_cls_token=True,
                  repeated_times=1,
-                 use_transform=False):
+                 use_transform=False,
+                 ):
         super().__init__()
         norm_layer = nn.LayerNorm
+        if need_layers is None:
+            need_layers = [i for i in range(depth)]
+        self.need_layers = need_layers
         self.num_classes = out_dim
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
 
@@ -296,7 +334,11 @@ class RepeatVisionTransformer(nn.Module):
         self.num_classes = num_classes
         self.head = nn.Linear(self.embed_dim, num_classes) if num_classes > 0 else nn.Identity()
 
-    def forward_features(self, x):
+    def forward_features(self, x, control_output: ControlOutput):
+        value_map = None
+        attention_scores = []
+        representations = []
+        attention_probs = []
         B = x.shape[0]
         x = self.patch_embed(x)
 
@@ -305,24 +347,32 @@ class RepeatVisionTransformer(nn.Module):
             x = torch.cat((cls_tokens, x), dim=1)
 
         x = x + self.pos_embed
+        embedding = x
         x = self.pos_drop(x)
 
         for blk in self.blocks:
-            x = blk(x)
-
+            repeat_block_out: TransformerOutput = blk(x, control_output)
+            x = repeat_block_out.last_representation
+            for i in repeat_block_out.representations:
+                representations.append(i)
+            for i in repeat_block_out.attention_scores:
+                attention_scores.append(i)
+            for i in repeat_block_out.attention_probs:
+                attention_probs.append(i)
+            value_map = repeat_block_out.value_map
         x = self.norm(x)
-        if self.cls_token is not None:
-            return x[:, 0]
-        else:
-            return x
+        return VisionTransformerOutput(last_representation=x[:, 0],
+                                       attention_scores=attention_scores,
+                                       attention_probs=attention_probs,
+                                       representations=representations,
+                                       value_map=value_map,
+                                       embedding=embedding)
 
-    def forward(self, x):
-        x = self.forward_features(x)
-        if self.avgpool is not None:
-            x = self.avgpool(x.transpose(1, 2))  # (B, C, 1)
-            x = torch.flatten(x, 1)
-        x = self.head(x)
-        return x, None, None, None, None, None
+    def forward(self, x, control_output: ControlOutput):
+        vit_output: VisionTransformerOutput = self.forward_features(x, control_output)
+        x = vit_output.last_representation
+        vit_output.last_representation = self.head(x)
+        return vit_output
 
     def hyper_para(self):
         return self.hyper

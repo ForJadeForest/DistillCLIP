@@ -9,12 +9,10 @@ from torch import optim
 from torchmetrics import Accuracy
 from torchmetrics.functional import accuracy
 
-try:
-    from _utils import teacher_load, LayerMap, LossControl
-    from clip_model import CLIPModel
-except ModuleNotFoundError:
-    from ._utils import teacher_load, LayerMap, LossControl
-    from .clip_model import CLIPModel
+
+from ._utils import teacher_load
+from .component.clip_model import CLIPModel
+
 
 
 @pl_cli.MODEL_REGISTRY
@@ -28,11 +26,11 @@ class DualDistillModel(pl.LightningModule):
         # 定义模型
         self.student = CLIPModel(True, vit_paras, text_encoder_para, tea_transformer_width=768)
         self.teacher_name = teacher_name
-        self.teacher, tea_image_layer_num, tea_text_layer_num = teacher_load(teacher_name, download_root, 'all')
+        self.teacher = teacher_load(teacher_name, download_root, 'all')
         for p in self.teacher.parameters():
             p.requires_grad = False
-        self.image_layer_map = LayerMap(self.student.image_encoder.layers, tea_image_layer_num, map_type)
-        self.text_layer_map = LayerMap(self.student.text_encoder.layers, tea_text_layer_num, map_type)
+        self.image_layer_map = LayerMap(self.student.image_encoder.layers, map_type)
+        self.text_layer_map = LayerMap(self.student.text_encoder.layers, map_type)
         self.student.init_layers_with_teacher(image_layer_map=self.image_layer_map,
                                               text_layer_map=self.text_layer_map,
                                               teacher_state_dict=self.teacher.state_dict(),

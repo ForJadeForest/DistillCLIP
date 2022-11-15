@@ -24,34 +24,59 @@ model:
   class_path: DistillModel
   init_args:
     student_encoder:
-      class_path: model.image_encoder.ImageEncoder
+#      class_path: model.component.image_encoder.ImageEncoder
+#      init_args:
+#        is_student: True
+#        tea_transformer_width: 768
+#        vit_paras:
+#          input_resolution: 224
+#          patch_size: 32
+#          width: 768
+#          layers: 4
+#          heads: 12
+#          output_dim: 512
+#          drop_out: 0
+#          need_layers: null
+      class_path: model.component.weight_share_model.RepeatVisionTransformer
       init_args:
-        is_student: True
-        tea_transformer_width: 768
-        vit_paras:
-          input_resolution: 224
-          patch_size: 32
-          width: 768
-          layers: 4
-          heads: 12
-          output_dim: 512
-          drop_out: 0.1
-          need_layers: null
+        img_size: 224
+        patch_size: 32
+        in_chans: 3
+        out_dim: 512
+        embed_dim: 768
+        depth: 4
+        num_heads: 12
+        mlp_ratio: 4.0
+        qkv_bias: True
+        qk_scale: null
+        drop_rate: 0.
+        attn_drop_rate: 0.
+        drop_path_rate: 0.
+        hybrid_backbone: null
+        rpe_config: null
+        use_cls_token: True
+        repeated_times: 2
+        use_transform: True
+    norm: False
     loss_control_para:
-      loss_name: [ 'out_l1', 'out_ce', 'out_kl', 'out_cos', 'embedding_mse', 'attention_score_mse',
-                   'attention_probs_mse', 'hidden_rep_mse', 'attention_probs_kl', 'last_value_map_kl',
-                   'vit_kd' ]
+#      loss_name: [ 'out_l1', 'out_ce', 'out_kl', 'out_cos', 'embedding_mse', 'attention_score_mse',
+#                   'attention_probs_mse', 'hidden_rep_mse', 'attention_probs_kl', 'last_value_map_kl',
+#                   'vit_kd' ]
+      loss_name: [ 'out_l1', 'out_cos',]
       temperature: 1
       vit_kd_para:
         student_dims: 768
         teacher_dims: 768
+        low_layers_num: 2
+        high_layers_num: 2
+      normalize: False
     teacher_name: ViT-B/32
     download_root: '/data/pyz/.cache'
     teacher_need_layers: [ 0, 1, 10, 11 ]
     model_type: 'image'
     map_type: 'begin'
     init_type: null
-    warm_steps: 10
+    warm_steps: 15
     total_steps: 300
     weight_decay: 1.0e-2
     lr: 5.0e-3
@@ -64,13 +89,14 @@ data:
   init_args:
     num_workers: 12
     dataset: '_dataset'
-    train_batch_size: 1024
+    train_batch_size: 1600
+    val_batch_size: 1250
     kwargs:
       data_dir: '/data/pyz/data'
       dataset_name: 'ImageDataset'
       cache_dir: '/data/pyz/data/cache'
       train_image_dir: '/home/pyz/combine_dataset/'
-      image_use: [ 'imagenet', 'coco' ]
+      image_use: [ 'coco', 'imagenet']
       cache_path: '/data/pyz/.cache/CLIPDistill'
       overwrite: False
 
@@ -83,8 +109,9 @@ trainer:
   accumulate_grad_batches: 1
   accelerator: 'gpu'
   devices: [ 0, 1, 2, 3]
+  strategy: 'ddp_find_unused_parameters_false'
   max_epochs: 300
-#  strategy: 'ddp'
+#  limit_train_batches: 1
   log_every_n_steps: 50
   enable_progress_bar: True
   check_val_every_n_epoch: 1
@@ -92,19 +119,21 @@ trainer:
   logger:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
-      dir: '/data/pyz/result/Dis_CLIP'
-      name : 'Image_test'
+      save_dir: '/data/pyz/result/Dis_CLIP'
+      name: 'baseline-weight share'
       project: 'ImageDistillation'
       log_model: false
-      sync_tensorboard: True
-      group:
+      group: weight_share
+      version: 'baseline-weight share'
+      tags: ['baseline', 'weight share']
+#      mode: 'online'
 
   callbacks:
     - class_path: LearningRateMonitor
-    - class_path: EarlyStopping
-      init_args:
-        monitor: 'val/loss'
-        patience: 15
+#    - class_path: EarlyStopping
+#      init_args:
+#        monitor: 'val/loss'
+#        patience: 15
 
     - class_path: ModelSummary
       init_args:

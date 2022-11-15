@@ -1,42 +1,22 @@
+import torch
 from torch import nn
 
-try:
-    from _common import VisionTransformer, VisionTransformerFFT
-    from _utils import output_filter, load
-
-except ModuleNotFoundError:
-    from ._common import VisionTransformer, VisionTransformerFFT
-    from ._utils import output_filter, load
-
-
-class ImageEncoderFFT(nn.Module):
-    def __init__(self, is_student, vit_paras):
-        super().__init__()
-        self.vit_paras = vit_paras
-        self.visual = VisionTransformerFFT(**vit_paras)
-        self.is_student = is_student
-        self.layers = vit_paras['layers']
-
-    def encode_image(self, image):
-        last_state = self.visual(image)
-        return last_state
-
-    def forward(self, image):
-        return self.encode_image(image)
-
-    def hyper_para(self):
-        return self.vit_paras
+from ._common import VisionTransformer
+from .output import ControlOutput, VisionTransformerOutput
 
 
 class ImageEncoder(nn.Module):
-    def __init__(self, is_student, vit_paras, tea_transformer_width=None, drop_out=0.1):
+    def __init__(self, is_student, vit_paras, tea_transformer_width=None):
         super().__init__()
+        self.layers = vit_paras['layers']
+        if vit_paras['need_layers'] is None:
+            vit_paras['need_layers'] = tuple(range(self.layers))
         self.vit_paras = vit_paras
-        self.visual = VisionTransformer(**vit_paras, drop_out=drop_out)
+        self.visual = VisionTransformer(**vit_paras)
         self.is_student = is_student
         self.embedding_projection = None
         self.hidden_projection = None
-        self.layers = vit_paras['layers']
+
         self.no_trans = False
         if self.vit_paras['width'] == tea_transformer_width:
             self.no_trans = True
@@ -44,6 +24,10 @@ class ImageEncoder(nn.Module):
             self.embedding_projection = nn.Linear(vit_paras['width'], tea_transformer_width)
             self.hidden_projection = nn.Linear(vit_paras['width'], tea_transformer_width)
         self.initialize_parameters()
+
+    @property
+    def need_layers(self):
+        return self.vit_paras['need_layers']
 
     def initialize_parameters(self):
         nn.init.normal_(self.visual.class_embedding, std=0.02)
@@ -59,22 +43,25 @@ class ImageEncoder(nn.Module):
             nn.init.normal_(block.mlp.c_fc.weight, std=fc_std)
             nn.init.normal_(block.mlp.c_proj.weight, std=proj_std)
 
-    def encode_image(self, image, only_last_state=True, need_attn_score=False, need_value_map=False,
-                     need_attn_prob=False, need_rep=False, need_emb=False):
-        last_state, attention_maps, representations, embedding, attention_probs, value_map = self.visual(image,
-                                                                                                         need_attn_score,
-                                                                                                         need_value_map,
-                                                                                                         need_attn_prob,
-                                                                                                         need_rep)
+    def encode_image(self, image, control_output: ControlOutput, only_last_state=True):
+        vit_output: VisionTransformerOutput = self.visual(image, control_output)
         if only_last_state:
-            return last_state
+            return vit_output.last_representation
+        if self.is_student and not self.no_trans:
+            if control_output.need_rep:
+                vit_output.representations = [self.hidden_projection(layer_rep) for layer_rep in
+                                              vit_output.representations]
+            if control_output.need_emb:
+                vit_output.embedding = self.embedding_projection(vit_output.embedding)
+        if control_output.need_attn_score:
+            vit_output.attention_scores = [torch.where(attn_score == float('-inf'),
+                                                       torch.zeros_like(attn_score),
+                                                       attn_score) for attn_score in vit_output.attention_scores]
 
-        return output_filter(self.is_student, representations, self.embedding_projection, embedding, attention_maps,
-                             last_state, self.hidden_projection, attention_probs, value_map, need_emb, need_rep,
-                             need_attn_score, self.no_trans)
+        return vit_output
 
-    def forward(self, image, only_last_state=True, **need_para):
-        return self.encode_image(image, only_last_state, **need_para)
+    def forward(self, image, control_output: ControlOutput, only_last_state=True):
+        return self.encode_image(image, control_output, only_last_state)
 
     def init_layers_with_teacher(self, layer_map, teacher_state_dict=None, init_type=None):
         import re

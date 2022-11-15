@@ -2,14 +2,9 @@ from typing import Dict
 
 from torch import nn
 
-try:
-    from image_encoder import ImageEncoder
-    from text_encoder import TextEncoder
-    from _utils import output_filter, load
-except ModuleNotFoundError:
-    from .image_encoder import ImageEncoder
-    from .text_encoder import TextEncoder
-    from ._utils import output_filter, load
+from .output import ControlOutput
+from .image_encoder import ImageEncoder
+from .text_encoder import TextEncoder
 
 
 class CLIPModel(nn.Module):
@@ -21,24 +16,26 @@ class CLIPModel(nn.Module):
                                         tea_transformer_width=tea_transformer_width)
         self.arch_para = vit_paras.update(text_encoder_para)
         self.is_student = is_student
+        self.img_layers = vit_paras['layers']
+        self.text_layers = text_encoder_para['transformer_layers']
 
-    def encode_image(self, image, only_last_state=True, **need_para):
-        return self.image_encoder.encode_image(image, only_last_state, **need_para)
+    def encode_image(self, image, control_output: ControlOutput, only_last_state=True):
+        return self.image_encoder.encode_image(image, control_output, only_last_state)
 
-    def encode_text(self, text, only_last_state=True, **need_para):
-        return self.text_encoder.encode_text(text, only_last_state, **need_para)
+    def encode_text(self, text, control_output: ControlOutput, only_last_state=True):
+        return self.text_encoder.encode_text(text, control_output, only_last_state)
 
-    def forward(self, text, image, only_last_state=True, **need_para):
-        image_output = self.encode_image(image, only_last_state, **need_para)
-        text_output = self.encode_text(text, only_last_state, **need_para)
+    def forward(self, text, image, control_output: ControlOutput, only_last_state=True):
+        image_output = self.encode_image(image, control_output, only_last_state)
+        text_output = self.encode_text(text, control_output, only_last_state)
         if only_last_state:
             image_feature = image_output / image_output.norm(dim=1, keepdim=True)
             text_feature = text_output / text_output.norm(dim=1, keepdim=True)
             logits = image_feature @ text_feature.t()
             return image_feature, text_feature, logits
         else:
-            image_feature = image_output[0] / image_output[0].norm(dim=1, keepdim=True)
-            text_feature = text_output[0] / text_output[0].norm(dim=1, keepdim=True)
+            image_feature = image_output.representations / image_output.representations.norm(dim=1, keepdim=True)
+            text_feature = text_output.representations / text_output.representations.norm(dim=1, keepdim=True)
             logits = image_feature @ text_feature.t()
             return image_output, text_output, logits
 
@@ -65,7 +62,8 @@ if __name__ == '__main__':
         'width': 768,
         'layers': 4,
         'heads': 12,
-        'output_dim': 512
+        'output_dim': 512,
+        'drop_out': 0.1
     }
     m = CLIPModel(False, vit_para, trans_para)
     print(m.state_dict())

@@ -29,8 +29,12 @@
   - [x] 将data存放到home下
   - [x] pin_memory 参数设置
   - [x] 提前做好数据裁切
-  
-  - 使用16 precision + 多卡
+- [ ] 多GPU val metric计算有问题. 目前来看和batch和GPU数量有关.
+  - 在不能整除batch的时候,剩下的部分会由GPU平分,导致最后一个batch的准确率很高,聚合会提高整体的准确率
+  - 5000 - 4 * 1000 = 1000 剩下的1000会由GPU评分,导致最后一个的实际batch是250
+  - 在val_epoch_end处收集数据进行计算(但是目前还是存在问题: 无论单GPU还是多GPU,在不同的val batch size的时候会出现不同的结果,在0.3474 ~ 0.3478波动)
+    
+    - 使用16 precision + 多卡
 
 
 ### Config
@@ -44,12 +48,6 @@
 
 ![image-20220731142303147](https://jadepicgo.oss-cn-shenzhen.aliyuncs.com/img/image-20220731142303147.png)
 
-**Plan**
-
-- 计划在下载好 Conceptual Captions的Image的时候，可以考虑一起蒸馏。或者单纯增加图像的数量。大概达到6M的样子。
-
-- 使用RandAugmentation进行增强。
-
 
 
 ## Ex
@@ -61,29 +59,25 @@
    - 只使用 `l1 + cos` 
    - 使用`l1 + cos + kl`
    - 使用 `value + attn_probs`
-   - 使用 `rep + attn_probs + emb` 
-
+   - 使用 `rep + attn_probs + emb`
+   - 使用 `l1 + cos + vit_kd`
 3. 数据
-
    - 使用 data_256 + imagenet + MSCOCO
    - 不用 data_256
-   - 需要加入自定义dataset的结构
+   - 只使用 MSCOCO
 
 4. 模型架构
+   暂定这四个模型
 
-   暂定这四个模型，之后可以采用4 layers
-
-   - 减少层数，不减少宽度 ，增加头数(768 width + 4 layers + 24 heads)
+   - 减少层数，不减少宽度 ，增加头数(768 width + 4 layers + 24 heads) **效果最好**
    - 减少宽度，减少层数，增加头数 (768 // 2 width + 4 layers + 24 heads)
    - 减少层数，不减少宽度 ，不增加头数(768 width + 4 layers + 12 heads) **做为基础模型**
    - 减少宽度，减少层数，不增加头数 (768 // 2 width + 4 layers + 12 heads)
+   - Wight Share (768 width + 4 layers + 24 heads + 2 repeat)
 
-5. Input 图像大小，按理来说Vit应该没有输入限制？
 
-6. Deit 提到dropout会导致性能损失
-
-7. 多加一点图像增强
-
+5. Deit 提到dropout会导致性能损失（确实如此）
+6. 将最后的输出norm去做蒸馏
 
 
 
@@ -100,10 +94,14 @@
     - [ ] 使用不加mask的attention进行蒸馏
   - [ ] 各个loss的权重
     - [x] 手动调节
-  - [ ] 指标的书写，测试结果
+  - [x] 指标的书写，测试结果
   - [ ] 数据集的下载以及对应的dataset
   - [ ] 模型蒸馏的速度评估
     - [参考指标与计算方法](https://zhuanlan.zhihu.com/p/376925457)
+  - [ ] 计划在下载好 Conceptual Captions的Image的时候，可以考虑一起蒸馏。或者单纯增加图像的数量。大概达到6M的样子。
+  - [x] 使用RandAugmentation进行增强。
+  - [ ] **Fine-Grain loss 添加**
+  - [ ] Weight share model 暂时不支持选用特定的layers蒸馏，所选的是全部层
   
   
 
