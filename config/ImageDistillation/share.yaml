@@ -62,7 +62,7 @@ model:
 #      loss_name: [ 'out_l1', 'out_ce', 'out_kl', 'out_cos', 'embedding_mse', 'attention_score_mse',
 #                   'attention_probs_mse', 'hidden_rep_mse', 'attention_probs_kl', 'last_value_map_kl',
 #                   'vit_kd' ]
-      loss_name: [ 'out_l1', 'out_cos',]
+      loss_name: [ 'out_l1', 'out_cos']
       temperature: 1
       vit_kd_para:
         student_dims: 768
@@ -108,7 +108,7 @@ trainer:
   auto_select_gpus: True
   accumulate_grad_batches: 1
   accelerator: 'gpu'
-  devices: [ 0, 1, 2, 3]
+  devices: [ 0, 1 ]
   strategy: 'ddp_find_unused_parameters_false'
   max_epochs: 300
 #  limit_train_batches: 1
