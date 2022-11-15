@@ -116,21 +116,21 @@ class DistillModel(pl.LightningModule):
         self.log('mean_score', mean_score, batch_size=stu_logits.shape[0], sync_dist=True)
         # log metric
         self.log('hp_metric', self.acc_metrics[0], metric_attribute='acc_metrics', batch_size=stu_logits.shape[0],
-                 rank_zero_only=True)
+                 sync_dist=True)
 
         for i, metric in enumerate(self.acc_metrics):
             metric(stu_logits, label)
             self.log('hp_metric/stu_acc_top{}'.format(self.k_list[i]), metric, metric_attribute='acc_metrics',
-                     batch_size=stu_logits.shape[0], rank_zero_only=True, prog_bar=True)
+                     batch_size=stu_logits.shape[0], sync_dist=True)
             if self.current_epoch == 0:
                 acc_tea = accuracy(tea_logits, label, top_k=self.k_list[i])
                 self.log('hp_metric/tea_acc_top{}'.format(self.k_list[i]), acc_tea, batch_size=tea_logits.shape[0],
-                         rank_zero_only=True)
+                         sync_dist=True)
                 tea_softmax_mean_score = torch.diagonal(torch.nn.functional.softmax(tea_logits, dim=1)).mean()
                 tea_mean_score = torch.diagonal(tea_logits).mean()
                 self.log('tea_softmax_mean_score', tea_softmax_mean_score, batch_size=stu_logits.shape[0],
-                         rank_zero_only=True)
-                self.log('tea_mean_score', tea_mean_score, batch_size=stu_logits.shape[0], rank_zero_only=True)
+                         sync_dist=True)
+                self.log('tea_mean_score', tea_mean_score, batch_size=stu_logits.shape[0], sync_dist=True)
 
     def log_info(self, stage, loss, cal_res, batch_size):
 
