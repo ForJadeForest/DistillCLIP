@@ -56,3 +56,10 @@ class TransformerLayerOutput:
     attention_scores: torch.Tensor = None,
     attention_probs: torch.Tensor = None,
     value_map: torch.Tensor = None
+
+@dataclass
+class CLIPOutput:
+    visual_output: torch.Tensor = None
+    text_output: torch.Tensor = None,
+    i2t_logits: torch.Tensor = None,
+    t2i_logits: torch.Tensor = None
