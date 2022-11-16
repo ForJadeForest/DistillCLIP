@@ -50,8 +50,8 @@ class DualDistillModel(pl.LightningModule):
     def forward(self, inputs):
         image, text = inputs
         text = text.squeeze(dim=1)
-        student_outs = self.student(text, image, only_last_state=False, **self.need_return_para)
-        teacher_outs = self.teacher(text, image, only_last_state=False, **self.need_return_para)
+        student_outs = self.student(text, image, self.need_return_para, only_last_state=False)
+        teacher_outs = self.teacher(text, image, self.need_return_para, only_last_state=False)
         return student_outs, teacher_outs
 
     def training_step(self, inputs, batch_idx):
