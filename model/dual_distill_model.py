@@ -3,19 +3,17 @@ from typing import *
 import pytorch_lightning as pl
 import torch
 import transformers
+import wandb
 from pytorch_lightning.loggers import WandbLogger, TensorBoardLogger
-from pytorch_lightning.utilities import cli as pl_cli
 from torch import optim
 from torchmetrics import Accuracy
 from torchmetrics.functional import accuracy
 
-
+from ._loss import LossCalculator
 from ._utils import teacher_load
 from .component.clip_model import CLIPModel
 
 
-
-@pl_cli.MODEL_REGISTRY
 class DualDistillModel(pl.LightningModule):
     def __init__(self, vit_paras: Dict, text_encoder_para: Dict, teacher_name: str, loss_control_para: Dict,
                  download_root: str, lr: float = 1e-3, map_type: str = 'mid', init_type=None):
@@ -29,26 +27,23 @@ class DualDistillModel(pl.LightningModule):
         self.teacher = teacher_load(teacher_name, download_root, 'all')
         for p in self.teacher.parameters():
             p.requires_grad = False
-        self.image_layer_map = LayerMap(self.student.image_encoder.layers, map_type)
-        self.text_layer_map = LayerMap(self.student.text_encoder.layers, map_type)
-        self.student.init_layers_with_teacher(image_layer_map=self.image_layer_map,
-                                              text_layer_map=self.text_layer_map,
-                                              teacher_state_dict=self.teacher.state_dict(),
-                                              init_type=init_type)
 
-        self.loss_control = LossControl(**loss_control_para)
-        self.need_return_para = self.loss_control.need_output()
+        self.loss_control = LossCalculator(**loss_control_para)
+        self.need_return_para = self.loss_control.get_control_output()
         # 定义指标
         self.k_list = [i for i in [1, 5, 10]]
-        self.acc_metrics = []
+        self.acc_metrics = torch.nn.ModuleList()
         for k in self.k_list:
             self.acc_metrics.append(Accuracy(top_k=k))
 
     def on_train_start(self):
         if self.global_rank == 0:
-            # 多gpu会报错
             if isinstance(self.logger, WandbLogger):
-                self.logger.experiment.config.update({'student_para': self.student.hyper_para()})
+                self.logger.log_hyperparams({'student_para': self.student.hyper_para()})
+                wandb.save('./*.py')
+                wandb.save('./data/*.py')
+                wandb.save('./model/*.py')
+                wandb.save('./model/component/*.py')
             elif isinstance(self.logger, TensorBoardLogger):
                 self.logger.log_hyperparams(self.hparams, {"hp/stu_acc_top1": 0, "hp/stu_acc_top10": 0})
 
@@ -62,8 +57,7 @@ class DualDistillModel(pl.LightningModule):
     def training_step(self, inputs, batch_idx):
         self.teacher.eval()
         student_outs, teacher_outs = self.forward(inputs)
-        loss, cal_res = self.loss_control.cal_tow_tower_loss(student_outs, teacher_outs, self.image_layer_map,
-                                                             self.text_layer_map, self.device)
+        loss, cal_res = self.loss_control(student_outs, teacher_outs, 'all')
         self.log_info('train', loss, cal_res, batch_size=len(inputs))
         return loss
 
@@ -72,11 +66,30 @@ class DualDistillModel(pl.LightningModule):
         student_outs, teacher_outs = self.forward(batch)
 
         label = torch.arange(student_outs[0][0].shape[0], device=self.device)
-        loss, cal_res = self.loss_control.cal_tow_tower_loss(student_outs, teacher_outs, self.image_layer_map,
-                                                             self.text_layer_map, self.device)
+        loss, cal_res = self.loss_control(student_outs, teacher_outs, 'all')
 
         stu_image_feature, stu_text_feature, stu_logits = student_outs
         tea_image_feature, tea_text_feature, tea_logits = teacher_outs
+
+        return {
+            'stu_image_feature': self.all_gather(stu_image_feature),
+            'stu_text_feature': self.all_gather(stu_text_feature),
+
+            'tea_image_feature': self.all_gather(tea_image_feature),
+            'tea_text_feature': self.all_gather(tea_text_feature)
+        }
+
+    def validation_step_end(self, step_out):
+        return step_out
+
+    def validation_epoch_end(self, outputs):
+        # [gpu_num, batch, batch]
+        stu_logits_outs = []
+        tea_logits_outs = []
+        for batch in outputs:
+            stu_logits_out, tea_logits_out = batch['stu_logits'], batch['tea_logits']
+
+
         # log metric
         self.log('hp_metric', self.acc_metrics[0], metric_attribute='acc_metrics', batch_size=len(batch[0]),
                  sync_dist=True)

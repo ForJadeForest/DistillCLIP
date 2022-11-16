@@ -20,10 +20,10 @@ class CLIPModel(nn.Module):
         self.text_layers = text_encoder_para['transformer_layers']
 
     def encode_image(self, image, control_output: ControlOutput, only_last_state=True):
-        return self.image_encoder.encode_image(image, control_output, only_last_state)
+        return self.image_encoder(image, control_output, only_last_state)
 
     def encode_text(self, text, control_output: ControlOutput, only_last_state=True):
-        return self.text_encoder.encode_text(text, control_output, only_last_state)
+        return self.text_encoder(text, control_output, only_last_state)
 
     def forward(self, text, image, control_output: ControlOutput, only_last_state=True):
         image_output = self.encode_image(image, control_output, only_last_state)
