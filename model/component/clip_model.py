@@ -2,7 +2,7 @@ from typing import Dict
 
 from torch import nn
 
-from .output import ControlOutput
+from .output import ControlOutput,  CLIPOutput
 from .image_encoder import ImageEncoder
 from .text_encoder import TextEncoder
 
@@ -32,12 +32,16 @@ class CLIPModel(nn.Module):
             image_feature = image_output / image_output.norm(dim=1, keepdim=True)
             text_feature = text_output / text_output.norm(dim=1, keepdim=True)
             logits = image_feature @ text_feature.t()
-            return image_feature, text_feature, logits
+            return image_feature, text_feature, logits, logits.T
         else:
-            image_feature = image_output.representations / image_output.representations.norm(dim=1, keepdim=True)
-            text_feature = text_output.representations / text_output.representations.norm(dim=1, keepdim=True)
+            image_feature = image_output.last_representation / image_output.last_representation.norm(dim=1, keepdim=True)
+            text_feature = text_output.last_representation / text_output.last_representation.norm(dim=1, keepdim=True)
             logits = image_feature @ text_feature.t()
-            return image_output, text_output, logits
+            return CLIPOutput(visual_output=image_output,
+                              text_output=text_output,
+                              i2t_logits=logits,
+                              t2i_logits=logits.T
+                              )
 
     def init_layers_with_teacher(self, text_layer_map, image_layer_map, teacher_state_dict=None, init_type=None):
         self.image_encoder.init_layers_with_teacher(image_layer_map, teacher_state_dict, init_type)
