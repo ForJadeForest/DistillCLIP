@@ -134,7 +134,8 @@ class Transformer(nn.Module):
         super().__init__()
         self.width = width
         self.layers = layers
-
+        if need_layers is None:
+            need_layers = [i for i in range(layers)]
         self.need_layers = need_layers
         self.resblocks = nn.Sequential(
             *[ResidualAttentionBlock(width, heads, attn_mask, drop_out) for _ in range(layers)])
@@ -168,7 +169,7 @@ class Transformer(nn.Module):
 
 class VisionTransformer(nn.Module):
     def __init__(self, input_resolution: int, patch_size: int, width: int, layers: int, heads: int, output_dim: int,
-                 need_layers: List, drop_out: float = 0.1):
+                 need_layers: Optional[List], drop_out: float = 0.1):
         super().__init__()
         self.input_resolution = input_resolution
         self.output_dim = output_dim
