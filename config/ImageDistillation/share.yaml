@@ -87,7 +87,7 @@ model:
 data:
   class_path: DistillationDataModule
   init_args:
-    num_workers: 12
+    num_workers: 16
     dataset: '_dataset'
     train_batch_size: 1600
     val_batch_size: 1250
@@ -108,7 +108,7 @@ trainer:
   auto_select_gpus: True
   accumulate_grad_batches: 1
   accelerator: 'gpu'
-  devices: [ 0, 1 ]
+  devices: [ 0, 1, 2, 3 ]
   strategy: 'ddp_find_unused_parameters_false'
   max_epochs: 300
 #  limit_train_batches: 1
@@ -140,17 +140,17 @@ trainer:
         max_depth: 2
     - class_path: ModelCheckpoint
       init_args:
-        filename: '{epoch}-val_acc{hp_metric/stu_acc_top1:.2f}-loss{val/loss}'
+        filename: '{epoch}-val_acc{hp_metric/stu_acc_top1:.2f}-loss{val/loss:.5f}'
         monitor: 'hp_metric/stu_acc_top1'
         save_last: True
-        save_top_k: 4
+        save_top_k: 2
         mode: 'max'
         auto_insert_metric_name: false
     - class_path: ModelCheckpoint
       init_args:
-        filename: '{epoch}-val_acc{hp_metric/stu_acc_top1:.2f}-loss{val/loss}'
+        filename: '{epoch}-val_acc{hp_metric/stu_acc_top1:.2f}-loss{val/loss:.5f}'
         monitor: 'val/loss'
         save_last: True
-        save_top_k: 4
-        mode: 'max'
+        save_top_k: 2
+        mode: 'min'
         auto_insert_metric_name: false

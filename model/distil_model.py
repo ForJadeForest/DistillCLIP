@@ -93,7 +93,6 @@ class DistillModel(pl.LightningModule):
         student_outs, teacher_outs = self.forward(inputs)
 
         loss, cal_res = self.loss_control(student_outs, teacher_outs, self.hparams.model_type)
-        # Logging to TensorBoard by default
         self.log_info('train', loss, cal_res, batch_size=len(inputs))
         return loss
 

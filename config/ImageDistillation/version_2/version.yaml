@@ -1,0 +1,16 @@
+model:
+  class_path: DistillModel
+  init_args:
+    norm: True
+
+trainer:
+  logger:
+    class_path: pytorch_lightning.loggers.wandb.WandbLogger
+    init_args:
+      save_dir: '/data/pyz/result/Dis_CLIP'
+      name: 'weight share-l2norm'
+      project: 'ImageDistillation'
+      log_model: false
+      group: weight_share
+      version: 'weight share-l2norm-baseline'
+      tags: ['baseline', 'weight share']
