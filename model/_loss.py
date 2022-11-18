@@ -91,12 +91,10 @@ class LossCalculator(nn.Module):
         return need_para
 
     def cal_tow_tower_loss(self, stu_out, tea_out):
-        stu_image_output, stu_text_output, stu_logits = stu_out
-        tea_image_output, tea_text_output, tea_logits = tea_out
         cal_res = {}
-        image_loss, image_loss_dict = self.cal_one_tower_loss(stu_image_output, tea_image_output)
-        text_loss, text_loss_dict = self.cal_one_tower_loss(stu_text_output, tea_text_output)
-        cal_res.update(image_loss_dict)
+        image_loss, image_loss_dict = self.cal_one_tower_loss(stu_out.visual_output, tea_out.visual_output)
+        text_loss, text_loss_dict = self.cal_one_tower_loss(stu_out.text_output, tea_out.text_output)
+
         for k, v in image_loss_dict.items():
             cal_res['image_' + k] = v
         for k, v in text_loss_dict.items():
@@ -105,13 +103,13 @@ class LossCalculator(nn.Module):
         for loss_name in self.loss_name:
             loss = self.loss[loss_name]
             if loss_name == 'label':
-                label = torch.arange(stu_logits.shape[0], device=stu_logits.device)
-                cal_res[loss_name] = loss(stu_logits, label)
+                label = torch.arange(stu_out.i2t_logits.shape[0], device=stu_out.i2t_logits.device)
+                cal_res[loss_name] = loss(stu_out.i2t_logits, label)
             elif loss_name == 'soft_label':
                 assert self.temperature
                 logits_kl_loss = loss(
-                    f.softmax(stu_logits / self.temperature, dim=1).log(),
-                    f.softmax(tea_logits / self.temperature, dim=1)
+                    f.softmax(stu_out.i2t_logits / self.temperature, dim=1).log(),
+                    f.softmax(tea_out.i2t_logits/ self.temperature, dim=1)
                 ) * self.temperature ** 2
                 cal_res[loss_name] = logits_kl_loss
         loss = 0.5 * (image_loss + text_loss)
