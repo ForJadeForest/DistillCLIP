@@ -65,18 +65,9 @@ class DualDistillModel(pl.LightningModule):
 
         student_outs, teacher_outs = self.forward(batch)
 
-        label = torch.arange(student_outs[0][0].shape[0], device=self.device)
-        loss, cal_res = self.loss_control(student_outs, teacher_outs, 'all')
-
-        stu_image_feature, stu_text_feature, stu_logits = student_outs
-        tea_image_feature, tea_text_feature, tea_logits = teacher_outs
-
         return {
-            'stu_image_feature': self.all_gather(stu_image_feature),
-            'stu_text_feature': self.all_gather(stu_text_feature),
-
-            'tea_image_feature': self.all_gather(tea_image_feature),
-            'tea_text_feature': self.all_gather(tea_text_feature)
+            'student_outs': self.all_gather(student_outs),
+            'teacher_outs': self.all_gather(teacher_outs),
         }
 
     def validation_step_end(self, step_out):
@@ -84,27 +75,24 @@ class DualDistillModel(pl.LightningModule):
 
     def validation_epoch_end(self, outputs):
         # [gpu_num, batch, batch]
-        stu_logits_outs = []
-        tea_logits_outs = []
         for batch in outputs:
             stu_logits_out, tea_logits_out = batch['stu_logits'], batch['tea_logits']
 
-
-        # log metric
-        self.log('hp_metric', self.acc_metrics[0], metric_attribute='acc_metrics', batch_size=len(batch[0]),
-                 sync_dist=True)
-        for i, metric in enumerate(self.acc_metrics):
-            metric.to(self.device)
-            metric(stu_logits, label)
-            self.log('hp_metric/stu_acc_top{}'.format(self.k_list[i]), metric, metric_attribute='acc_metrics',
-                     batch_size=len(batch[0]), sync_dist=True, )
-            if self.current_epoch == 0:
-                acc_tea = accuracy(tea_logits, label, top_k=self.k_list[i])
-                self.log('hp_metric/tea_acc_top{}'.format(self.k_list[i]), acc_tea, prog_bar=False, sync_dist=True,
-                         batch_size=len(batch[0]))
-        # Logging to TensorBoard by default
-        self.log_info('val', loss, cal_res, len(batch[0]))
-        return loss
+        # # log metric
+        # self.log('hp_metric', self.acc_metrics[0], metric_attribute='acc_metrics', batch_size=len(batch[0]),
+        #          sync_dist=True)
+        # for i, metric in enumerate(self.acc_metrics):
+        #     metric.to(self.device)
+        #     metric(stu_logits, label)
+        #     self.log('hp_metric/stu_acc_top{}'.format(self.k_list[i]), metric, metric_attribute='acc_metrics',
+        #              batch_size=len(batch[0]), sync_dist=True, )
+        #     if self.current_epoch == 0:
+        #         acc_tea = accuracy(tea_logits, label, top_k=self.k_list[i])
+        #         self.log('hp_metric/tea_acc_top{}'.format(self.k_list[i]), acc_tea, prog_bar=False, sync_dist=True,
+        #                  batch_size=len(batch[0]))
+        # # Logging to TensorBoard by default
+        # self.log_info('val', loss, cal_res, len(batch[0]))
+        # return loss
 
     def log_info(self, stage, loss, cal_res, batch_size):
 

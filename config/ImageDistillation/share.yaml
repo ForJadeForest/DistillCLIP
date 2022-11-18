@@ -68,7 +68,7 @@ model:
         student_dims: 768
         teacher_dims: 768
         low_layers_num: 2
-        high_layers_num: 2
+        high_layers_num: 1
       normalize: False
     teacher_name: ViT-B/32
     download_root: '/data/pyz/.cache'
