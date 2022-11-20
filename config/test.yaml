@@ -1,0 +1,130 @@
+model:
+  class_path: DualDistillModel
+  init_args:
+    #    image_student:
+    #      class_path: model.component.weight_share_model.RepeatVisionTransformer
+    #      init_args:
+    #        img_size: 224
+    #        patch_size: 32
+    #        in_chans: 3
+    #        out_dim: 512
+    #        embed_dim: 768
+    #        depth: 4
+    #        num_heads: 12
+    #        mlp_ratio: 4.0
+    #        qkv_bias: True
+    #        repeated_times: 2
+    #        use_transform: True
+    #    text_student:
+    #      class_path: model.component.weight_share_model.RepeatTextTransformer
+    #      init_args:
+    #        out_dim: 512
+    #        embed_dim: 512
+    #        depth: 4
+    #        num_heads: 8
+    #        mlp_ratio: 4.0
+    #        qkv_bias: True
+    #        repeated_times: 2
+    #        use_transform: True
+    image_student:
+      class_path: model.component.image_encoder.ImageEncoder
+      init_args:
+        is_student: True
+        tea_transformer_width: 768
+        vit_paras:
+          input_resolution: 224
+          patch_size: 32
+          width: 768
+          layers: 4
+          heads: 12
+          output_dim: 512
+          drop_out: 0
+          need_layers: null
+    text_student:
+      class_path: model.component.text_encoder.TextEncoder
+      init_args:
+        transformer_width: 512
+        transformer_layers: 4
+        transformer_heads: 8
+        context_length: 77
+        vocab_size: 49408
+        embed_dim: 512
+        tea_transformer_width: 512
+        is_student: True
+
+
+    norm: False
+    loss_control_para:
+      loss_name: [ 'out_l1', 'out_cos' ]
+      temperature: 1
+      vit_kd_para:
+        student_dims: 768
+        teacher_dims: 768
+        low_layers_num: 2
+        high_layers_num: 1
+      normalize: False
+    teacher_name: ViT-B/32
+    download_root: '/mnt/d/data/pyz/cache'
+    teacher_need_layers: [ 0, 1, 10, 11 ]
+    warm_steps: 15
+    total_steps: 300
+    weight_decay: 1.0e-2
+    lr: 5.0e-3
+
+data:
+  class_path: DistillationDataModule
+  init_args:
+    num_workers: 0
+    dataset: 'ms_coco'
+    dataset_name: 'COCODataset'
+    train_batch_size: 10
+    val_batch_size: 100
+    kwargs:
+      root_path: '/mnt/d/data/mscoco'
+      annotation_path: '/mnt/d/data/mscoco/annotations'
+
+
+trainer:
+  auto_select_gpus: True
+  accumulate_grad_batches: 1
+  accelerator: 'gpu'
+  devices: [ 0 ]
+  max_epochs: 2
+  limit_train_batches: 2
+  log_every_n_steps: 50
+  enable_progress_bar: True
+  check_val_every_n_epoch: 1
+  precision: 16
+  logger:
+    class_path: pytorch_lightning.loggers.wandb.WandbLogger
+    init_args:
+      save_dir: '/mnt/d/data/result/Dis_CLIP'
+      name: 'baseline-weight share'
+      project: 'CLIPDistillation'
+      log_model: false
+      group: weight_share
+      version: 'baseline-weight share'
+      tags: [ 'baseline', 'weight share' ]
+
+  callbacks:
+    - class_path: LearningRateMonitor
+
+    - class_path: ModelSummary
+      init_args:
+        max_depth: 2
+    - class_path: ModelCheckpoint
+      init_args:
+        filename: '{epoch}-val_acc{hp_metric/stu_acc_top1:.2f}-loss{val/loss:.5f}'
+        monitor: 'hp_metric/stu_acc_top1'
+        save_last: True
+        save_top_k: 2
+        mode: 'max'
+        auto_insert_metric_name: false
+    - class_path: ModelCheckpoint
+      init_args:
+        filename: '{epoch}-val_acc{hp_metric/stu_acc_top1:.2f}-loss{val/loss:.5f}'
+        monitor: 'val/loss'
+        save_last: True
+        save_top_k: 2
+        mode: 'min'
+        auto_insert_metric_name: false
