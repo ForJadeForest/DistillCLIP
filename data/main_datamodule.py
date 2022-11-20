@@ -3,15 +3,14 @@ import inspect
 from typing import *
 
 import pytorch_lightning as pl
-from pytorch_lightning.utilities import cli as pl_cli
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 
 
 class DistillationDataModule(pl.LightningDataModule):
     def __init__(self, kwargs, num_workers=8,
                  dataset='',
                  train_batch_size=128,
-                 val_batch_size=1024
+                 val_batch_size=1250,
                  ):
         super().__init__()
         self.num_workers = num_workers
@@ -53,7 +52,7 @@ class DistillationDataModule(pl.LightningDataModule):
             # importlib.import_module('.xxx_dataset')动态的导入了模块
             # getattr 是获取属性值，获取模块中 XxxDataset 这一类的属性
             self.data_module = getattr(importlib.import_module(
-                "." + dataset_file, package=__package__), name)
+                ".component" + dataset_file, package=__package__), name)
         except:
             raise ValueError(
                 f'Invalid Dataset File Name or Invalid Class Name data.{dataset_file}.{name}')
