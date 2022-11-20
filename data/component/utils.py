@@ -8,6 +8,8 @@ IMAGE_PREFIX = {
     'data_256': 'data_256',
     'imagenet': 'imagenet'
 }
+IMAGE_MEAN = (0.48145466, 0.4578275, 0.40821073),
+IMAGE_STD = (0.26862954, 0.26130258, 0.27577711)
 
 
 def encode_images(path_list, teacher_name: str):

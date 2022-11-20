@@ -7,7 +7,7 @@ from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
 
-from .utils import IMAGE_DATASET_NAME, IMAGE_PREFIX, encode_texts
+from .utils import IMAGE_DATASET_NAME, IMAGE_PREFIX, IMAGE_MEAN, IMAGE_STD, encode_texts
 
 LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
 logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
@@ -16,9 +16,7 @@ logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
 class ImageDataset(Dataset):
     def __init__(self, data_dir=r'data/ref', train=True, no_augment=True,
                  aug_prob=0.5, image_use=None, cache_dir='cache', teacher_name='ViT-B/32', overwrite=False,
-                 train_image_dir='/data/pyz/data/combine_dataset',
-                 img_mean=(0.48145466, 0.4578275, 0.40821073),
-                 img_std=(0.26862954, 0.26130258, 0.27577711)):
+                 train_image_dir='/data/pyz/data/combine_dataset'):
         super(ImageDataset, self).__init__()
         if image_use is None:
             image_use = ['coco', 'data_256', 'imagenet']
@@ -29,8 +27,8 @@ class ImageDataset(Dataset):
         self.train = train
         self.no_augment = no_augment
         self.aug_prob = aug_prob
-        self.img_mean = img_mean
-        self.img_std = img_std
+        self.img_mean = IMAGE_MEAN
+        self.img_std = IMAGE_STD
         self.cache_dir = Path(cache_dir)
         self.aug = train and not no_augment
         self.path_list = None

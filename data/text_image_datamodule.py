@@ -1,9 +1,12 @@
+from pathlib import Path
+
 import pytorch_lightning as pl
 import webdataset as wds
+from clip import tokenize
 from sklearn.model_selection import train_test_split
 from torchvision import transforms
-from pathlib import Path
-from clip import tokenize
+
+from .component.utils import IMAGE_MEAN, IMAGE_STD
 
 
 class TextImageDataModule(pl.LightningDataModule):
@@ -12,8 +15,8 @@ class TextImageDataModule(pl.LightningDataModule):
         self.batch_size = batch_size
         self.num_workers = workers
         print("batch_size", self.batch_size, "num_workers", self.num_workers)
-        self.img_mean = (0.48145466, 0.4578275, 0.40821073)
-        self.img_std = (0.26862954, 0.26130258, 0.27577711)
+        self.img_mean = IMAGE_MEAN
+        self.img_std = IMAGE_STD
         url = [str(i) for i in list(Path(image_path).glob('*.tar'))]
         self.train_url, self.val_url = train_test_split(url, test_size=0.1)
         print(f'len(train) == {len(self.train_url)}, len(val) == {len(self.val_url)}')

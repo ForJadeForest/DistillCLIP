@@ -6,17 +6,14 @@ import torch
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
-from utils import encode_images
+from .utils import encode_images, IMAGE_STD, IMAGE_MEAN
 
 LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
 logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
 
 
 class TextDataset(Dataset):
-    def __init__(self, cache_dir='cache', data_dir=r'data/ref', train=True, overwrite=False, teacher_name='ViT-B/32',
-                 img_mean=(0.48145466, 0.4578275, 0.40821073),
-                 img_std=(0.26862954, 0.26130258, 0.27577711)
-                 ):
+    def __init__(self, cache_dir='cache', data_dir=r'data/ref', train=True, overwrite=False, teacher_name='ViT-B/32'):
         super(TextDataset, self).__init__()
         from clip import tokenize
         self.data_dir = Path(data_dir)
@@ -29,8 +26,8 @@ class TextDataset(Dataset):
             self.tokenize_text = self.load(overwrite)
         else:
             self.teacher_name = teacher_name
-            self.img_mean = img_mean
-            self.img_std = img_std
+            self.img_mean = IMAGE_MEAN
+            self.img_std = IMAGE_STD
             self.sentences, self.captions, self.path_list, self.image_rep = self.load(overwrite)
             self.image_rep = self.image_rep.squeeze(dim=1)
 
