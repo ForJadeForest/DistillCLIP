@@ -72,16 +72,16 @@ model:
     lr: 5.0e-3
 
 data:
-  class_path: DistillationDataModule
+  class_path: MainDataModule
   init_args:
-    num_workers: 0
     dataset: 'ms_coco'
     dataset_name: 'COCODataset'
-    train_batch_size: 10
-    val_batch_size: 100
-    kwargs:
+    dataset_para:
       root_path: '/mnt/d/data/mscoco'
       annotation_path: '/mnt/d/data/mscoco/annotations'
+    train_batch_size: 10
+    val_batch_size: 100
+    num_workers: 0
 
 
 trainer:
