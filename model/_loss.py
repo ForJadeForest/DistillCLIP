@@ -114,9 +114,10 @@ class LossCalculator(nn.Module):
                 cal_res[loss_name] = logits_kl_loss
         loss = 0.5 * (image_loss + text_loss)
         for (loss_name, scale) in self.loss_scale.items():
+            # TODO: label loss is i2t logits and t2i logits loss average
             if loss_name == 'label' or loss_name == 'soft_label':
                 cal_res[loss_name] = cal_res[loss_name] * scale
-            loss += cal_res[loss_name] * self.percent[loss_name]
+                loss += cal_res[loss_name] * self.percent[loss_name]
         return loss, cal_res
 
     def cal_one_tower_loss(self, stu_out, tea_out):
