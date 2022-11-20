@@ -1,24 +1,28 @@
 import importlib
 import inspect
-from typing import *
 
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 
 
-class DistillationDataModule(pl.LightningDataModule):
-    def __init__(self, kwargs, num_workers=8,
-                 dataset='',
+class MainDataModule(pl.LightningDataModule):
+    def __init__(self, dataset_para, dataset, dataset_name,
+                 num_workers=8,
                  train_batch_size=128,
-                 val_batch_size=1250,
-                 ):
+                 val_batch_size=1250):
+        """
+         dataset_para: The dataset parameters
+         dataset: The *.py file name of the dataset class
+         dataset_name: The dataset Class name
+         """
         super().__init__()
         self.num_workers = num_workers
         self.dataset = dataset
-        self.kwargs = kwargs
+        self.dataset_para = dataset_para
+        self.dataset_name = dataset_name
+
         self.train_batch_size = train_batch_size
         self.val_batch_size = val_batch_size
-        self.dataset_name = kwargs['dataset_name']
         self.load_data_module()
         self.save_hyperparameters()
 
@@ -52,7 +56,7 @@ class DistillationDataModule(pl.LightningDataModule):
             # importlib.import_module('.xxx_dataset')动态的导入了模块
             # getattr 是获取属性值，获取模块中 XxxDataset 这一类的属性
             self.data_module = getattr(importlib.import_module(
-                ".component" + dataset_file, package=__package__), name)
+                ".component." + dataset_file, package=__package__), name)
         except:
             raise ValueError(
                 f'Invalid Dataset File Name or Invalid Class Name data.{dataset_file}.{name}')
@@ -60,17 +64,17 @@ class DistillationDataModule(pl.LightningDataModule):
     def instancialize(self, **other_args):
         """ Instancialize a model using the corresponding parameters
             from self.hparams dictionary. You can also input any args
-            to overwrite the corresponding value in self.kwargs.
+            to overwrite the corresponding value in self.dataset_para.
         """
         # 获取self.data_module (self.dataset对应的类) 的__init__函数的参数
         class_args = inspect.signature(self.data_module.__init__).parameters
 
-        inkeys = self.kwargs.keys()
+        inkeys = self.dataset_para.keys()
         args1 = {}
         for arg in class_args:
             # 如果需要的参数在kwargs的key中，则赋值
             if arg in inkeys:
-                args1[arg] = self.kwargs[arg]
+                args1[arg] = self.dataset_para[arg]
         args1.update(other_args)
         return self.data_module(**args1)
 
