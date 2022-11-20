@@ -23,7 +23,6 @@ class DistillModel(pl.LightningModule):
         super().__init__()
         if model_type not in ['text', 'image']:
             raise ValueError(f"the model_type should in ['text', 'image'], bug got {model_type}")
-        self.__dict__.update(locals())
         self.save_hyperparameters(ignore=['student_encoder'])
 
         # 定义模型
@@ -47,7 +46,7 @@ class DistillModel(pl.LightningModule):
             self.acc_metrics.append(Accuracy(top_k=k))
 
     def speed_test(self, model, dummy_input, pre_fix='stu_'):
-        flops, param = cal_flop(self.student, dummy_input)
+        flops, param = cal_flop(model, dummy_input)
         mean_syn, std_syn, mean_fps = cal_speed(self.student, dummy_input)
         metric_dict = {
             pre_fix + 'flops': flops,
@@ -78,11 +77,9 @@ class DistillModel(pl.LightningModule):
         self.speed_test(self.teacher, dummy_input, pre_fix='tea_')
 
     def forward(self, inputs):
-        if isinstance(self.student, RepeatVisionTransformer):
-            student_outs = self.student(inputs, self.need_return_para)
-        else:
-            student_outs = self.student(inputs, self.need_return_para, only_last_state=False)
-        teacher_outs = self.teacher(inputs, self.need_return_para, only_last_state=False)
+
+        student_outs = self.student(inputs, self.need_return_para)
+        teacher_outs = self.teacher(inputs, self.need_return_para)
         if self.norm:
             student_outs.last_representation /= student_outs.last_representation.norm(dim=-1, keepdim=True)
             teacher_outs.last_representation /= teacher_outs.last_representation.norm(dim=-1, keepdim=True)
@@ -91,9 +88,7 @@ class DistillModel(pl.LightningModule):
     def training_step(self, inputs, batch_idx):
         self.teacher.eval()
         student_outs, teacher_outs = self.forward(inputs)
-
         loss, cal_res = self.loss_control(student_outs, teacher_outs, self.hparams.model_type)
-        # Logging to TensorBoard by default
         self.log_info('train', loss, cal_res, batch_size=len(inputs))
         return loss
 
@@ -166,21 +161,6 @@ class DistillModel(pl.LightningModule):
             num_warmup_steps=self.hparams.warm_steps,
             num_training_steps=self.hparams.total_steps
         )
-        """
-        optimizer:
-          class_path: AdamW
-          init_args:
-            lr: 1.0e-3
-            weight_decay: 0.0001
-            eps: 1.0e-8
-        
-        
-        lr_scheduler:
-          class_path: get_cosine_schedule_with_warmup
-          init_args:
-            num_warmup_steps: 5
-            num_training_steps: 200
-        """
         return [optimizer], [scheduler]
 
 

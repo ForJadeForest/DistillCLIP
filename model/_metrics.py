@@ -1,4 +1,6 @@
 # 如果需要自定义metrics，在此处定义
+from typing import List, Tuple
+
 import numpy as np
 import torch
 from thop import profile
@@ -6,25 +8,28 @@ from thop import profile
 
 def cal_flop(model, inputs):
     # input_shape of model,batch_size=1
-    flops, params = profile(model, inputs=(inputs, ))
+    if isinstance(inputs, torch.Tensor):
+        inputs = (inputs, )
+    flops, params = profile(model, inputs=inputs)
     print("FLOPs=", str(flops / 1e9) + '{}'.format("G"))
     print("params=", str(params / 1e6) + '{}'.format("M"))
     return flops, params
 
 
 def cal_speed(model, inputs):
-    dummy_input = inputs
+    if isinstance(inputs, torch.Tensor):
+        inputs = (inputs, )
     starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
     repetitions = 300
     timings = np.zeros((repetitions, 1))
     # GPU-WARM-UP
     for _ in range(10):
-        _ = model(dummy_input)
+        _ = model(*inputs)
     # MEASURE PERFORMANCE
     with torch.no_grad():
         for rep in range(repetitions):
             starter.record()
-            _ = model(dummy_input)
+            _ = model(*inputs)
             ender.record()
             # WAIT FOR GPU SYNC
             torch.cuda.synchronize()

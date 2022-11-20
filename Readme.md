@@ -9,7 +9,7 @@
   - 在两个encoder最后一层加入个Linear，投射到相同空间
 - Vit的模型架构中的embedding层或许有所差异。是否蒸馏Embeeding？
 - 蒸馏Embedding是否加position embedding
-  - 目前采用不加的方法
+  - 目前采用加的方法
 - 蒸馏的attention map是均值？还是每一个头都进行loss计算？
   - 均值的话，attention 头数可以减少，但似乎头数是一个比较重要的参数。
   - 目前使用计算每一个头的loss
@@ -101,6 +101,8 @@
   - [ ] 计划在下载好 Conceptual Captions的Image的时候，可以考虑一起蒸馏。或者单纯增加图像的数量。大概达到6M的样子。
   - [x] 使用RandAugmentation进行增强。
   - [ ] **Fine-Grain loss 添加**
+    - FICLP model采用的方法需要的是匹配的文本图像对，需要重新选择数据集。同时对比学习的效果不一定好。（batch 太小，使用梯度积累？）
+      - [多GPU DDP 计算对比学习的损失](https://github.com/Lightning-AI/lightning/discussions/14390)
   - [ ] Weight share model 暂时不支持选用特定的layers蒸馏，所选的是全部层
   
   

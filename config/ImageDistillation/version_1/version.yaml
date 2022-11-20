@@ -1,0 +1,24 @@
+data:
+  class_path: DistillationDataModule
+  init_args:
+    dataset: '_dataset'
+    kwargs:
+      data_dir: '/data/pyz/data'
+      dataset_name: 'ImageDataset'
+      cache_dir: '/data/pyz/data/cache'
+      train_image_dir: '/home/pyz/combine_dataset/'
+      image_use: [ 'coco']
+      cache_path: '/data/pyz/.cache/CLIPDistill'
+      overwrite: False
+
+trainer:
+  logger:
+    class_path: pytorch_lightning.loggers.wandb.WandbLogger
+    init_args:
+      save_dir: '/data/pyz/result/Dis_CLIP'
+      name: 'weight-share_only-coco'
+      project: 'ImageDistillation'
+      log_model: false
+      group: weight_share
+      version: 'weight-share_only-coco-baseline'
+      tags: ['baseline', 'weight share', 'dataset-change']
