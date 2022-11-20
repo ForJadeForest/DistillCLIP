@@ -122,7 +122,8 @@ def teacher_load(teacher_name: str, download_root, model_type, need_layers=None)
     state_dict = load(teacher_name, download_root=download_root)
     if model_type == 'text':
         para = get_transformer_para(state_dict)
-        teacher_model = TextEncoder(is_student=False, **para, need_layers=need_layers)
+        para.update(dict(need_layers=need_layers))
+        teacher_model = TextEncoder(is_student=False, **para)
         my_state_dict = teacher_model.state_dict()
         for k in my_state_dict:
             if k in state_dict:
@@ -132,7 +133,7 @@ def teacher_load(teacher_name: str, download_root, model_type, need_layers=None)
     elif model_type == 'image':
         para = get_visual_transformer_para(state_dict)
         para.update(dict(need_layers=need_layers))
-        teacher_model = ImageEncoder(is_student=False, vit_paras=para)
+        teacher_model = ImageEncoder(is_student=False, **para)
         my_state_dict = teacher_model.state_dict()
         for k in my_state_dict:
             if k in state_dict:
@@ -141,9 +142,13 @@ def teacher_load(teacher_name: str, download_root, model_type, need_layers=None)
         return teacher_model
     elif model_type == 'all':
         from .component.clip_model import CLIPModel
-        vit_para = get_visual_transformer_para(state_dict)
+        vit_paras = get_visual_transformer_para(state_dict)
+        vit_paras.update(dict(need_layers=need_layers))
         trans_para = get_transformer_para(state_dict)
-        teacher_model = CLIPModel(False, vit_para, trans_para)
+        trans_para.update(dict(need_layers=need_layers))
+        image_encoder = ImageEncoder(is_student=False, **vit_paras)
+        text_encoder = TextEncoder(is_student=False, **trans_para)
+        teacher_model = CLIPModel(False, image_encoder, text_encoder)
         my_state_dict = teacher_model.state_dict()
         map_d = {
             k: False for k in my_state_dict.keys()

@@ -1,23 +1,15 @@
-from typing import Dict
-
 from torch import nn
 
-from .output import ControlOutput,  CLIPOutput
-from .image_encoder import ImageEncoder
-from .text_encoder import TextEncoder
+from .output import ControlOutput, CLIPOutput
 
 
 class CLIPModel(nn.Module):
-    def __init__(self, is_student, vit_paras: Dict, text_encoder_para: Dict, tea_transformer_width=None):
+    def __init__(self, is_student: bool, image_encoder: nn.Module, text_encoder: nn.Module, norm=False):
         super().__init__()
-        self.image_encoder = ImageEncoder(is_student=is_student, vit_paras=vit_paras,
-                                          tea_transformer_width=tea_transformer_width)
-        self.text_encoder = TextEncoder(is_student=is_student, **text_encoder_para,
-                                        tea_transformer_width=tea_transformer_width)
-        self.arch_para = vit_paras.update(text_encoder_para)
+        self.image_encoder = image_encoder
+        self.text_encoder = text_encoder
         self.is_student = is_student
-        self.img_layers = vit_paras['layers']
-        self.text_layers = text_encoder_para['transformer_layers']
+        self.norm = norm
 
     def encode_image(self, image, control_output: ControlOutput, only_last_state=True):
         return self.image_encoder(image, control_output, only_last_state)
@@ -34,14 +26,14 @@ class CLIPModel(nn.Module):
             logits = image_feature @ text_feature.t()
             return image_feature, text_feature, logits, logits.T
         else:
-            image_feature = image_output.last_representation / image_output.last_representation.norm(dim=1, keepdim=True)
+            image_feature = image_output.last_representation / image_output.last_representation.norm(dim=1,
+                                                                                                     keepdim=True)
             text_feature = text_output.last_representation / text_output.last_representation.norm(dim=1, keepdim=True)
             logits = image_feature @ text_feature.t()
             return CLIPOutput(visual_output=image_output,
                               text_output=text_output,
                               i2t_logits=logits,
-                              t2i_logits=logits.T
-                              )
+                              t2i_logits=logits.T)
 
     def init_layers_with_teacher(self, text_layer_map, image_layer_map, teacher_state_dict=None, init_type=None):
         self.image_encoder.init_layers_with_teacher(image_layer_map, teacher_state_dict, init_type)
