@@ -161,21 +161,6 @@ class DistillModel(pl.LightningModule):
             num_warmup_steps=self.hparams.warm_steps,
             num_training_steps=self.hparams.total_steps
         )
-        """
-        optimizer:
-          class_path: AdamW
-          init_args:
-            lr: 1.0e-3
-            weight_decay: 0.0001
-            eps: 1.0e-8
-        
-        
-        lr_scheduler:
-          class_path: get_cosine_schedule_with_warmup
-          init_args:
-            num_warmup_steps: 5
-            num_training_steps: 200
-        """
         return [optimizer], [scheduler]
 
 
