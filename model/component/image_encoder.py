@@ -6,7 +6,7 @@ from .output import ControlOutput, VisionTransformerOutput
 
 
 class ImageEncoder(nn.Module):
-    def __init__(self, is_student, tea_transformer_width=None, **vit_paras):
+    def __init__(self, is_student, vit_paras, tea_transformer_width=None):
         super().__init__()
         self.layers = vit_paras['layers']
         if 'need_layers' not in vit_paras or vit_paras['need_layers'] is None:

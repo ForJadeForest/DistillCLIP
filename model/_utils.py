@@ -133,7 +133,7 @@ def teacher_load(teacher_name: str, download_root, model_type, need_layers=None)
     elif model_type == 'image':
         para = get_visual_transformer_para(state_dict)
         para.update(dict(need_layers=need_layers))
-        teacher_model = ImageEncoder(is_student=False, **para)
+        teacher_model = ImageEncoder(is_student=False, vit_paras=para)
         my_state_dict = teacher_model.state_dict()
         for k in my_state_dict:
             if k in state_dict:
@@ -146,7 +146,7 @@ def teacher_load(teacher_name: str, download_root, model_type, need_layers=None)
         vit_paras.update(dict(need_layers=need_layers))
         trans_para = get_transformer_para(state_dict)
         trans_para.update(dict(need_layers=need_layers))
-        image_encoder = ImageEncoder(is_student=False, **vit_paras)
+        image_encoder = ImageEncoder(is_student=False, vit_paras=vit_paras)
         text_encoder = TextEncoder(is_student=False, **trans_para)
         teacher_model = CLIPModel(False, image_encoder, text_encoder)
         my_state_dict = teacher_model.state_dict()
