@@ -98,14 +98,14 @@ class TextEncoder(nn.Module):
         if self.text_projection is not None:
             nn.init.normal_(self.text_projection, std=self.transformer.width ** -0.5)
 
-    def forward(self, text, control_output: ControlOutput, only_last_state=True):
-        return self.encode_text(text, control_output, only_last_state)
+    def forward(self, text, control_output: ControlOutput):
+        return self.encode_text(text, control_output)
 
     def hyper_para(self):
         return {
             'context_length': self.context_length,
             'transformer_width': self.transformer_width,
-            'transformer_layers': self.transformer_layers,
+            'transformer_layers': self.layers,
             'transformer_heads': self.transformer_heads,
             'vocab_size': self.vocab_size,
             'embed_dim': self.embed_dim,
@@ -140,7 +140,3 @@ class TextEncoder(nn.Module):
                 my_model_state_dict[key] = tea_state_dict[tea_key]
         self.load_state_dict(my_model_state_dict)
         print('init with teacher weight success!')
-
-    @need_layers.setter
-    def need_layers(self, value):
-        self._need_layers = value
