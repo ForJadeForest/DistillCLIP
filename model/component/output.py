@@ -59,7 +59,7 @@ class TransformerLayerOutput:
 
 @dataclass
 class CLIPOutput:
-    visual_output: torch.Tensor = None
-    text_output: torch.Tensor = None,
+    visual_output: VisionTransformerOutput = None
+    text_output: TextTransformerOutput = None,
     i2t_logits: torch.Tensor = None,
     t2i_logits: torch.Tensor = None
