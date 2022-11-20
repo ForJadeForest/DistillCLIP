@@ -6,10 +6,10 @@ from .output import ControlOutput, VisionTransformerOutput
 
 
 class ImageEncoder(nn.Module):
-    def __init__(self, is_student, vit_paras, tea_transformer_width=None):
+    def __init__(self, is_student, tea_transformer_width=None, **vit_paras):
         super().__init__()
         self.layers = vit_paras['layers']
-        if vit_paras['need_layers'] is None:
+        if 'need_layers' not in vit_paras or vit_paras['need_layers'] is None:
             vit_paras['need_layers'] = tuple(range(self.layers))
         self.vit_paras = vit_paras
         self.visual = VisionTransformer(**vit_paras)
@@ -43,10 +43,8 @@ class ImageEncoder(nn.Module):
             nn.init.normal_(block.mlp.c_fc.weight, std=fc_std)
             nn.init.normal_(block.mlp.c_proj.weight, std=proj_std)
 
-    def encode_image(self, image, control_output: ControlOutput, only_last_state=True):
+    def encode_image(self, image, control_output: ControlOutput):
         vit_output: VisionTransformerOutput = self.visual(image, control_output)
-        if only_last_state:
-            return vit_output.last_representation
         if self.is_student and not self.no_trans:
             if control_output.need_rep:
                 vit_output.representations = [self.hidden_projection(layer_rep) for layer_rep in
@@ -60,8 +58,8 @@ class ImageEncoder(nn.Module):
 
         return vit_output
 
-    def forward(self, image, control_output: ControlOutput, only_last_state=True):
-        return self.encode_image(image, control_output, only_last_state)
+    def forward(self, image, control_output: ControlOutput):
+        return self.encode_image(image, control_output)
 
     def init_layers_with_teacher(self, layer_map, teacher_state_dict=None, init_type=None):
         import re

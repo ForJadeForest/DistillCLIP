@@ -7,7 +7,7 @@ from .output import ControlOutput, TransformerOutput, TextTransformerOutput
 
 class TextEncoder(nn.Module):
     def __init__(self, transformer_width, transformer_layers, transformer_heads, context_length, need_layers,
-                 vocab_size, embed_dim, tea_transformer_width=None, is_student=True, drop_out=0.1):
+                 vocab_size, embed_dim, tea_transformer_width=None, is_student=True, drop_out=0.):
         super().__init__()
         self.context_length = context_length
         self.transformer_width = transformer_width
@@ -53,7 +53,7 @@ class TextEncoder(nn.Module):
         mask.triu_(1)  # zero out the lower diagonal
         return mask
 
-    def encode_text(self, text, control_output: ControlOutput, only_last_state=True):
+    def encode_text(self, text, control_output: ControlOutput):
         embedding = self.token_embedding(text)  # [batch_size, n_ctx, d_model]
         x = embedding + self.positional_embedding
         embedding_res = x
@@ -63,8 +63,6 @@ class TextEncoder(nn.Module):
         # take features from the eot embedding (eot_token is the highest number in each sequence)
         x = x[torch.arange(x.shape[0]), text.argmax(dim=-1)] @ self.text_projection
 
-        if only_last_state:
-            return x
         if self.is_student and not self.no_trans:
             if control_output.need_rep:
                 transformer_output.representations = [self.hidden_projection(layer_rep) for layer_rep in
