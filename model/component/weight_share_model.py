@@ -379,12 +379,10 @@ class RepeatTextTransformer(nn.Module):
     """
 
     def __init__(self, need_layers: Optional[List] = None, vocab_size=49408, context_length=77, out_dim=512,
-                 embed_dim=768, depth=12,
-                 num_heads=12, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop_rate=0., attn_drop_rate=0.,
-                 drop_path_rate=0., rpe_config=None,
+                 embed_dim=768, depth=12, num_heads=12, mlp_ratio=4.,
+                 qkv_bias=False, qk_scale=None, drop_rate=0., attn_drop_rate=0., drop_path_rate=0., rpe_config=None,
                  repeated_times=1,
-                 use_transform=False,
-                 ):
+                 use_transform=False):
         super().__init__()
         norm_layer = nn.LayerNorm
         if need_layers is None:
@@ -394,8 +392,6 @@ class RepeatTextTransformer(nn.Module):
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
         self.context_length = context_length
         self.patch_embed = nn.Embedding(vocab_size, embed_dim)
-
-        self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
         self.pos_embed = nn.Parameter(torch.empty(self.context_length, embed_dim))
         self.pos_drop = nn.Dropout(p=drop_rate)
 
@@ -438,8 +434,6 @@ class RepeatTextTransformer(nn.Module):
         self.head = nn.Linear(embed_dim, out_dim) if out_dim > 0 else nn.Identity()
 
         trunc_normal_(self.pos_embed, std=.02)
-        if self.cls_token is not None:
-            trunc_normal_(self.cls_token, std=.02)
         self.apply(self._init_weights)
         self.apply(self._init_custom_weights)
 
@@ -479,9 +473,6 @@ class RepeatTextTransformer(nn.Module):
         attention_probs = []
         B = x.shape[0]
         x = self.patch_embed(x)
-
-        cls_tokens = self.cls_token.expand(B, -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
-        x = torch.cat((cls_tokens, x), dim=1)
 
         x = x + self.pos_embed
         embedding = x
