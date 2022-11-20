@@ -10,6 +10,7 @@ from torchmetrics import Accuracy
 from torchmetrics.functional import accuracy
 
 from ._loss import LossCalculator
+from ._metrics import cal_speed, cal_flop
 from ._utils import teacher_load
 from .component.weight_share_model import RepeatVisionTransformer
 
@@ -20,6 +21,8 @@ class DistillModel(pl.LightningModule):
                  teacher_need_layers: List, model_type: str = 'text', map_type: str = 'mid', init_type=None,
                  warm_steps=10, total_steps=200, weight_decay=1e-3, lr: float = 1e-3):
         super().__init__()
+        if model_type not in ['text', 'image']:
+            raise ValueError(f"the model_type should in ['text', 'image'], bug got {model_type}")
         self.__dict__.update(locals())
         self.save_hyperparameters(ignore=['student_encoder'])
 
@@ -43,6 +46,18 @@ class DistillModel(pl.LightningModule):
         for k in self.k_list:
             self.acc_metrics.append(Accuracy(top_k=k))
 
+    def speed_test(self, model, dummy_input, pre_fix='stu_'):
+        flops, param = cal_flop(self.student, dummy_input)
+        mean_syn, std_syn, mean_fps = cal_speed(self.student, dummy_input)
+        metric_dict = {
+            pre_fix + 'flops': flops,
+            pre_fix + 'param': param,
+            pre_fix + 'mean_times': mean_syn,
+            pre_fix + 'std_times': std_syn,
+            pre_fix + 'mean_fps': mean_fps
+        }
+        self.log_dict(metric_dict, sync_dist=True)
+
     def on_train_start(self):
         if self.global_rank == 0:
             # 多gpu会报错
@@ -55,6 +70,12 @@ class DistillModel(pl.LightningModule):
                 self.logger.watch(self)
             elif isinstance(self.logger, TensorBoardLogger):
                 self.logger.log_hyperparams(self.hparams, {"hp/stu_acc_top1": 0, "hp/stu_acc_top10": 0})
+        if self.hparams.model_type == 'image':
+            dummy_input = torch.rand(size=(1, 3, 224, 224), device=self.device)
+        else:
+            dummy_input = torch.rand(size=(1, 77), device=self.device)
+        self.speed_test(self.student, dummy_input, pre_fix='stu_')
+        self.speed_test(self.teacher, dummy_input, pre_fix='tea_')
 
     def forward(self, inputs):
         if isinstance(self.student, RepeatVisionTransformer):
