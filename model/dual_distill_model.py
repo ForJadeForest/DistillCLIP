@@ -17,17 +17,17 @@ from .component.output import CLIPOutput
 
 
 class DualDistillModel(pl.LightningModule):
-    def __init__(self, image_student: nn.Module, text_student: nn.Module, need_layers: List, teacher_name: str,
-                 loss_control_para: Dict,
+    def __init__(self, image_student: nn.Module, text_student: nn.Module, teacher_need_layers: List, teacher_name: str,
+                 loss_control_para: Dict, warm_steps, total_steps, weight_decay,
                  download_root: str, lr: float = 1e-3, map_type: Optional[str] = None, init_type: Optional[str] = None,
-                 norm=False):
+                 norm=False, ):
         super().__init__()
-        self.save_hyperparameters(ignore=['student_encoder'])
+        self.save_hyperparameters(ignore=['image_student', 'text_student'])
 
         # 定义模型
         self.student = CLIPModel(True, image_student, text_student, norm)
         self.teacher_name = teacher_name
-        self.teacher = teacher_load(teacher_name, download_root, 'all', need_layers=need_layers)
+        self.teacher = teacher_load(teacher_name, download_root, 'all', need_layers=teacher_need_layers)
         for p in self.teacher.parameters():
             p.requires_grad = False
 
@@ -50,13 +50,14 @@ class DualDistillModel(pl.LightningModule):
             elif isinstance(self.logger, TensorBoardLogger):
                 self.logger.log_hyperparams(self.hparams, {"hp/stu_acc_top1": 0, "hp/stu_acc_top10": 0})
         dummy_input = (
-            torch.rand(size=(1, 77), device=self.device), torch.rand(size=(1, 3, 224, 224), device=self.device))
+            torch.randint(high=49407, size=(1, 77), device=self.device),
+            torch.rand(size=(1, 3, 224, 224), device=self.device))
         self.speed_test(self.student, dummy_input, pre_fix='stu_')
         self.speed_test(self.teacher, dummy_input, pre_fix='tea_')
 
     def speed_test(self, model, dummy_input, pre_fix='stu_'):
         flops, param = cal_flop(model, dummy_input)
-        mean_syn, std_syn, mean_fps = cal_speed(self.student, dummy_input)
+        mean_syn, std_syn, mean_fps = cal_speed(model, dummy_input)
         metric_dict = {
             pre_fix + 'flops': flops,
             pre_fix + 'param': param,
@@ -68,7 +69,6 @@ class DualDistillModel(pl.LightningModule):
 
     def forward(self, inputs) -> Tuple[CLIPOutput, CLIPOutput]:
         image, text = inputs
-        text = text.squeeze(dim=1)
         student_outs: CLIPOutput = self.student(text, image, self.need_return_para)
         teacher_outs: CLIPOutput = self.teacher(text, image, self.need_return_para)
         return student_outs, teacher_outs
@@ -83,7 +83,8 @@ class DualDistillModel(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
 
         student_outs, teacher_outs = self.forward(batch)
-
+        loss, cal_res = self.loss_control(student_outs, teacher_outs, 'all')
+        self.log_info('val', loss, cal_res, batch_size=len(batch))
         return {
             'stu_image_outs': self.all_gather(student_outs.visual_output.last_representation),
             'stu_text_outs': self.all_gather(student_outs.text_output.last_representation),
