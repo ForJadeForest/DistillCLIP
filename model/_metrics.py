@@ -9,7 +9,7 @@ from thop import profile
 def cal_flop(model, inputs):
     # input_shape of model,batch_size=1
     if isinstance(inputs, torch.Tensor):
-        inputs = (inputs, )
+        inputs = (inputs,)
     flops, params = profile(model, inputs=inputs)
     print("FLOPs=", str(flops / 1e9) + '{}'.format("G"))
     print("params=", str(params / 1e6) + '{}'.format("M"))
@@ -18,7 +18,7 @@ def cal_flop(model, inputs):
 
 def cal_speed(model, inputs):
     if isinstance(inputs, torch.Tensor):
-        inputs = (inputs, )
+        inputs = (inputs,)
     starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
     repetitions = 300
     timings = np.zeros((repetitions, 1))
@@ -42,4 +42,13 @@ def cal_speed(model, inputs):
                                                                                          std_syn=std_syn,
                                                                                          mean_fps=mean_fps))
     return mean_syn, std_syn, mean_fps
+
+
+def cal_emscore(image_features, text_features):
+    """
+    image_features: [batch, image_seq_len, embedding]
+    text_features: [batch, text_seq_len, embedding]
+    """
+
+
 
