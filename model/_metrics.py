@@ -44,11 +44,9 @@ def cal_speed(model, inputs):
     return mean_syn, std_syn, mean_fps
 
 
-def cal_emscore(image_features, text_features):
+def cal_emscore(image_features: torch.Tensor, text_features: torch.Tensor):
     """
     image_features: [batch, image_seq_len, embedding]
     text_features: [batch, text_seq_len, embedding]
     """
-
-
-
+    

@@ -1,61 +1,61 @@
 model:
   class_path: DualDistillModel
   init_args:
-    #    image_student:
-    #      class_path: model.component.weight_share_model.RepeatVisionTransformer
-    #      init_args:
-    #        img_size: 224
-    #        patch_size: 32
-    #        in_chans: 3
-    #        out_dim: 512
-    #        embed_dim: 768
-    #        depth: 4
-    #        num_heads: 12
-    #        mlp_ratio: 4.0
-    #        qkv_bias: True
-    #        repeated_times: 2
-    #        use_transform: True
-    #    text_student:
-    #      class_path: model.component.weight_share_model.RepeatTextTransformer
-    #      init_args:
-    #        out_dim: 512
-    #        embed_dim: 512
-    #        depth: 4
-    #        num_heads: 8
-    #        mlp_ratio: 4.0
-    #        qkv_bias: True
-    #        repeated_times: 2
-    #        use_transform: True
-    image_student:
-      class_path: model.component.image_encoder.ImageEncoder
-      init_args:
-        is_student: True
-        tea_transformer_width: 768
-        vit_paras:
-          input_resolution: 224
-          patch_size: 32
-          width: 768
-          layers: 4
-          heads: 12
-          output_dim: 512
-          drop_out: 0
-          need_layers: null
-    text_student:
-      class_path: model.component.text_encoder.TextEncoder
-      init_args:
-        transformer_width: 512
-        transformer_layers: 4
-        transformer_heads: 8
-        context_length: 77
-        vocab_size: 49408
-        embed_dim: 512
-        tea_transformer_width: 512
-        is_student: True
+        image_student:
+          class_path: model.component.weight_share_model.RepeatVisionTransformer
+          init_args:
+            img_size: 224
+            patch_size: 32
+            in_chans: 3
+            out_dim: 512
+            embed_dim: 768
+            depth: 4
+            num_heads: 24
+            mlp_ratio: 4.0
+            qkv_bias: True
+            repeated_times: 2
+            use_transform: True
+        text_student:
+          class_path: model.component.weight_share_model.RepeatTextTransformer
+          init_args:
+            out_dim: 512
+            embed_dim: 512
+            depth: 4
+            num_heads: 16
+            mlp_ratio: 4.0
+            qkv_bias: True
+            repeated_times: 2
+            use_transform: True
+#    image_student:
+#      class_path: model.component.image_encoder.ImageEncoder
+#      init_args:
+#        is_student: True
+#        tea_transformer_width: 768
+#        vit_paras:
+#          input_resolution: 224
+#          patch_size: 32
+#          width: 768
+#          layers: 4
+#          heads: 12
+#          output_dim: 512
+#          drop_out: 0
+#          need_layers: null
+#    text_student:
+#      class_path: model.component.text_encoder.TextEncoder
+#      init_args:
+#        transformer_width: 512
+#        transformer_layers: 4
+#        transformer_heads: 8
+#        context_length: 77
+#        vocab_size: 49408
+#        embed_dim: 512
+#        tea_transformer_width: 512
+#        is_student: True
 
 
     norm: False
     loss_control_para:
-      loss_name: [ 'out_l1', 'out_cos' ]
+      loss_name: [ 'out_l1', 'out_cos', 'label']
       temperature: 1
       vit_kd_para:
         student_dims: 768
@@ -64,7 +64,7 @@ model:
         high_layers_num: 1
       normalize: False
     teacher_name: ViT-B/32
-    download_root: '/mnt/d/data/pyz/cache'
+    download_root: '/data/pyz/cache'
     teacher_need_layers: [ 0, 1, 10, 11 ]
     warm_steps: 15
     total_steps: 300
@@ -77,7 +77,7 @@ data:
     dataset: 'ms_coco'
     dataset_name: 'COCODataset'
     dataset_para:
-      root_path: '/mnt/d/data/mscoco'
+      root_path: '/data/mscoco'
       annotation_path: '/mnt/d/data/mscoco/annotations'
     train_batch_size: 10
     val_batch_size: 100

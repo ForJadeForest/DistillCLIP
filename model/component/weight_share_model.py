@@ -490,7 +490,7 @@ class RepeatTextTransformer(nn.Module):
             value_map = repeat_block_out.value_map
         x = self.norm(x)
         x = self.head(x)
-        return TextTransformerOutput(last_representation=x[:, -1, :],
+        return TextTransformerOutput(last_representation=x[:, x.argmax(dim=-1), :],
                                      last_layer_output=x,
                                      attention_scores=attention_scores,
                                      attention_probs=attention_probs,
