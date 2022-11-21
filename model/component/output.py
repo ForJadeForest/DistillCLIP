@@ -16,9 +16,10 @@ class ControlOutput:
 @dataclass
 class VisionTransformerOutput:
     last_representation: torch.Tensor = None
-    attention_scores: List[torch.Tensor] = [],
-    attention_probs: List[torch.Tensor] = [],
-    representations: List[torch.Tensor] = [],
+    last_layer_output: torch.Tensor = None
+    attention_scores: List[torch.Tensor] = None
+    attention_probs: List[torch.Tensor] = None
+    representations: List[torch.Tensor] = None
     value_map: torch.Tensor = None,
     embedding: torch.Tensor = None,
 
@@ -26,9 +27,10 @@ class VisionTransformerOutput:
 @dataclass
 class TextTransformerOutput:
     last_representation: torch.Tensor = None
-    attention_scores: List[torch.Tensor] = [],
-    attention_probs: List[torch.Tensor] = [],
-    representations: List[torch.Tensor] = [],
+    last_layer_output: torch.Tensor = None,
+    attention_scores: List[torch.Tensor] = None
+    attention_probs: List[torch.Tensor] = None
+    representations: List[torch.Tensor] = None
     value_map: torch.Tensor = None,
     embedding: torch.Tensor = None,
 
@@ -43,23 +45,23 @@ class AttentionOutput:
 
 @dataclass
 class TransformerOutput:
-    last_representation: torch.Tensor = None
-    attention_scores: List[torch.Tensor] = [],
-    attention_probs: List[torch.Tensor] = [],
-    representations: List[torch.Tensor] = [],
+    last_layer_output: torch.Tensor = None
+    attention_scores: List[torch.Tensor] = None
+    attention_probs: List[torch.Tensor] = None
+    representations: List[torch.Tensor] = None
     value_map: torch.Tensor = None
 
 
 @dataclass
 class TransformerLayerOutput:
     hidden_representation: torch.Tensor = None
-    attention_scores: torch.Tensor = None,
-    attention_probs: torch.Tensor = None,
+    attention_scores: torch.Tensor = None
+    attention_probs: torch.Tensor = None
     value_map: torch.Tensor = None
 
 @dataclass
 class CLIPOutput:
     visual_output: VisionTransformerOutput = None
-    text_output: TextTransformerOutput = None,
-    i2t_logits: torch.Tensor = None,
+    text_output: TextTransformerOutput = None
+    i2t_logits: torch.Tensor = None
     t2i_logits: torch.Tensor = None

@@ -202,13 +202,14 @@ class VisionTransformer(nn.Module):
         x = x + self.positional_embedding.to(x.dtype)
         embeddings = x
         x = self.ln_pre(x)
-        vision_output: VisionTransformerOutput = self.transformer(x, control_output)
-        x = self.ln_post(vision_output.last_representation[:, 0, :])
+        vision_output: TransformerOutput = self.transformer(x, control_output)
+        x = self.ln_post(vision_output.last_layer_output)
 
         if self.proj is not None:
             x = x @ self.proj
 
-        return VisionTransformerOutput(last_representation=x,
+        return VisionTransformerOutput(last_representation=x[:, 0, :],
+                                       last_layer_output=x,
                                        attention_scores=vision_output.attention_scores,
                                        attention_probs=vision_output.attention_probs,
                                        representations=vision_output.representations,
