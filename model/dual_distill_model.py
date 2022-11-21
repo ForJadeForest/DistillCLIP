@@ -18,13 +18,13 @@ from .component.output import CLIPOutput
 
 class DualDistillModel(pl.LightningModule):
     def __init__(self, image_student: nn.Module, text_student: nn.Module, teacher_need_layers: List, teacher_name: str,
-                 loss_control_para: Dict, warm_steps, total_steps, weight_decay,
-                 download_root: str, lr: float = 1e-3, map_type: Optional[str] = None, init_type: Optional[str] = None,
-                 norm=False, ):
+                 loss_control_para: Dict, warm_steps, total_steps, weight_decay, lr: float,
+                 download_root: str,  map_type: Optional[str] = None, init_type: Optional[str] = None,
+                 norm=False):
         super().__init__()
         self.save_hyperparameters(ignore=['image_student', 'text_student'])
 
-        # 定义模型
+        # define model
         self.student = CLIPModel(True, image_student, text_student, norm)
         self.teacher_name = teacher_name
         self.teacher = teacher_load(teacher_name, download_root, 'all', need_layers=teacher_need_layers)
@@ -33,7 +33,7 @@ class DualDistillModel(pl.LightningModule):
 
         self.loss_control = LossCalculator(**loss_control_para)
         self.need_return_para = self.loss_control.get_control_output()
-        # 定义指标
+        # define metric
         self.k_list = [i for i in [1, 2, 3, 4, 5, 10]]
         self.acc_metrics = torch.nn.ModuleList()
         for k in self.k_list:
