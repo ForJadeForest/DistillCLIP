@@ -467,12 +467,12 @@ class RepeatTextTransformer(nn.Module):
         self.num_classes = num_classes
         self.head = nn.Linear(self.embed_dim, num_classes) if num_classes > 0 else nn.Identity()
 
-    def forward_features(self, x, control_output: ControlOutput):
+    def forward_features(self, text, control_output: ControlOutput):
         value_map = None
         attention_scores = []
         representations = []
         attention_probs = []
-        x = self.patch_embed(x)
+        x = self.patch_embed(text)
 
         x = x + self.pos_embed
         embedding = x
@@ -490,7 +490,8 @@ class RepeatTextTransformer(nn.Module):
             value_map = repeat_block_out.value_map
         x = self.norm(x)
         x = self.head(x)
-        return TextTransformerOutput(last_representation=x[:, x.argmax(dim=-1), :],
+
+        return TextTransformerOutput(last_representation=x[torch.arange(x.shape[0]), text.argmax(dim=-1)],
                                      last_layer_output=x,
                                      attention_scores=attention_scores,
                                      attention_probs=attention_probs,

@@ -7,10 +7,10 @@ import torch
 @dataclass
 class ControlOutput:
     need_emb: bool = False
-    need_attn_score: bool = False,
-    need_value_map: bool = False,
-    need_attn_prob: bool = False,
-    need_rep: bool = False,
+    need_attn_score: bool = False
+    need_value_map: bool = False
+    need_attn_prob: bool = False
+    need_rep: bool = False
 
 
 @dataclass

@@ -102,9 +102,9 @@ class LossCalculator(nn.Module):
 
         for loss_name in self.loss_name:
             loss = self.loss[loss_name]
-            if loss_name == 'label':
+            if loss_name == 'hard_label':
                 label = torch.arange(stu_out.i2t_logits.shape[0], device=stu_out.i2t_logits.device)
-                cal_res[loss_name] = 0.5 * (loss(stu_out.i2t_logits, label), loss(stu_out.t2i_logits, label))
+                cal_res[loss_name] = 0.5 * (loss(stu_out.i2t_logits) + loss(stu_out.t2i_logits))
             elif loss_name == 'soft_label':
                 assert self.temperature
                 logits_kl_loss = loss(
@@ -114,7 +114,7 @@ class LossCalculator(nn.Module):
                 cal_res[loss_name] = logits_kl_loss
         loss = 0.5 * (image_loss + text_loss)
         for (loss_name, scale) in self.loss_scale.items():
-            if loss_name == 'label' or loss_name == 'soft_label':
+            if loss_name == 'hard_label' or loss_name == 'soft_label':
                 cal_res[loss_name] = cal_res[loss_name] * scale
                 loss += cal_res[loss_name] * self.percent[loss_name]
         return loss, cal_res
@@ -161,7 +161,7 @@ class LossCalculator(nn.Module):
                 cal_res[loss_name] = loss(pred_s, pred_t)
         loss = 0
         for (loss_name, scale) in self.loss_scale.items():
-            if loss_name == 'label' or loss_name == 'soft_label':
+            if loss_name == 'hard_label' or loss_name == 'soft_label':
                 continue
             cal_res[loss_name] = cal_res[loss_name] * scale
             loss += cal_res[loss_name] * self.percent[loss_name]

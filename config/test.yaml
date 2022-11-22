@@ -1,31 +1,31 @@
 model:
   class_path: DualDistillModel
   init_args:
-        image_student:
-          class_path: model.component.weight_share_model.RepeatVisionTransformer
-          init_args:
-            img_size: 224
-            patch_size: 32
-            in_chans: 3
-            out_dim: 512
-            embed_dim: 768
-            depth: 4
-            num_heads: 24
-            mlp_ratio: 4.0
-            qkv_bias: True
-            repeated_times: 2
-            use_transform: True
-        text_student:
-          class_path: model.component.weight_share_model.RepeatTextTransformer
-          init_args:
-            out_dim: 512
-            embed_dim: 512
-            depth: 4
-            num_heads: 16
-            mlp_ratio: 4.0
-            qkv_bias: True
-            repeated_times: 2
-            use_transform: True
+    image_student:
+      class_path: model.component.weight_share_model.RepeatVisionTransformer
+      init_args:
+        img_size: 224
+        patch_size: 32
+        in_chans: 3
+        out_dim: 512
+        embed_dim: 768
+        depth: 4
+        num_heads: 24
+        mlp_ratio: 4.0
+        qkv_bias: True
+        repeated_times: 2
+        use_transform: True
+    text_student:
+      class_path: model.component.weight_share_model.RepeatTextTransformer
+      init_args:
+        out_dim: 512
+        embed_dim: 512
+        depth: 4
+        num_heads: 16
+        mlp_ratio: 4.0
+        qkv_bias: True
+        repeated_times: 2
+        use_transform: True
 #    image_student:
 #      class_path: model.component.image_encoder.ImageEncoder
 #      init_args:
@@ -55,7 +55,7 @@ model:
 
     norm: False
     loss_control_para:
-      loss_name: [ 'out_l1', 'out_cos', 'label']
+      loss_name: [ 'out_l1', 'out_cos', 'hard_label']
       temperature: 1
       vit_kd_para:
         student_dims: 768
@@ -77,20 +77,22 @@ data:
     dataset: 'ms_coco'
     dataset_name: 'COCODataset'
     dataset_para:
-      root_path: '/data/mscoco'
-      annotation_path: '/mnt/d/data/mscoco/annotations'
-    train_batch_size: 10
-    val_batch_size: 100
-    num_workers: 0
+      root_path: '/home/pyz/data_tmp/mscoco'
+      annotation_path: '/home/pyz/data_tmp/mscoco/annotations'
+    train_batch_size: 768
+    val_batch_size: 1250
+    num_workers: 12
 
 
 trainer:
   auto_select_gpus: True
+  strategy: 'ddp_find_unused_parameters_false'
+  default_root_dir: '/data/pyz/result/dis_clip'
   accumulate_grad_batches: 1
   accelerator: 'gpu'
-  devices: [ 0 ]
-  max_epochs: 2
-  limit_train_batches: 2
+  devices: [ 0, 1, 2, 3 ]
+  max_epochs: 300
+#  limit_train_batches: 2
   log_every_n_steps: 50
   enable_progress_bar: True
   check_val_every_n_epoch: 1
@@ -98,12 +100,13 @@ trainer:
   logger:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
-      save_dir: '/mnt/d/data/result/Dis_CLIP'
+      dir: '/data/pyz/result/dis_clip'
       name: 'baseline-weight share'
       project: 'CLIPDistillation'
       log_model: false
       group: weight_share
-      version: 'baseline-weight share'
+#      version: 'baseline-weight share'
+      # delete 文件夹id or version还是不能复用
       tags: [ 'baseline', 'weight share' ]
 
   callbacks:

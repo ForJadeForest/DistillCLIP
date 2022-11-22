@@ -75,7 +75,7 @@ class TextEncoder(nn.Module):
                                                                torch.zeros_like(attn_score),
                                                                attn_score) for attn_score in
                                                    transformer_output.attention_scores]
-        return TextTransformerOutput(last_representation=last_layer_output[:, text.argmax(dim=-1)],
+        return TextTransformerOutput(last_representation=last_layer_output[torch.arange(x.shape[0]), text.argmax(dim=-1)],
                                      last_layer_output=last_layer_output,
                                      attention_scores=transformer_output.attention_scores,
                                      attention_probs=transformer_output.attention_probs,
