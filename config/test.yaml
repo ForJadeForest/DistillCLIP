@@ -69,7 +69,7 @@ model:
     warm_steps: 15
     total_steps: 300
     weight_decay: 1.0e-2
-    lr: 1.0e-2
+    lr: 1.0e-3
 
 data:
   class_path: MainDataModule
@@ -102,13 +102,13 @@ trainer:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
       dir: '/data/pyz/result/dis_clip'
-      name: 'weight share-no_label-1e-2lr-grad_clip'
+      name: 'weight share-test'
       project: 'CLIPDistillation'
       log_model: false
       group: weight_share
 #      version: 'baseline-weight share'
       # delete 文件夹id or version还是不能复用
-      tags: [ 'baseline', 'weight share', 'lr-change']
+      tags: [ 'baseline', 'weight share', 'test']
 
   callbacks:
     - class_path: LearningRateMonitor

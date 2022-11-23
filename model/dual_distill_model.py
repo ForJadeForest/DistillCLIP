@@ -124,6 +124,9 @@ class DualDistillModel(pl.LightningModule):
         mean_score = torch.diagonal(stu_logits).mean()
         self.log('softmax_mean_score', softmax_mean_score, batch_size=stu_logits.shape[0], sync_dist=True)
         self.log('mean_score', mean_score, batch_size=stu_logits.shape[0], sync_dist=True)
+        self.logger.log_image(key="stu_mean_score", images=[mean_score])
+        self.logger.log_image(key="stu_softmax_mean_score", images=[softmax_mean_score])
+
         # log metric
         self.log('hp_metric', self.acc_metrics[0], metric_attribute='acc_metrics', batch_size=stu_logits.shape[0],
                  sync_dist=True)
@@ -141,6 +144,9 @@ class DualDistillModel(pl.LightningModule):
                 self.log('tea_softmax_mean_score', tea_softmax_mean_score, batch_size=stu_logits.shape[0],
                          sync_dist=True)
                 self.log('tea_mean_score', tea_mean_score, batch_size=stu_logits.shape[0], sync_dist=True)
+
+                self.logger.log_image(key="tea_mean_score", images=[tea_mean_score])
+                self.logger.log_image(key="tea_softmax_mean_score", images=[tea_softmax_mean_score])
 
     def log_info(self, stage, loss, cal_res, batch_size):
 
