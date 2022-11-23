@@ -346,7 +346,7 @@ class RepeatVisionTransformer(nn.Module):
 
         for blk in self.blocks:
             repeat_block_out: TransformerOutput = blk(x, control_output)
-            x = repeat_block_out.last_representation
+            x = repeat_block_out.last_layer_output
             for i in repeat_block_out.representations:
                 representations.append(i)
             for i in repeat_block_out.attention_scores:
@@ -355,7 +355,10 @@ class RepeatVisionTransformer(nn.Module):
                 attention_probs.append(i)
             value_map = repeat_block_out.value_map
         x = self.norm(x)
+        x = self.head(x)
+
         return VisionTransformerOutput(last_representation=x[:, 0],
+                                       last_layer_output=x,
                                        attention_scores=attention_scores,
                                        attention_probs=attention_probs,
                                        representations=representations,
@@ -364,8 +367,6 @@ class RepeatVisionTransformer(nn.Module):
 
     def forward(self, x, control_output: ControlOutput):
         vit_output: VisionTransformerOutput = self.forward_features(x, control_output)
-        x = vit_output.last_representation
-        vit_output.last_representation = self.head(x)
         return vit_output
 
     def hyper_para(self):
@@ -466,13 +467,12 @@ class RepeatTextTransformer(nn.Module):
         self.num_classes = num_classes
         self.head = nn.Linear(self.embed_dim, num_classes) if num_classes > 0 else nn.Identity()
 
-    def forward_features(self, x, control_output: ControlOutput):
+    def forward_features(self, text, control_output: ControlOutput):
         value_map = None
         attention_scores = []
         representations = []
         attention_probs = []
-        B = x.shape[0]
-        x = self.patch_embed(x)
+        x = self.patch_embed(text)
 
         x = x + self.pos_embed
         embedding = x
@@ -480,7 +480,7 @@ class RepeatTextTransformer(nn.Module):
 
         for blk in self.blocks:
             repeat_block_out: TransformerOutput = blk(x, control_output)
-            x = repeat_block_out.last_representation
+            x = repeat_block_out.last_layer_output
             for i in repeat_block_out.representations:
                 representations.append(i)
             for i in repeat_block_out.attention_scores:
@@ -489,7 +489,10 @@ class RepeatTextTransformer(nn.Module):
                 attention_probs.append(i)
             value_map = repeat_block_out.value_map
         x = self.norm(x)
-        return TextTransformerOutput(last_representation=x[:, 0],
+        x = self.head(x)
+
+        return TextTransformerOutput(last_representation=x[torch.arange(x.shape[0]), text.argmax(dim=-1)],
+                                     last_layer_output=x,
                                      attention_scores=attention_scores,
                                      attention_probs=attention_probs,
                                      representations=representations,
@@ -498,8 +501,6 @@ class RepeatTextTransformer(nn.Module):
 
     def forward(self, x, control_output: ControlOutput):
         text_output: TextTransformerOutput = self.forward_features(x, control_output)
-        x = text_output.last_representation
-        text_output.last_representation = self.head(x)
         return text_output
 
     def hyper_para(self):

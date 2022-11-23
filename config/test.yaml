@@ -1,61 +1,61 @@
 model:
   class_path: DualDistillModel
   init_args:
-    #    image_student:
-    #      class_path: model.component.weight_share_model.RepeatVisionTransformer
-    #      init_args:
-    #        img_size: 224
-    #        patch_size: 32
-    #        in_chans: 3
-    #        out_dim: 512
-    #        embed_dim: 768
-    #        depth: 4
-    #        num_heads: 12
-    #        mlp_ratio: 4.0
-    #        qkv_bias: True
-    #        repeated_times: 2
-    #        use_transform: True
-    #    text_student:
-    #      class_path: model.component.weight_share_model.RepeatTextTransformer
-    #      init_args:
-    #        out_dim: 512
-    #        embed_dim: 512
-    #        depth: 4
-    #        num_heads: 8
-    #        mlp_ratio: 4.0
-    #        qkv_bias: True
-    #        repeated_times: 2
-    #        use_transform: True
     image_student:
-      class_path: model.component.image_encoder.ImageEncoder
+      class_path: model.component.weight_share_model.RepeatVisionTransformer
       init_args:
-        is_student: True
-        tea_transformer_width: 768
-        vit_paras:
-          input_resolution: 224
-          patch_size: 32
-          width: 768
-          layers: 4
-          heads: 12
-          output_dim: 512
-          drop_out: 0
-          need_layers: null
+        img_size: 224
+        patch_size: 32
+        in_chans: 3
+        out_dim: 512
+        embed_dim: 768
+        depth: 4
+        num_heads: 24
+        mlp_ratio: 4.0
+        qkv_bias: True
+        repeated_times: 2
+        use_transform: True
     text_student:
-      class_path: model.component.text_encoder.TextEncoder
+      class_path: model.component.weight_share_model.RepeatTextTransformer
       init_args:
-        transformer_width: 512
-        transformer_layers: 4
-        transformer_heads: 8
-        context_length: 77
-        vocab_size: 49408
+        out_dim: 512
         embed_dim: 512
-        tea_transformer_width: 512
-        is_student: True
+        depth: 4
+        num_heads: 16
+        mlp_ratio: 4.0
+        qkv_bias: True
+        repeated_times: 2
+        use_transform: True
+#    image_student:
+#      class_path: model.component.image_encoder.ImageEncoder
+#      init_args:
+#        is_student: True
+#        tea_transformer_width: 768
+#        vit_paras:
+#          input_resolution: 224
+#          patch_size: 32
+#          width: 768
+#          layers: 4
+#          heads: 12
+#          output_dim: 512
+#          drop_out: 0
+#          need_layers: null
+#    text_student:
+#      class_path: model.component.text_encoder.TextEncoder
+#      init_args:
+#        transformer_width: 512
+#        transformer_layers: 4
+#        transformer_heads: 8
+#        context_length: 77
+#        vocab_size: 49408
+#        embed_dim: 512
+#        tea_transformer_width: 512
+#        is_student: True
 
 
     norm: False
     loss_control_para:
-      loss_name: [ 'out_l1', 'out_cos' ]
+      loss_name: [ 'out_l1', 'out_cos']
       temperature: 1
       vit_kd_para:
         student_dims: 768
@@ -64,12 +64,12 @@ model:
         high_layers_num: 1
       normalize: False
     teacher_name: ViT-B/32
-    download_root: '/mnt/d/data/pyz/cache'
+    download_root: '/data/pyz/cache'
     teacher_need_layers: [ 0, 1, 10, 11 ]
     warm_steps: 15
     total_steps: 300
     weight_decay: 1.0e-2
-    lr: 5.0e-3
+    lr: 1.0e-2
 
 data:
   class_path: MainDataModule
@@ -77,20 +77,23 @@ data:
     dataset: 'ms_coco'
     dataset_name: 'COCODataset'
     dataset_para:
-      root_path: '/mnt/d/data/mscoco'
-      annotation_path: '/mnt/d/data/mscoco/annotations'
-    train_batch_size: 10
-    val_batch_size: 100
-    num_workers: 0
+      root_path: '/home/pyz/data_tmp/mscoco'
+      annotation_path: '/home/pyz/data_tmp/mscoco/annotations'
+    train_batch_size: 768
+    val_batch_size: 1250
+    num_workers: 12
 
 
 trainer:
   auto_select_gpus: True
+  strategy: 'ddp_find_unused_parameters_false'
+  default_root_dir: '/data/pyz/result/dis_clip'
   accumulate_grad_batches: 1
   accelerator: 'gpu'
-  devices: [ 0 ]
-  max_epochs: 2
-  limit_train_batches: 2
+  devices: [ 0, 1, 2, 3 ]
+  gradient_clip_val: 10
+  max_epochs: 300
+#  limit_train_batches: 2
   log_every_n_steps: 50
   enable_progress_bar: True
   check_val_every_n_epoch: 1
@@ -98,16 +101,21 @@ trainer:
   logger:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
-      save_dir: '/mnt/d/data/result/Dis_CLIP'
-      name: 'baseline-weight share'
+      dir: '/data/pyz/result/dis_clip'
+      name: 'weight share-no_label-1e-2lr-grad_clip'
       project: 'CLIPDistillation'
       log_model: false
       group: weight_share
-      version: 'baseline-weight share'
-      tags: [ 'baseline', 'weight share' ]
+#      version: 'baseline-weight share'
+      # delete 文件夹id or version还是不能复用
+      tags: [ 'baseline', 'weight share', 'lr-change']
 
   callbacks:
     - class_path: LearningRateMonitor
+    - class_path: EarlyStopping
+      init_args:
+        monitor: 'val/loss'
+        patience: 15
 
     - class_path: ModelSummary
       init_args:

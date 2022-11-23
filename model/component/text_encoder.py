@@ -58,10 +58,11 @@ class TextEncoder(nn.Module):
         x = embedding + self.positional_embedding
         embedding_res = x
         transformer_output: TransformerOutput = self.transformer(x, control_output)
-        x = self.ln_final(transformer_output.last_representation)
+        x = self.ln_final(transformer_output.last_layer_output)
         # x.shape = [batch_size, n_ctx, transformer.width]
         # take features from the eot embedding (eot_token is the highest number in each sequence)
-        x = x[torch.arange(x.shape[0]), text.argmax(dim=-1)] @ self.text_projection
+        last_layer_output = x @ self.text_projection
+        # x = x[torch.arange(x.shape[0]), text.argmax(dim=-1)] @ self.text_projection
 
         if self.is_student and not self.no_trans:
             if control_output.need_rep:
@@ -74,7 +75,8 @@ class TextEncoder(nn.Module):
                                                                torch.zeros_like(attn_score),
                                                                attn_score) for attn_score in
                                                    transformer_output.attention_scores]
-        return TextTransformerOutput(last_representation=x,
+        return TextTransformerOutput(last_representation=last_layer_output[torch.arange(x.shape[0]), text.argmax(dim=-1)],
+                                     last_layer_output=last_layer_output,
                                      attention_scores=transformer_output.attention_scores,
                                      attention_probs=transformer_output.attention_probs,
                                      representations=transformer_output.representations,
