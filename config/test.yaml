@@ -109,7 +109,7 @@ trainer:
       group: weight_share
 #      version: 'baseline-weight share'
       # delete 文件夹id or version还是不能复用
-      tags: [ 'baseline', 'weight share']
+      tags: [ 'baseline', 'weight share', 'test' ]
 
   callbacks:
     - class_path: LearningRateMonitor

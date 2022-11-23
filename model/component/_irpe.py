@@ -9,10 +9,6 @@ try:
     from rpe_ops.rpe_index import RPEIndexFunction
 except ImportError:
     RPEIndexFunction = None
-    import warnings
-    RED_STR = "\033[91m{}\033[00m"
-    warnings.warn(RED_STR.format("[WARNING] The module `rpe_ops` is not built. \
-For better training performance, please build `rpe_ops`."),)
 
 
 @torch.no_grad()
