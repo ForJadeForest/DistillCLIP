@@ -7,7 +7,6 @@ import transformers
 import wandb
 from pytorch_lightning.loggers import WandbLogger, TensorBoardLogger
 from torch import optim, nn
-from torchmetrics import Accuracy
 from torchmetrics.functional import accuracy
 
 from ._loss import LossCalculator
@@ -50,10 +49,10 @@ class DualDistillModel(pl.LightningModule):
         dummy_input = (
             torch.randint(high=49407, size=(1, 77), device=self.device),
             torch.rand(size=(1, 3, 224, 224), device=self.device))
-        self.speed_test(self.student, dummy_input, pre_fix='stu')
-        self.speed_test(self.teacher, dummy_input, pre_fix='tea')
+        self.speed_test(self.student, dummy_input, prefix='stu')
+        self.speed_test(self.teacher, dummy_input, prefix='tea')
 
-    def speed_test(self, model, dummy_input, prefix='stu'):
+    def speed_test(self, model, dummy_input, prefix):
         flops, param = cal_flop(model, dummy_input)
         mean_syn, std_syn, mean_fps = cal_speed(model, dummy_input)
         metric_dict = {
@@ -154,10 +153,9 @@ class DualDistillModel(pl.LightningModule):
 
         self.log(f'{prefix}_softmax_mean_score', softmax_mean_score, batch_size=logits.shape[0], sync_dist=True)
         self.log(f'{prefix}_mean_score', mean_score, batch_size=logits.shape[0], sync_dist=True)
-        self.logger.log_image(key="stu_logtis_map",
+        self.logger.log_image(key="stu_logits_map",
                               images=[plt.imshow(logits.cpu()), plt.imshow(softmax_logits.cpu())],
-                              caption=["stu_logtis_map", "stu_softmax_logtis_map"])
-
+                              caption=["stu_logits_map", "stu_softmax_logits_map"])
 
     def log_acc(self, logits, prefix):
         label = torch.arange(logits.shape[0], device=self.device)
