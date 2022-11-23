@@ -55,7 +55,7 @@ model:
 
     norm: False
     loss_control_para:
-      loss_name: [ 'out_l1', 'out_cos', 'hard_label']
+      loss_name: [ 'out_l1', 'out_cos']
       temperature: 1
       vit_kd_para:
         student_dims: 768
@@ -69,7 +69,7 @@ model:
     warm_steps: 15
     total_steps: 300
     weight_decay: 1.0e-2
-    lr: 5.0e-3
+    lr: 1.0e-2
 
 data:
   class_path: MainDataModule
@@ -91,6 +91,7 @@ trainer:
   accumulate_grad_batches: 1
   accelerator: 'gpu'
   devices: [ 0, 1, 2, 3 ]
+  gradient_clip_val: 10
   max_epochs: 300
 #  limit_train_batches: 2
   log_every_n_steps: 50
@@ -101,16 +102,20 @@ trainer:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
       dir: '/data/pyz/result/dis_clip'
-      name: 'baseline-weight share'
+      name: 'weight share-no_label-1e-2lr-grad_clip'
       project: 'CLIPDistillation'
       log_model: false
       group: weight_share
 #      version: 'baseline-weight share'
       # delete 文件夹id or version还是不能复用
-      tags: [ 'baseline', 'weight share' ]
+      tags: [ 'baseline', 'weight share', 'lr-change']
 
   callbacks:
     - class_path: LearningRateMonitor
+    - class_path: EarlyStopping
+      init_args:
+        monitor: 'val/loss'
+        patience: 15
 
     - class_path: ModelSummary
       init_args:
