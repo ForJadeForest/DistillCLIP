@@ -1,7 +1,7 @@
 import os.path
 
 from torchvision import datasets, transforms
-
+from .rand_augment import RandAugment
 from .utils import IMAGE_MEAN, IMAGE_STD
 
 
@@ -13,7 +13,7 @@ class COCODataset(datasets.CocoCaptions):
         self.trans = transforms.Compose([
             transforms.Resize(224),
             transforms.CenterCrop(224),
-            transforms.RandAugment(num_ops=4),
+            RandAugment(num_ops=4),
             transforms.ToTensor(),
             transforms.Normalize(self.img_mean, self.img_std),
         ]) if train else transforms.Compose([
