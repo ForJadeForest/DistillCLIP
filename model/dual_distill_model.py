@@ -36,10 +36,6 @@ class DualDistillModel(pl.LightningModule):
         self.need_return_para = self.loss_control.get_control_output()
         # define metric
         self.k_list = [i for i in [1, 2, 3, 4, 5, 10]]
-        self.acc_metrics = []
-        for k in self.k_list:
-            self.acc_metrics.append(Accuracy(top_k=k))
-        self.acc_metrics = nn.ModuleList(self.acc_metrics)
 
     def on_train_start(self):
         if self.global_rank == 0:
@@ -54,18 +50,18 @@ class DualDistillModel(pl.LightningModule):
         dummy_input = (
             torch.randint(high=49407, size=(1, 77), device=self.device),
             torch.rand(size=(1, 3, 224, 224), device=self.device))
-        self.speed_test(self.student, dummy_input, pre_fix='stu_')
-        self.speed_test(self.teacher, dummy_input, pre_fix='tea_')
+        self.speed_test(self.student, dummy_input, pre_fix='stu')
+        self.speed_test(self.teacher, dummy_input, pre_fix='tea')
 
-    def speed_test(self, model, dummy_input, pre_fix='stu_'):
+    def speed_test(self, model, dummy_input, prefix='stu'):
         flops, param = cal_flop(model, dummy_input)
         mean_syn, std_syn, mean_fps = cal_speed(model, dummy_input)
         metric_dict = {
-            pre_fix + 'flops': flops,
-            pre_fix + 'param': param,
-            pre_fix + 'mean_times': mean_syn,
-            pre_fix + 'std_times': std_syn,
-            pre_fix + 'mean_fps': mean_fps
+            f'{prefix}_flops': flops,
+            f'{prefix}_param': param,
+            f'{prefix}_mean_times': mean_syn,
+            f'{prefix}_std_times': std_syn,
+            f'{prefix}_mean_fps': mean_fps
         }
         self.log_dict(metric_dict, sync_dist=True)
 
@@ -80,6 +76,14 @@ class DualDistillModel(pl.LightningModule):
         student_outs, teacher_outs = self.forward(inputs)
         loss, cal_res = self.loss_control(student_outs, teacher_outs, 'all')
         self.log_info('train', loss, cal_res, batch_size=len(inputs))
+        stu_logits, _ = norm_and_logits(student_outs.visual_output.last_representation,
+                                        student_outs.text_output.last_representation)
+        tea_logits, _ = norm_and_logits(teacher_outs.visual_output.last_representation,
+                                        teacher_outs.text_output.last_representation)
+        self.log_acc(stu_logits, prefix='train_stu')
+        if self.current_epoch % 30 == 0:
+            self.log_heatmap(stu_logits, prefix='train_stu')
+
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -117,37 +121,16 @@ class DualDistillModel(pl.LightningModule):
         stu_text_outs = torch.cat(stu_text_outs, dim=0).float()
         tea_image_outs = torch.cat(tea_image_outs, dim=0).float()
         tea_text_outs = torch.cat(tea_text_outs, dim=0).float()
-
         stu_logits, _ = norm_and_logits(stu_image_outs, stu_text_outs)
         tea_logits, _ = norm_and_logits(tea_image_outs, tea_text_outs)
-        label = torch.arange(stu_logits.shape[0], device=self.device)
-        tea_softmax_logits = nn.functional.softmax(tea_logits, dim=1)
-        stu_softmax_logits = nn.functional.softmax(stu_logits, dim=1)
 
-        softmax_mean_score = torch.diagonal(stu_softmax_logits).mean()
-        mean_score = torch.diagonal(stu_logits).mean()
-
-        self.log('softmax_mean_score', softmax_mean_score, batch_size=stu_logits.shape[0], sync_dist=True)
-        self.log('mean_score', mean_score, batch_size=stu_logits.shape[0], sync_dist=True)
-        self.logger.log_image(key="stu_logtis_map", images=[plt.imshow(stu_logits.cpu())])
-        self.logger.log_image(key="stu_softmax_logtis_map", images=[plt.imshow(stu_softmax_logits.cpu())])
         if self.current_epoch == 0:
-            tea_softmax_mean_score = torch.diagonal(tea_softmax_logits).mean()
-            tea_mean_score = torch.diagonal(tea_logits).mean()
-            self.log('tea_softmax_mean_score', tea_softmax_mean_score, batch_size=stu_logits.shape[0],
-                     sync_dist=True)
-            self.log('tea_mean_score', tea_mean_score, batch_size=stu_logits.shape[0], sync_dist=True)
-            self.logger.log_image(key="tea_logtis_map", images=[plt.imshow(tea_logits.cpu())])
-            self.logger.log_image(key="tea_softmax_logtis_map", images=[plt.imshow(tea_softmax_logits.cpu())])
+            self.log_heatmap(stu_logits, prefix='tea')
+            self.log_acc(tea_logits, prefix='tea')
 
-        for i, metric in enumerate(self.acc_metrics):
-            metric(stu_logits, label)
-            self.log('hp_metric/stu_acc_top{}'.format(self.k_list[i]), metric, metric_attribute='acc_metrics',
-                     batch_size=stu_logits.shape[0], sync_dist=True)
-            if self.current_epoch == 0:
-                acc_tea = accuracy(tea_logits, label, top_k=self.k_list[i])
-                self.log('hp_metric/tea_acc_top{}'.format(self.k_list[i]), acc_tea, batch_size=tea_logits.shape[0],
-                         sync_dist=True)
+        if self.current_epoch % 30 == 0:
+            self.log_heatmap(stu_logits, prefix='stu')
+        self.log_acc(stu_logits, prefix='stu')
 
     def log_info(self, stage, loss, cal_res, batch_size):
 
@@ -163,6 +146,24 @@ class DualDistillModel(pl.LightningModule):
             num_training_steps=self.hparams.total_steps
         )
         return [optimizer], [scheduler]
+
+    def log_heatmap(self, logits, prefix):
+        softmax_logits = nn.functional.softmax(logits, dim=1)
+        softmax_mean_score = torch.diagonal(softmax_logits).mean()
+        mean_score = torch.diagonal(logits).mean()
+
+        self.log(f'{prefix}_softmax_mean_score', softmax_mean_score, batch_size=logits.shape[0], sync_dist=True)
+        self.log(f'{prefix}_mean_score', mean_score, batch_size=logits.shape[0], sync_dist=True)
+        self.logger.log_image(key="stu_logtis_map",
+                              images=[plt.imshow(logits.cpu()), plt.imshow(softmax_logits.cpu())],
+                              caption=["stu_logtis_map", "stu_softmax_logtis_map"])
+
+
+    def log_acc(self, logits, prefix):
+        label = torch.arange(logits.shape[0], device=self.device)
+        for k in self.k_list:
+            acc_tea = accuracy(logits, label, top_k=k)
+            self.log(f'hp_metric/{prefix}_acc_top{k}', acc_tea, batch_size=logits.shape[0], sync_dist=True)
 
 
 def norm_and_logits(img_encode, text_encode):
