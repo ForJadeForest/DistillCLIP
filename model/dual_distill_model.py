@@ -151,7 +151,7 @@ class DualDistillModel(pl.LightningModule):
 
     def log_info(self, stage, loss, cal_res, batch_size):
 
-        self.log("{}/loss".format(stage), loss, batch_size=batch_size)
+        self.log("{}/loss".format(stage), loss, batch_size=batch_size, sync_dist=True)
         for loss_name, loss_res in cal_res.items():
             self.log("{}/{}".format(stage, loss_name), loss_res, batch_size=batch_size, sync_dist=True)
 
