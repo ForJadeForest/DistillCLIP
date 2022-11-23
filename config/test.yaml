@@ -85,6 +85,7 @@ data:
 
 
 trainer:
+  num_sanity_val_steps: 0
   auto_select_gpus: True
   strategy: 'ddp_find_unused_parameters_false'
   default_root_dir: '/data/pyz/result/dis_clip'
