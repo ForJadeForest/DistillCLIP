@@ -16,6 +16,8 @@
 - 或许两个一起蒸馏才能拥有好的效果？
 - 图像数据较少，蒸馏后对于一些没有出现在train dataset中的物体结果比较差
   - 由于图像和文本是对齐的，能否直接用文本的dataset去蒸馏图像的Encoder？ (input 无法确定)
+- 只使用mscoco数据蒸馏很难。如果加上hard label loss的话模型的bias会比较高。mean_score可以达到0.6，teacher只有0.3
+  - 为什么mean_score可以到0.6但是准确度不高呢？
 
 ### bug fix
 - [x] teacher model 没有使用 `.eval()`
@@ -95,8 +97,7 @@
   - [ ] 各个loss的权重
     - [x] 手动调节
   - [x] 指标的书写，测试结果
-  - [ ] 数据集的下载以及对应的dataset
-  - [ ] 模型蒸馏的速度评估
+  - [x] 模型蒸馏的速度评估
     - [参考指标与计算方法](https://zhuanlan.zhihu.com/p/376925457)
   - [ ] 计划在下载好 Conceptual Captions的Image的时候，可以考虑一起蒸馏。或者单纯增加图像的数量。大概达到6M的样子。
   - [x] 使用RandAugmentation进行增强。
@@ -104,6 +105,7 @@
     - FICLP model采用的方法需要的是匹配的文本图像对，需要重新选择数据集。同时对比学习的效果不一定好。（batch 太小，使用梯度积累？）
       - [多GPU DDP 计算对比学习的损失](https://github.com/Lightning-AI/lightning/discussions/14390)
   - [ ] Weight share model 暂时不支持选用特定的layers蒸馏，所选的是全部层
+  - [ ] 将logits图show出来
   
   
 
