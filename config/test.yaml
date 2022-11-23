@@ -69,7 +69,7 @@ model:
     warm_steps: 15
     total_steps: 300
     weight_decay: 1.0e-2
-    lr: 1.0e-3
+    lr: 5.0e-3
 
 data:
   class_path: MainDataModule
@@ -108,7 +108,7 @@ trainer:
       group: weight_share
 #      version: 'baseline-weight share'
       # delete 文件夹id or version还是不能复用
-      tags: [ 'baseline', 'weight share', 'test']
+      tags: [ 'baseline', 'weight share']
 
   callbacks:
     - class_path: LearningRateMonitor

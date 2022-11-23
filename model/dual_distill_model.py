@@ -1,5 +1,6 @@
 from typing import *
 
+import matplotlib.pyplot as plt
 import pytorch_lightning as pl
 import torch
 import transformers
@@ -19,7 +20,7 @@ from .component.output import CLIPOutput
 class DualDistillModel(pl.LightningModule):
     def __init__(self, image_student: nn.Module, text_student: nn.Module, teacher_need_layers: List, teacher_name: str,
                  loss_control_para: Dict, warm_steps, total_steps, weight_decay, lr: float,
-                 download_root: str,  map_type: Optional[str] = None, init_type: Optional[str] = None,
+                 download_root: str, map_type: Optional[str] = None, init_type: Optional[str] = None,
                  norm=False):
         super().__init__()
         self.save_hyperparameters(ignore=['image_student', 'text_student'])
@@ -35,9 +36,10 @@ class DualDistillModel(pl.LightningModule):
         self.need_return_para = self.loss_control.get_control_output()
         # define metric
         self.k_list = [i for i in [1, 2, 3, 4, 5, 10]]
-        self.acc_metrics = torch.nn.ModuleList()
+        self.acc_metrics = []
         for k in self.k_list:
             self.acc_metrics.append(Accuracy(top_k=k))
+        self.acc_metrics = nn.ModuleList(*self.acc_metrics)
 
     def on_train_start(self):
         if self.global_rank == 0:
@@ -119,17 +121,24 @@ class DualDistillModel(pl.LightningModule):
         stu_logits, _ = norm_and_logits(stu_image_outs, stu_text_outs)
         tea_logits, _ = norm_and_logits(tea_image_outs, tea_text_outs)
         label = torch.arange(stu_logits.shape[0], device=self.device)
+        tea_softmax_logits = nn.functional.softmax(tea_logits, dim=1)
+        stu_softmax_logits = nn.functional.softmax(stu_logits, dim=1)
 
-        softmax_mean_score = torch.diagonal(torch.nn.functional.softmax(stu_logits, dim=1)).mean()
+        softmax_mean_score = torch.diagonal(stu_softmax_logits).mean()
         mean_score = torch.diagonal(stu_logits).mean()
+
         self.log('softmax_mean_score', softmax_mean_score, batch_size=stu_logits.shape[0], sync_dist=True)
         self.log('mean_score', mean_score, batch_size=stu_logits.shape[0], sync_dist=True)
-        self.logger.log_image(key="stu_mean_score", images=[mean_score])
-        self.logger.log_image(key="stu_softmax_mean_score", images=[softmax_mean_score])
-
-        # log metric
-        self.log('hp_metric', self.acc_metrics[0], metric_attribute='acc_metrics', batch_size=stu_logits.shape[0],
-                 sync_dist=True)
+        self.logger.log_image(key="stu_mean_score", images=[plt.imshow(stu_logits.cpu())])
+        self.logger.log_image(key="stu_softmax_mean_score", images=[plt.imshow(stu_softmax_logits.cpu())])
+        if self.current_epoch == 0:
+            tea_softmax_mean_score = torch.diagonal(tea_softmax_logits).mean()
+            tea_mean_score = torch.diagonal(tea_logits).mean()
+            self.log('tea_softmax_mean_score', tea_softmax_mean_score, batch_size=stu_logits.shape[0],
+                     sync_dist=True)
+            self.log('tea_mean_score', tea_mean_score, batch_size=stu_logits.shape[0], sync_dist=True)
+            self.logger.log_image(key="tea_mean_score", images=[plt.imshow(tea_logits.cpu())])
+            self.logger.log_image(key="tea_softmax_mean_score", images=[plt.imshow(tea_softmax_logits.cpu())])
 
         for i, metric in enumerate(self.acc_metrics):
             metric(stu_logits, label)
@@ -139,14 +148,6 @@ class DualDistillModel(pl.LightningModule):
                 acc_tea = accuracy(tea_logits, label, top_k=self.k_list[i])
                 self.log('hp_metric/tea_acc_top{}'.format(self.k_list[i]), acc_tea, batch_size=tea_logits.shape[0],
                          sync_dist=True)
-                tea_softmax_mean_score = torch.diagonal(torch.nn.functional.softmax(tea_logits, dim=1)).mean()
-                tea_mean_score = torch.diagonal(tea_logits).mean()
-                self.log('tea_softmax_mean_score', tea_softmax_mean_score, batch_size=stu_logits.shape[0],
-                         sync_dist=True)
-                self.log('tea_mean_score', tea_mean_score, batch_size=stu_logits.shape[0], sync_dist=True)
-
-                self.logger.log_image(key="tea_mean_score", images=[tea_mean_score])
-                self.logger.log_image(key="tea_softmax_mean_score", images=[tea_softmax_mean_score])
 
     def log_info(self, stage, loss, cal_res, batch_size):
 
