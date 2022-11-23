@@ -39,7 +39,7 @@ class DualDistillModel(pl.LightningModule):
         self.acc_metrics = []
         for k in self.k_list:
             self.acc_metrics.append(Accuracy(top_k=k))
-        self.acc_metrics = nn.ModuleList(*self.acc_metrics)
+        self.acc_metrics = nn.ModuleList(self.acc_metrics)
 
     def on_train_start(self):
         if self.global_rank == 0:
@@ -129,16 +129,16 @@ class DualDistillModel(pl.LightningModule):
 
         self.log('softmax_mean_score', softmax_mean_score, batch_size=stu_logits.shape[0], sync_dist=True)
         self.log('mean_score', mean_score, batch_size=stu_logits.shape[0], sync_dist=True)
-        self.logger.log_image(key="stu_mean_score", images=[plt.imshow(stu_logits.cpu())])
-        self.logger.log_image(key="stu_softmax_mean_score", images=[plt.imshow(stu_softmax_logits.cpu())])
+        self.logger.log_image(key="stu_logtis_map", images=[plt.imshow(stu_logits.cpu())])
+        self.logger.log_image(key="stu_softmax_logtis_map", images=[plt.imshow(stu_softmax_logits.cpu())])
         if self.current_epoch == 0:
             tea_softmax_mean_score = torch.diagonal(tea_softmax_logits).mean()
             tea_mean_score = torch.diagonal(tea_logits).mean()
             self.log('tea_softmax_mean_score', tea_softmax_mean_score, batch_size=stu_logits.shape[0],
                      sync_dist=True)
             self.log('tea_mean_score', tea_mean_score, batch_size=stu_logits.shape[0], sync_dist=True)
-            self.logger.log_image(key="tea_mean_score", images=[plt.imshow(tea_logits.cpu())])
-            self.logger.log_image(key="tea_softmax_mean_score", images=[plt.imshow(tea_softmax_logits.cpu())])
+            self.logger.log_image(key="tea_logtis_map", images=[plt.imshow(tea_logits.cpu())])
+            self.logger.log_image(key="tea_softmax_logtis_map", images=[plt.imshow(tea_softmax_logits.cpu())])
 
         for i, metric in enumerate(self.acc_metrics):
             metric(stu_logits, label)
