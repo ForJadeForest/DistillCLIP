@@ -68,7 +68,7 @@ class DualDistillModel(pl.LightningModule):
             f'{prefix}_std_times': std_syn,
             f'{prefix}_mean_fps': mean_fps
         }
-        self.log_dict(metric_dict, rank_zero_only=True)
+        self.log_dict(metric_dict, rank_zero_only=True, sync_dist=False)
 
     def forward(self, inputs) -> Tuple[CLIPOutput, CLIPOutput]:
         image, text = inputs
@@ -90,7 +90,7 @@ class DualDistillModel(pl.LightningModule):
         self.log_acc(tea_logits, stage='train', prefix='tea')
 
         if self.global_step % 2000 == 0:
-            self.log_heatmap(stu_logits, stage='train', prefix='train_stu')
+            self.log_heatmap(stu_logits, stage='train', prefix='stu')
 
         return loss
 
@@ -106,7 +106,7 @@ class DualDistillModel(pl.LightningModule):
         self.log_acc(stu_logits, 'val_step', prefix='stu')
         self.log_acc(tea_logits, stage='val_step', prefix='tea')
         if self.global_step % 2000 == 0:
-            self.log_heatmap(stu_logits, stage='val_step', prefix='train_stu')
+            self.log_heatmap(stu_logits, stage='val_step', prefix='stu')
         return {
             'stu_image_outs': self.all_gather(student_outs.visual_output.last_representation),
             'stu_text_outs': self.all_gather(student_outs.text_output.last_representation),
