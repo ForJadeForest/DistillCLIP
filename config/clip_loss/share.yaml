@@ -10,7 +10,7 @@ model:
         out_dim: 512
         embed_dim: 768
         depth: 4
-        num_heads: 24
+        num_heads: 12
         mlp_ratio: 4.0
         qkv_bias: True
         repeated_times: 2
@@ -21,37 +21,11 @@ model:
         out_dim: 512
         embed_dim: 512
         depth: 4
-        num_heads: 16
+        num_heads: 8
         mlp_ratio: 4.0
         qkv_bias: True
         repeated_times: 2
         use_transform: True
-#    image_student:
-#      class_path: model.component.image_encoder.ImageEncoder
-#      init_args:
-#        is_student: True
-#        tea_transformer_width: 768
-#        vit_paras:
-#          input_resolution: 224
-#          patch_size: 32
-#          width: 768
-#          layers: 4
-#          heads: 12
-#          output_dim: 512
-#          drop_out: 0
-#          need_layers: null
-#    text_student:
-#      class_path: model.component.text_encoder.TextEncoder
-#      init_args:
-#        transformer_width: 512
-#        transformer_layers: 4
-#        transformer_heads: 8
-#        context_length: 77
-#        vocab_size: 49408
-#        embed_dim: 512
-#        tea_transformer_width: 512
-#        is_student: True
-
 
     norm: False
     loss_control_para:
@@ -83,8 +57,6 @@ data:
     dataset_para:
       root_path: '/home/pyz/data_tmp/mscoco'
       annotation_path: '/home/pyz/data_tmp/mscoco/annotations'
-    #      root_path: '/data/pyz/data/mscoco'
-    #      annotation_path: '/data/pyz/data/mscoco/annotations'
     train_batch_size: 768
     val_batch_size: 1250
     num_workers: 12
@@ -98,9 +70,8 @@ trainer:
   accumulate_grad_batches: 1
   accelerator: 'gpu'
   devices: [ 0, 1, 2, 3 ]
-#  gradient_clip_val: 10
-  max_epochs: 2
-#  limit_train_batches: 2
+  #  gradient_clip_val: 10
+  max_epochs: 300
   log_every_n_steps: 30
   enable_progress_bar: True
   check_val_every_n_epoch: 1
@@ -109,13 +80,11 @@ trainer:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
       dir: '/data/pyz/result/dis_clip'
-      name: 'weight share test'
+      name: 'ws-baseline'
       project: 'CLIPDistillation'
       log_model: false
       group: weight_share
-      #      version: 'baseline-weight share'
-      # delete 文件夹id or version还是不能复用
-      tags: [ 'baseline', 'weight share', 'loss change' ]
+      tags: [ 'weight share', 'loss change' ]
 
 
   callbacks:

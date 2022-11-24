@@ -18,6 +18,7 @@
   - 由于图像和文本是对齐的，能否直接用文本的dataset去蒸馏图像的Encoder？ (input 无法确定)
 - 只使用mscoco数据蒸馏很难。如果加上hard label loss的话模型的bias会比较高。mean_score可以达到0.6，teacher只有0.3
   - 为什么mean_score可以到0.6但是准确度不高呢？
+- 数据增强如果改变了颜色，会导致不太准确。
 
 ### bug fix
 - [x] teacher model 没有使用 `.eval()`

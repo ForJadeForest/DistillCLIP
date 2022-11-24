@@ -5,7 +5,7 @@ import torch
 from torch import nn
 from torch.nn import functional as f
 
-from .component.output import ControlOutput
+from .component.output import ControlOutput, CLIPOutput
 
 LOSSNAME = ['out_l1', 'out_ce', 'out_kl', 'out_cos', 'embedding_mse', 'attention_score_mse',
             'attention_probs_mse', 'hidden_rep_mse', 'attention_probs_kl', 'last_value_map_kl',
@@ -67,6 +67,8 @@ class LossCalculator(nn.Module):
                 loss_function = SoftLabel()
             elif n == 'vit_kd':
                 loss_function = ViTKDLoss(**self.vit_kd_para)
+            elif n == 'logits_mse':
+                loss_function = LogitsMSE()
             else:
                 raise ValueError("Invalid Loss Type!")
             losses[n] = loss_function
@@ -90,7 +92,7 @@ class LossCalculator(nn.Module):
 
         return need_para
 
-    def cal_tow_tower_loss(self, stu_out, tea_out):
+    def cal_tow_tower_loss(self, stu_out: CLIPOutput, tea_out: CLIPOutput):
         cal_res = {}
         image_loss, image_loss_dict = self.cal_one_tower_loss(stu_out.visual_output, tea_out.visual_output)
         text_loss, text_loss_dict = self.cal_one_tower_loss(stu_out.text_output, tea_out.text_output)
@@ -110,6 +112,9 @@ class LossCalculator(nn.Module):
                     0.5 * (loss(stu_out.i2t_logits, tea_out.i2t_logits)
                            + loss(stu_out.t2i_logits, tea_out.i2t_lt2i_logits)) * self.temperature ** 2
                 cal_res[loss_name] = logits_kl_loss
+            elif loss_name == 'logits_mse':
+                cal_res[loss_name] = \
+                    0.5 * (loss(stu_out.i2t_logits, tea_out.i2t_logits) + loss(stu_out.t2i_logits, tea_out.t2i_logits))
         loss = 0.5 * (image_loss + text_loss)
         for (loss_name, scale) in self.loss_scale.items():
             if loss_name == 'hard_label' or loss_name == 'soft_label':
@@ -159,7 +164,7 @@ class LossCalculator(nn.Module):
                 cal_res[loss_name] = loss(pred_s, pred_t)
         loss = 0
         for (loss_name, scale) in self.loss_scale.items():
-            if loss_name == 'hard_label' or loss_name == 'soft_label':
+            if loss_name == 'hard_label' or loss_name == 'soft_label' or loss_name == 'logits_mse':
                 continue
             cal_res[loss_name] = cal_res[loss_name] * scale
             loss += cal_res[loss_name] * self.percent[loss_name]
@@ -188,6 +193,7 @@ class TotalLoss:
     hard_label = nn.CrossEntropyLoss(reduction='mean')
     soft_label = nn.KLDivLoss(reduction='batchmean')
     vit_kd = None
+    logits_mse = nn.MSELoss()
 
 
 class OutL1Loss(nn.Module):
@@ -329,6 +335,15 @@ class LastValueMapKL(nn.Module):
             f.softmax(stu_value_map, dim=1).log(),
             f.softmax(tea_value_map, dim=1)
         )
+
+
+class LogitsMSE(nn.Module):
+    def __init__(self):
+        super(LogitsMSE, self).__init__()
+        self.loss = TotalLoss.logits_mse
+
+    def forward(self, stu_logits, tea_logits):
+        return self.loss(stu_logits, tea_logits)
 
 
 class HardLabel(nn.Module):
