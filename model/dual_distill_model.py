@@ -84,9 +84,12 @@ class DualDistillModel(pl.LightningModule):
 
         stu_logits, _ = norm_and_logits(student_outs.visual_output.last_representation,
                                         student_outs.text_output.last_representation)
-
+        tea_logits, _ = norm_and_logits(teacher_outs.visual_output.last_representation,
+                                        teacher_outs.text_output.last_representation)
         self.log_acc(stu_logits, stage='train', prefix='stu')
-        if self.current_epoch % 50 == 0:
+        self.log_acc(tea_logits, stage='train', prefix='tea')
+
+        if self.global_step % 2000 == 0:
             self.log_heatmap(stu_logits, stage='train', prefix='train_stu')
 
         return loss
@@ -142,9 +145,9 @@ class DualDistillModel(pl.LightningModule):
 
     def log_info(self, stage, loss, cal_res, batch_size):
 
-        self.log("{}/loss".format(stage), loss, batch_size=batch_size, sync_dist=True)
+        self.log(f"{stage}/loss", loss, batch_size=batch_size, sync_dist=True)
         for loss_name, loss_res in cal_res.items():
-            self.log("{}/{}".format(stage, loss_name), loss_res, batch_size=batch_size, sync_dist=True)
+            self.log(f"{stage}/{loss_name}", loss_res, batch_size=batch_size, sync_dist=True)
 
     def configure_optimizers(self):
         optimizer = optim.AdamW(self.parameters(), lr=self.hparams.lr, weight_decay=self.hparams.weight_decay)
@@ -162,16 +165,20 @@ class DualDistillModel(pl.LightningModule):
 
         self.log(f'{stage}_{prefix}_softmax_mean_score', softmax_mean_score, batch_size=logits.shape[0], sync_dist=True)
         self.log(f'{stage}_{prefix}_mean_score', mean_score, batch_size=logits.shape[0], sync_dist=True)
-        self.logger.log_image(key=f"{stage}_{prefix}_logits",
-                              images=[plt.imshow(logits.detach().cpu()),
-                                      plt.imshow(softmax_logits.detach().cpu())],
-                              caption=[f"{stage}_{prefix}_map", f"{stage}_{prefix}_softmax_map"])
+        if self.global_rank == 0:
+            self.logger.log_image(key=f"{stage}_{prefix}_logits",
+                                  images=[plt.imshow(logits.detach().cpu()),
+                                          plt.imshow(softmax_logits.detach().cpu())],
+                                  caption=[f"{stage}_{prefix}_map", f"{stage}_{prefix}_softmax_map"])
 
     def log_acc(self, logits, stage, prefix):
         label = torch.arange(logits.shape[0], device=self.device)
         for k in self.k_list:
             acc = accuracy(logits, label, top_k=k)
-            self.log(f'hp_metric/{stage}_{prefix}_acc_top{k}', acc, batch_size=logits.shape[0], sync_dist=True)
+            if stage == 'val':
+                self.log(f'hp_metric/{prefix}_acc_top{k}', acc, batch_size=logits.shape[0], sync_dist=True)
+            else:
+                self.log(f'train/{stage}_{prefix}_acc_top{k}', acc, batch_size=logits.shape[0], sync_dist=True)
 
 
 def norm_and_logits(img_encode, text_encode):

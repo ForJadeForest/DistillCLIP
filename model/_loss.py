@@ -164,7 +164,7 @@ class LossCalculator(nn.Module):
                 cal_res[loss_name] = loss(pred_s, pred_t)
         loss = 0
         for (loss_name, scale) in self.loss_scale.items():
-            if loss_name == 'hard_label' or loss_name == 'soft_label':
+            if loss_name == 'hard_label' or loss_name == 'soft_label' or loss_name == 'logits_mse':
                 continue
             cal_res[loss_name] = cal_res[loss_name] * scale
             loss += cal_res[loss_name] * self.percent[loss_name]
