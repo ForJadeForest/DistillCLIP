@@ -74,11 +74,14 @@ class DualDistillModel(pl.LightningModule):
         image, text = inputs
         student_outs: CLIPOutput = self.student(text, image, self.need_return_para)
         teacher_outs: CLIPOutput = self.teacher(text, image, self.need_return_para)
+        if self.hparams.norm:
+            student_outs, teacher_outs = norm_last_representation(student_outs, teacher_outs)
         return student_outs, teacher_outs
 
     def training_step(self, inputs, batch_idx):
         self.teacher.eval()
         student_outs, teacher_outs = self.forward(inputs)
+
         loss, cal_res = self.loss_control(student_outs, teacher_outs, 'all')
         self.log_info('train', loss, cal_res, batch_size=len(inputs))
 
@@ -199,3 +202,12 @@ def norm_and_logits(img_encode, text_encode):
     text_encode = text_encode / text_encode.norm(dim=1, keepdim=True)
     logits = img_encode @ text_encode.t()
     return logits, logits.T
+
+
+def norm_last_representation(stu_outs, tea_outs):
+    stu_outs.visual_output.last_representation /= stu_outs.visual_output.last_representation.norm(dim=-1, keepdim=True)
+    stu_outs.text_output.last_representation /= stu_outs.text_output.last_representation.norm(dim=-1, keepdim=True)
+    tea_outs.visual_output.last_representation /= tea_outs.visual_output.last_representation.norm(dim=-1, keepdim=True)
+    tea_outs.text_output.last_representation /= tea_outs.text_output.last_representation.norm(dim=-1, keepdim=True)
+
+    return stu_outs, tea_outs
