@@ -99,7 +99,14 @@ class DualDistillModel(pl.LightningModule):
         student_outs, teacher_outs = self.forward(batch)
         loss, cal_res = self.loss_control(student_outs, teacher_outs, 'all')
         self.log_info('val', loss, cal_res, batch_size=len(batch))
-
+        stu_logits, _ = norm_and_logits(student_outs.visual_output.last_representation,
+                                        student_outs.text_output.last_representation)
+        tea_logits, _ = norm_and_logits(teacher_outs.visual_output.last_representation,
+                                        teacher_outs.text_output.last_representation)
+        self.log_acc(stu_logits, 'val_step', prefix='stu')
+        self.log_acc(tea_logits, stage='val_step', prefix='tea')
+        if self.global_step % 2000 == 0:
+            self.log_heatmap(stu_logits, stage='val_step', prefix='train_stu')
         return {
             'stu_image_outs': self.all_gather(student_outs.visual_output.last_representation),
             'stu_text_outs': self.all_gather(student_outs.text_output.last_representation),
@@ -133,7 +140,13 @@ class DualDistillModel(pl.LightningModule):
         stu_logits, _ = norm_and_logits(stu_image_outs, stu_text_outs)
         tea_logits, _ = norm_and_logits(tea_image_outs, tea_text_outs)
 
+        stu_image_tea_text_logits, _ = norm_and_logits(stu_image_outs, tea_text_outs)
+        stu_text_tea_image_logits, _ = norm_and_logits(tea_image_outs, stu_text_outs)
+
         self.log_acc(stu_logits, stage='val', prefix='stu')
+        self.log_acc(stu_image_tea_text_logits, stage='val', prefix='stu_image_tea_text')
+        self.log_acc(stu_text_tea_image_logits, stage='val', prefix='stu_text_tea_image')
+
         if self.current_epoch % 50 == 0:
             self.log_heatmap(stu_logits, stage='val', prefix='stu')
 
@@ -178,7 +191,7 @@ class DualDistillModel(pl.LightningModule):
             if stage == 'val':
                 self.log(f'hp_metric/{prefix}_acc_top{k}', acc, batch_size=logits.shape[0], sync_dist=True)
             else:
-                self.log(f'train/{stage}_{prefix}_acc_top{k}', acc, batch_size=logits.shape[0], sync_dist=True)
+                self.log(f'{stage}/{stage}_{prefix}_acc_top{k}', acc, batch_size=logits.shape[0], sync_dist=True)
 
 
 def norm_and_logits(img_encode, text_encode):
