@@ -90,7 +90,7 @@ def get_transformer_para(state_dict):
     return transformer_para
 
 
-def get_visual_transformer_para(state_dict):
+def get_visual_para(state_dict):
     vit = "visual.proj" in state_dict
     embed_dim = state_dict["text_projection"].shape[1]
     if vit:
@@ -112,26 +112,29 @@ def get_visual_transformer_para(state_dict):
             'output_dim': embed_dim
         }
     else:
-        raise ValueError('the state_dict is error, you should give the state_dict of clip model')
+        counts: list = [len(set(k.split(".")[2] for k in state_dict if k.startswith(f"visual.layer{b}"))) for b in
+                        [1, 2, 3, 4]]
+        vision_layers = tuple(counts)
+        vision_width = state_dict["visual.layer1.0.conv1.weight"].shape[0]
+        output_width = round((state_dict["visual.attnpool.positional_embedding"].shape[0] - 1) ** 0.5)
+        assert output_width ** 2 + 1 == state_dict["visual.attnpool.positional_embedding"].shape[0]
+        image_resolution = output_width * 32
+        image_encoder_para = {
+            'layers': vision_layers,
+            'width': vision_width,
+            'input_resolution': image_resolution,
+            'heads': vision_width * 32 // 64,
+            'output_dim': embed_dim
+        }
     return image_encoder_para
 
 
-def teacher_load(teacher_name: str, download_root, model_type, need_layers=None):
-    from .component.text_encoder import TextEncoder
+def load_image(teacher_name, download_root, need_layers):
     from .component.image_encoder import ImageEncoder
+    from .component.resnet_encoder import ModifiedResNet
     state_dict = load(teacher_name, download_root=download_root)
-    if model_type == 'text':
-        para = get_transformer_para(state_dict)
-        para.update(dict(need_layers=need_layers))
-        teacher_model = TextEncoder(is_student=False, **para)
-        my_state_dict = teacher_model.state_dict()
-        for k in my_state_dict:
-            if k in state_dict:
-                my_state_dict[k] = state_dict[k]
-        teacher_model.load_state_dict(my_state_dict)
-        return teacher_model
-    elif model_type == 'image':
-        para = get_visual_transformer_para(state_dict)
+    para = get_visual_para(state_dict)
+    if 'vit' in teacher_name.lower():
         para.update(dict(need_layers=need_layers))
         teacher_model = ImageEncoder(is_student=False, vit_paras=para)
         my_state_dict = teacher_model.state_dict()
@@ -139,29 +142,40 @@ def teacher_load(teacher_name: str, download_root, model_type, need_layers=None)
             if k in state_dict:
                 my_state_dict[k] = state_dict[k]
         teacher_model.load_state_dict(my_state_dict)
-        return teacher_model
+    else:
+        teacher_model = ModifiedResNet(**para)
+        my_state_dict = teacher_model.state_dict()
+        for k in my_state_dict:
+            my_state_dict[k] = state_dict['visual.' + k]
+        teacher_model.load_state_dict(my_state_dict)
+    return teacher_model
+
+
+def load_text(teacher_name, download_root, need_layers):
+    from .component.text_encoder import TextEncoder
+
+    state_dict = load(teacher_name, download_root=download_root)
+    para = get_transformer_para(state_dict)
+    para.update(dict(need_layers=need_layers))
+    teacher_model = TextEncoder(is_student=False, **para)
+    my_state_dict = teacher_model.state_dict()
+    for k in my_state_dict:
+        if k in state_dict:
+            my_state_dict[k] = state_dict[k]
+    teacher_model.load_state_dict(my_state_dict)
+    return teacher_model
+
+
+def teacher_load(teacher_name: str, download_root, model_type, need_layers=None):
+    if model_type == 'text':
+        return load_text(teacher_name, download_root, need_layers)
+    elif model_type == 'image':
+        return load_image(teacher_name, download_root, need_layers)
+
     elif model_type == 'all':
         from .component.clip_model import CLIPModel
-        vit_paras = get_visual_transformer_para(state_dict)
-        vit_paras.update(dict(need_layers=need_layers))
-        trans_para = get_transformer_para(state_dict)
-        trans_para.update(dict(need_layers=need_layers))
-        image_encoder = ImageEncoder(is_student=False, vit_paras=vit_paras)
-        text_encoder = TextEncoder(is_student=False, **trans_para)
+        image_encoder = load_image(teacher_name, download_root, need_layers)
+        text_encoder = load_text(teacher_name, download_root, need_layers)
         teacher_model = CLIPModel(False, image_encoder, text_encoder)
-        my_state_dict = teacher_model.state_dict()
-        map_d = {
-            k: False for k in my_state_dict.keys()
-        }
-        for k in my_state_dict:
-            if k in state_dict:
-                my_state_dict[k] = state_dict[k]
-                map_d[k] = True
-            elif k.startswith('text_encoder'):
-                my_state_dict[k] = state_dict[k.replace('text_encoder.', '')]
-                map_d[k] = True
-            elif k.startswith('image_encoder'):
-                my_state_dict[k] = state_dict[k.replace('image_encoder.', '')]
-                map_d[k] = True
-        teacher_model.load_state_dict(my_state_dict)
+
         return teacher_model
