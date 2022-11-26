@@ -18,7 +18,7 @@ trainer:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
       dir: '/data/pyz/result/dis_clip'
-      name: 'ws-l1-cos-soft_label'
+      name: 'ws-l1-cos-vit_kd'
       project: 'CLIPDistillation'
       log_model: false
       group: weight_share
