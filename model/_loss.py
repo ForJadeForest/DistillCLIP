@@ -30,7 +30,8 @@ class LossCalculator(nn.Module):
                 vit_kd_para['low_layers_num'] = 2
             if 'high_layers_num' not in vit_kd_para:
                 vit_kd_para['high_layers_num'] = 1
-            self.vit_kd_para = vit_kd_para
+        self.vit_kd_para = vit_kd_para
+
         self.loss = self._init_loss()
         self.normalize = normalize
         assert abs(sum([v for v in self.percent.values()]) - 1) <= 1e-5
@@ -46,7 +47,7 @@ class LossCalculator(nn.Module):
             elif n == 'out_ce':
                 loss_function = OutCELoss()
             elif n == 'out_kl':
-                loss_function = OutKLLoss(self.temperature, )
+                loss_function = OutKLLoss(self.temperature)
             elif n == 'out_cos':
                 loss_function = OutCosLoss()
             elif n == 'embedding_mse':
@@ -64,7 +65,7 @@ class LossCalculator(nn.Module):
             elif n == 'hard_label':
                 loss_function = HardLabel()
             elif n == 'soft_label':
-                loss_function = SoftLabel()
+                loss_function = SoftLabel(self.temperature)
             elif n == 'vit_kd':
                 loss_function = ViTKDLoss(**self.vit_kd_para)
             elif n == 'logits_mse':
@@ -110,7 +111,7 @@ class LossCalculator(nn.Module):
                 assert self.temperature
                 logits_kl_loss = \
                     0.5 * (loss(stu_out.i2t_logits, tea_out.i2t_logits)
-                           + loss(stu_out.t2i_logits, tea_out.i2t_lt2i_logits)) * self.temperature ** 2
+                           + loss(stu_out.t2i_logits, tea_out.t2i_logits)) * self.temperature ** 2
                 cal_res[loss_name] = logits_kl_loss
             elif loss_name == 'logits_mse':
                 cal_res[loss_name] = \
@@ -357,9 +358,10 @@ class HardLabel(nn.Module):
 
 
 class SoftLabel(nn.Module):
-    def __init__(self):
+    def __init__(self, temperature):
         super(SoftLabel, self).__init__()
         self.loss = TotalLoss.soft_label
+        self.temperature = temperature
 
     def forward(self, stu_logits, tea_logits):
         logits_kl_loss = self.loss(
