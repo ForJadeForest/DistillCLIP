@@ -56,7 +56,6 @@ class DualDistillModel(pl.LightningModule):
         elif isinstance(self.logger, TensorBoardLogger):
             self.logger.log_hyperparams(self.hparams, {"hp/stu_acc_top1": 0, "hp/stu_acc_top10": 0})
 
-    @rank_zero_only
     def speed_test(self, model, dummy_input, prefix):
         with torch.no_grad():
             flops, param = cal_flop(model, dummy_input)
@@ -68,7 +67,7 @@ class DualDistillModel(pl.LightningModule):
             f'{prefix}_std_times': std_syn,
             f'{prefix}_mean_fps': mean_fps
         }
-        self.log_dict(metric_dict, rank_zero_only=True, sync_dist=False)
+        self.log_dict(metric_dict, sync_dist=True)
 
     def forward(self, inputs) -> Tuple[CLIPOutput, CLIPOutput]:
         image, text = inputs
