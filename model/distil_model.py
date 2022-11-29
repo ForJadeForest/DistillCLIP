@@ -47,17 +47,14 @@ class DistillModel(pl.LightningModule):
             dummy_input = torch.rand(size=(1, 3, 224, 224), device=self.device)
         else:
             dummy_input = torch.rand(size=(1, 77), device=self.device)
-        self.speed_test(self.student, dummy_input, prefix='stu_')
-        self.speed_test(self.teacher, dummy_input, prefix='tea_')
+        # self.speed_test(self.student, dummy_input, prefix='stu_')
+        # self.speed_test(self.teacher, dummy_input, prefix='tea_')
 
     @rank_zero_only
     def logger_begin(self):
         if isinstance(self.logger, WandbLogger):
             self.logger.log_hyperparams({'student_para': self.student.hyper_para()})
-            wandb.save('./*.py')
-            wandb.save('./data/*.py')
-            wandb.save('./model/*.py')
-            wandb.save('./model/component/*.py')
+            self.logger.experiment.log_code()
         elif isinstance(self.logger, TensorBoardLogger):
             self.logger.log_hyperparams(self.hparams, {"hp/stu_acc_top1": 0, "hp/stu_acc_top10": 0})
 
@@ -143,6 +140,7 @@ class DistillModel(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = optim.AdamW(self.parameters(), lr=self.hparams.lr, weight_decay=self.hparams.weight_decay)
+        # optimizer = optim.SGD(self.parameters(), lr=self.hparams.lr, weight_decay=self.hparams.weight_decay)
         scheduler = transformers.get_cosine_schedule_with_warmup(
             optimizer,
             num_warmup_steps=self.hparams.warm_steps,
@@ -157,11 +155,11 @@ class DistillModel(pl.LightningModule):
 
         self.log(f'{stage}_{prefix}_softmax_mean_score', softmax_mean_score, batch_size=logits.shape[0], sync_dist=True)
         self.log(f'{stage}_{prefix}_mean_score', mean_score, batch_size=logits.shape[0], sync_dist=True)
-        if self.global_rank == 0:
-            self.logger.log_image(key=f"{stage}_{prefix}_logits",
-                                  images=[plt.imshow(logits.detach().cpu()),
-                                          plt.imshow(softmax_logits.detach().cpu())],
-                                  caption=[f"{stage}_{prefix}_map", f"{stage}_{prefix}_softmax_map"])
+
+        # self.logger.log_image(key=f"{stage}_{prefix}_logits",
+        #                       images=[plt.imshow(logits.detach().cpu()),
+        #                               plt.imshow(softmax_logits.detach().cpu())],
+        #                       caption=[f"{stage}_{prefix}_map", f"{stage}_{prefix}_softmax_map"])
 
     def log_acc(self, logits, stage, prefix):
         label = torch.arange(logits.shape[0], device=self.device)
