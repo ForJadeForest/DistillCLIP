@@ -19,6 +19,7 @@
 - 只使用mscoco数据蒸馏很难。如果加上hard label loss的话模型的bias会比较高。mean_score可以达到0.6，teacher只有0.3
   - 为什么mean_score可以到0.6但是准确度不高呢？
 - 数据增强如果改变了颜色，会导致不太准确。
+- 指标不止考虑对角线上的和，还要降低非对应的其他的分数。
 
 ### bug fix
 - [x] teacher model 没有使用 `.eval()`
