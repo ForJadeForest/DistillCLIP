@@ -132,17 +132,13 @@ class LossCalculator(nn.Module):
             elif loss_name == 'out_ce':
                 cal_res[loss_name] = loss(stu_out.last_representation, tea_out.last_representation)
             elif loss_name == 'out_kl':
-                # calculate the pred loss
                 assert self.temperature, 'You should give the temperature for the kl loss'
-
                 cal_res[loss_name] = loss(stu_out.last_representation, tea_out.last_representation)
             elif loss_name == 'embedding_mse':
-                # calculate the embedding loss
                 cal_res[loss_name] = loss(stu_out.embedding, tea_out.embedding)
             elif loss_name == 'out_cos':
                 cal_res[loss_name] = loss(stu_out.last_representation, tea_out.last_representation)
             elif loss_name == 'attention_score_mse':
-                # attention loss
                 cal_res[loss_name] = loss(stu_out.attention_scores, tea_out.attention_scores)
             elif loss_name == 'attention_probs_mse':
                 cal_res[loss_name] = loss(stu_out.attention_probs, tea_out.attention_probs)
