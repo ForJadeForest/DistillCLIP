@@ -20,8 +20,7 @@ from .component.output import CLIPOutput
 class DualDistillModel(pl.LightningModule):
     def __init__(self, image_student: nn.Module, text_student: nn.Module, teacher_need_layers: List, teacher_name: str,
                  loss_control_para: Dict, warm_steps, total_steps, weight_decay, lr: float,
-                 download_root: str, map_type: Optional[str] = None, init_type: Optional[str] = None,
-                 norm=False):
+                 download_root: str, norm=False):
         super().__init__()
         self.save_hyperparameters(ignore=['image_student', 'text_student'])
 
@@ -42,17 +41,15 @@ class DualDistillModel(pl.LightningModule):
         dummy_input = (
             torch.randint(high=49407, size=(1, 77), device=self.device),
             torch.rand(size=(1, 3, 224, 224), device=self.device))
-        self.speed_test(self.student, dummy_input, prefix='stu')
-        self.speed_test(self.teacher, dummy_input, prefix='tea')
+        # self.speed_test(self.student, dummy_input, prefix='stu')
+        # self.speed_test(self.teacher, dummy_input, prefix='tea')
 
     @rank_zero_only
     def logger_begin(self):
         if isinstance(self.logger, WandbLogger):
             self.logger.log_hyperparams({'student_para': self.student.hyper_para()})
-            wandb.save('./*.py')
-            wandb.save('./data/*.py')
-            wandb.save('./model/*.py')
-            wandb.save('./model/component/*.py')
+            self.logger.experiment.log_code()
+
         elif isinstance(self.logger, TensorBoardLogger):
             self.logger.log_hyperparams(self.hparams, {"hp/stu_acc_top1": 0, "hp/stu_acc_top10": 0})
 
@@ -107,7 +104,7 @@ class DualDistillModel(pl.LightningModule):
                                         teacher_outs.text_output.last_representation)
         self.log_acc(stu_logits, 'val_step', prefix='stu')
         self.log_acc(tea_logits, stage='val_step', prefix='tea')
-        if self.global_step % 2000 == 0:
+        if self.current_epoch % 50 == 0:
             self.log_heatmap(stu_logits, stage='val_step', prefix='stu')
         return {
             'stu_image_outs': self.all_gather(student_outs.visual_output.last_representation),
@@ -180,11 +177,11 @@ class DualDistillModel(pl.LightningModule):
 
         self.log(f'{stage}_{prefix}_softmax_mean_score', softmax_mean_score, batch_size=logits.shape[0], sync_dist=True)
         self.log(f'{stage}_{prefix}_mean_score', mean_score, batch_size=logits.shape[0], sync_dist=True)
-        if self.global_rank == 0:
-            self.logger.log_image(key=f"{stage}_{prefix}_logits",
-                                  images=[plt.imshow(logits.detach().cpu()),
-                                          plt.imshow(softmax_logits.detach().cpu())],
-                                  caption=[f"{stage}_{prefix}_map", f"{stage}_{prefix}_softmax_map"])
+
+        # self.logger.log_image(key=f"{stage}_{prefix}_logits",
+        #                       images=[plt.imshow(logits.detach().cpu()),
+        #                               plt.imshow(softmax_logits.detach().cpu())],
+        #                       caption=[f"{stage}_{prefix}_map", f"{stage}_{prefix}_softmax_map"])
 
     def log_acc(self, logits, stage, prefix):
         label = torch.arange(logits.shape[0], device=self.device)
