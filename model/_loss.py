@@ -15,7 +15,7 @@ LOSSNAME = ['out_l1', 'out_ce', 'out_kl', 'out_cos', 'embedding_mse', 'attention
 
 class LossCalculator(nn.Module):
     def __init__(self, loss_name, loss_scale: dict = None,
-                 temperature=None, percent=None, vit_kd_para: Dict = None, normalize=True):
+                 temperature=None, percent=None, vit_kd_para: Dict = None):
         super().__init__()
         self.loss_name = loss_name
         self.loss_scale = loss_scale
@@ -33,7 +33,6 @@ class LossCalculator(nn.Module):
         self.vit_kd_para = vit_kd_para
 
         self.loss = self._init_loss()
-        self.normalize = normalize
         assert abs(sum([v for v in self.percent.values()]) - 1) <= 1e-5
         print(self.percent)
         print(self.loss_scale)
