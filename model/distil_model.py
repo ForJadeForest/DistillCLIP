@@ -14,11 +14,11 @@ from ._loss import LossCalculator
 from ._metrics import cal_speed, cal_flop
 from ._utils import teacher_load
 from .component.image_encoder import ImageEncoder
-
+from .component.weight_share_model import RepeatVisionTransformer
 
 class DistillModel(pl.LightningModule):
     def __init__(self, student_encoder: torch.nn.Module,
-                 teacher_name: str, loss_control_para: Dict, download_root: str, norm: bool,
+                 teacher_name: str, loss_control_para: Dict, download_root: str, norm: bool, freeze_embed: bool,
                  teacher_need_layers: List = None, model_type: str = 'image', map_type: str = None, init_type=None,
                  warm_steps=10, total_steps=200, weight_decay=1e-3, lr: float = 1e-3):
         super().__init__()
@@ -38,7 +38,8 @@ class DistillModel(pl.LightningModule):
         self.need_return_para = self.loss_control.get_control_output()
         for p in self.teacher.parameters():
             p.requires_grad = False
-
+        if model_type == 'image' and freeze_embed:
+            self.freeze_image_embedding()
         self.k_list = [i for i in [1, 2, 3, 4, 5, 10]]
 
     def on_train_start(self):
@@ -129,7 +130,6 @@ class DistillModel(pl.LightningModule):
         if self.current_epoch == 0:
             self.log_heatmap(tea_logits, stage='val', prefix='tea')
             self.log_acc(tea_logits, stage='val', prefix='tea')
-
         return
 
     def log_info(self, stage, loss, cal_res, batch_size):
@@ -139,7 +139,8 @@ class DistillModel(pl.LightningModule):
             self.log("{}/{}".format(stage, loss_name), loss_res, batch_size=batch_size, sync_dist=True)
 
     def configure_optimizers(self):
-        optimizer = optim.AdamW(self.parameters(), lr=self.hparams.lr, weight_decay=self.hparams.weight_decay)
+        opt_para = filter(lambda p: p.requires_grad, self.parameters())
+        optimizer = optim.AdamW(opt_para, lr=self.hparams.lr, weight_decay=self.hparams.weight_decay)
         # optimizer = optim.SGD(self.parameters(), lr=self.hparams.lr, weight_decay=self.hparams.weight_decay)
         scheduler = transformers.get_cosine_schedule_with_warmup(
             optimizer,
@@ -170,6 +171,26 @@ class DistillModel(pl.LightningModule):
             else:
                 self.log(f'{stage}/{stage}_{prefix}_acc_top{k}', acc, batch_size=logits.shape[0], sync_dist=True)
 
+    def freeze_image_embedding(self):
+        student_weights = self.student.state_dict()
+        if isinstance(self.student, RepeatVisionTransformer):
+            stu_keys = ['patch_embed.proj.weight', 'cls_token', 'pos_embed']
+            tea_keys = ['visual.conv1.weight', 'visual.class_embedding', 'visual.positional_embedding']
+            for s_k, t_k in zip(stu_keys, tea_keys):
+                student_weights[s_k] = self.teacher.state_dict()[t_k]
+
+            self.student.load_state_dict(student_weights)
+            for n, p in self.student.named_parameters():
+                if n in stu_keys:
+                    p.requires_grad = False
+        elif isinstance(self.student, ImageEncoder):
+            freeze_key = ['visual.conv1.weight', 'visual.class_embedding', 'visual.positional_embedding']
+            for k in freeze_key:
+                student_weights[k] = self.teacher.state_dict()[k]
+            self.student.load_state_dict(student_weights)
+            for n, p in self.student.named_parameters():
+                if n in freeze_key:
+                    p.requires_grad = False
 
 def norm_and_logits(encode, stu_encode, tea_encode):
     encode = encode / encode.norm(dim=1, keepdim=True)
