@@ -3,6 +3,7 @@ from typing import *
 import pytorch_lightning as pl
 import torch
 import transformers
+import wandb
 from matplotlib import pyplot as plt
 from pytorch_lightning.loggers import WandbLogger, TensorBoardLogger
 from pytorch_lightning.utilities import rank_zero_only
@@ -18,9 +19,9 @@ from .component.weight_share_model import RepeatVisionTransformer
 
 class DistillModel(pl.LightningModule):
     def __init__(self, student_encoder: torch.nn.Module,
-                 teacher_name: str, loss_control_para: Dict, download_root: str, norm: bool, freeze_embed: bool,
+                 teacher_name: str, loss_control_para: Dict, download_root: str, freeze_embed: bool,
                  teacher_need_layers: List = None, model_type: str = 'image', map_type: str = None, init_type=None,
-                 warm_steps=10, total_steps=200, weight_decay=1e-3, lr: float = 1e-3):
+                 warm_steps=10, total_steps=200, weight_decay=1e-3, lr: float = 1e-3, norm: bool = False):
         super().__init__()
         if model_type not in ['text', 'image']:
             raise ValueError(f"the model_type should in ['text', 'image'], bug got {model_type}")
@@ -40,14 +41,16 @@ class DistillModel(pl.LightningModule):
             p.requires_grad = False
         if model_type == 'image' and freeze_embed:
             self.freeze_image_embedding()
-        self.k_list = [i for i in [1, 2, 3, 4, 5, 10]]
+
+        # define metric
+        self.k_list = [i for i in [1, 3, 5, 10, 20, 50]]
 
     def on_train_start(self):
         self.logger_begin()
-        if self.hparams.model_type == 'image':
-            dummy_input = torch.rand(size=(1, 3, 224, 224), device=self.device)
-        else:
-            dummy_input = torch.rand(size=(1, 77), device=self.device)
+        # if self.hparams.model_type == 'image':
+        #     dummy_input = torch.rand(size=(1, 3, 224, 224), device=self.device)
+        # else:
+        #     dummy_input = torch.rand(size=(1, 77), device=self.device)
         # self.speed_test(self.student, dummy_input, prefix='stu_')
         # self.speed_test(self.teacher, dummy_input, prefix='tea_')
 
@@ -56,6 +59,9 @@ class DistillModel(pl.LightningModule):
         if isinstance(self.logger, WandbLogger):
             self.logger.log_hyperparams({'student_para': self.student.hyper_para()})
             self.logger.experiment.log_code()
+            wandb.define_metric(name='val_stu_acc/stu_acc_top1', summary='max')
+            wandb.define_metric(name='val_stu_acc/stu_acc_top10', summary='max')
+            wandb.define_metric(name='val_stu_acc/stu_acc_top50', summary='max')
         elif isinstance(self.logger, TensorBoardLogger):
             self.logger.log_hyperparams(self.hparams, {"hp/stu_acc_top1": 0, "hp/stu_acc_top10": 0})
 

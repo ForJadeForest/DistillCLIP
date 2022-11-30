@@ -37,9 +37,9 @@ class DualDistillModel(pl.LightningModule):
         self.need_return_para = self.loss_control.get_control_output()
         if freeze_embed:
             self.freeze_image_embedding()
-        wandb.define_metric(name='')
+
         # define metric
-        self.k_list = [i for i in [1, 2, 3, 4, 5, 10]]
+        self.k_list = [i for i in [1, 3, 5, 10, 20, 50]]
 
     def on_train_start(self):
         self.logger_begin()
@@ -53,6 +53,9 @@ class DualDistillModel(pl.LightningModule):
         if isinstance(self.logger, WandbLogger):
             self.logger.log_hyperparams({'student_para': self.student.hyper_para()})
             self.logger.experiment.log_code()
+            wandb.define_metric(name='val_stu_acc/stu_acc_top1', summary='max')
+            wandb.define_metric(name='val_stu_acc/stu_acc_top10', summary='max')
+            wandb.define_metric(name='val_stu_acc/stu_acc_top50', summary='max')
 
         elif isinstance(self.logger, TensorBoardLogger):
             self.logger.log_hyperparams(self.hparams, {"hp/stu_acc_top1": 0, "hp/stu_acc_top10": 0})
@@ -85,13 +88,13 @@ class DualDistillModel(pl.LightningModule):
         loss, cal_res = self.loss_control(student_outs, teacher_outs, 'all')
         self.log_info('train_loss', loss, cal_res, batch_size=len(inputs))
 
-        stu_logits, _ = norm_and_logits(student_outs.visual_output.last_representation,
-                                        student_outs.text_output.last_representation)
-        tea_logits, _ = norm_and_logits(teacher_outs.visual_output.last_representation,
-                                        teacher_outs.text_output.last_representation)
-        self.log_acc(stu_logits, section='train_acc', prefix='stu')
-        self.log_acc(tea_logits, section='train_acc', prefix='tea')
-        self.log_diag_score(stu_logits, section='train_diag_score', prefix='stu')
+        # stu_logits, _ = norm_and_logits(student_outs.visual_output.last_representation,
+        #                                 student_outs.text_output.last_representation)
+        # tea_logits, _ = norm_and_logits(teacher_outs.visual_output.last_representation,
+        #                                 teacher_outs.text_output.last_representation)
+        # self.log_acc(stu_logits, section='train_acc', prefix='stu')
+        # self.log_acc(tea_logits, section='train_acc', prefix='tea')
+        # self.log_diag_score(stu_logits, section='train_diag_score', prefix='stu')
 
         return loss
 
@@ -156,7 +159,6 @@ class DualDistillModel(pl.LightningModule):
         return
 
     def log_info(self, section, loss, cal_res, batch_size):
-
         self.log(f"{section}/loss", loss, batch_size=batch_size, sync_dist=True)
         for loss_name, loss_res in cal_res.items():
             self.log(f"{section}/{loss_name}", loss_res, batch_size=batch_size, sync_dist=True)
