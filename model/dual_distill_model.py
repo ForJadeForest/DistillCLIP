@@ -204,7 +204,12 @@ class DualDistillModel(pl.LightningModule):
             student_keys = ['image_encoder.' + k for k in base_key]
 
             for s_k, t_k in zip(student_keys, teacher_keys):
-                student_weights[s_k] = self.teacher.state_dict()[t_k]
+                weights = self.teacher.state_dict()[t_k]
+                if 'cls_token' in s_k:
+                    weights = weights.unsqueeze(0).unsqueeze(0)
+                if 'pos_embed' in s_k:
+                    weights = weights.unsqueeze(0)
+                student_weights[s_k] = weights
 
             self.student.load_state_dict(student_weights)
             for n, p in self.student.named_parameters():
