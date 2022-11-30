@@ -64,7 +64,7 @@ trainer:
   log_every_n_steps: 30
   enable_progress_bar: True
   check_val_every_n_epoch: 1
-  precision: 32
+  precision: 16
   logger:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
