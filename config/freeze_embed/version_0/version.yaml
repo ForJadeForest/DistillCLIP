@@ -1,0 +1,16 @@
+model:
+  loss_control_para:
+    loss_name: [ 'out_l1', 'out_cos' ]
+  freeze_embed: True
+  norm: False
+
+trainer:
+  logger:
+    class_path: pytorch_lightning.loggers.wandb.WandbLogger
+    init_args:
+      dir: '/data/pyz/result/dis_clip'
+      name: 'ws-l1-cos-freeze'
+      project: 'CLIPDistillation'
+      log_model: false
+      group: weight_share
+      tags: [ 'weight share', 'loss change', 'freeze_embedding' ]
