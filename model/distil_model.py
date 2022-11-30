@@ -3,7 +3,6 @@ from typing import *
 import pytorch_lightning as pl
 import torch
 import transformers
-import wandb
 from matplotlib import pyplot as plt
 from pytorch_lightning.loggers import WandbLogger, TensorBoardLogger
 from pytorch_lightning.utilities import rank_zero_only
@@ -15,6 +14,7 @@ from ._metrics import cal_speed, cal_flop
 from ._utils import teacher_load
 from .component.image_encoder import ImageEncoder
 from .component.weight_share_model import RepeatVisionTransformer
+
 
 class DistillModel(pl.LightningModule):
     def __init__(self, student_encoder: torch.nn.Module,
@@ -85,7 +85,7 @@ class DistillModel(pl.LightningModule):
         self.teacher.eval()
         student_outs, teacher_outs = self.forward(inputs)
         loss, cal_res = self.loss_control(student_outs, teacher_outs, self.hparams.model_type)
-        self.log_info('train', loss, cal_res, batch_size=len(inputs))
+        self.log_info('train_loss', loss, cal_res, batch_size=len(inputs))
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -97,7 +97,16 @@ class DistillModel(pl.LightningModule):
 
         student_outs, teacher_outs = self.forward(inputs)
         loss, cal_res = self.loss_control(student_outs, teacher_outs, self.hparams.model_type)
-        self.log_info('val', loss, cal_res, len(inputs))
+
+        stu_logits, tea_logits = norm_and_logits(
+            contrary_rep, student_outs.last_representation,
+            teacher_outs.last_representation)[:2]
+
+        self.log_info('val_loss', loss, cal_res, batch_size=len(batch))
+        self.log_acc(stu_logits, section='val_step', prefix='stu')
+        self.log_acc(tea_logits, section='val_step', prefix='tea')
+        self.log_diag_score(stu_logits, section='val_step', prefix='stu')
+
         return {
             'student': self.all_gather(student_outs.last_representation),
             'teacher': self.all_gather(teacher_outs.last_representation),
@@ -122,21 +131,19 @@ class DistillModel(pl.LightningModule):
         contrary_reps = torch.cat(contrary_reps, dim=0).float()
         stu_logits, tea_logits = norm_and_logits(contrary_reps, stu_outs, tea_outs)[:2]
 
-        self.log_acc(stu_logits, stage='val', prefix='stu')
-
-        if self.current_epoch % 50 == 0:
-            self.log_heatmap(stu_logits, stage='val', prefix='stu')
+        self.log_acc(stu_logits, section='val_stu_acc', prefix='stu')
+        self.log_diag_score(stu_logits, section='val_stu_score', prefix='stu')
 
         if self.current_epoch == 0:
-            self.log_heatmap(tea_logits, stage='val', prefix='tea')
-            self.log_acc(tea_logits, stage='val', prefix='tea')
+            self.log_diag_score(tea_logits, section='val_tea_score', prefix='tea')
+            self.log_acc(tea_logits, section='val_tea_acc', prefix='tea')
         return
 
-    def log_info(self, stage, loss, cal_res, batch_size):
+    def log_info(self, section, loss, cal_res, batch_size):
 
-        self.log("{}/loss".format(stage), loss, batch_size=batch_size, sync_dist=True)
+        self.log("{}/loss".format(section), loss, batch_size=batch_size, sync_dist=True)
         for loss_name, loss_res in cal_res.items():
-            self.log("{}/{}".format(stage, loss_name), loss_res, batch_size=batch_size, sync_dist=True)
+            self.log("{}/{}".format(section, loss_name), loss_res, batch_size=batch_size, sync_dist=True)
 
     def configure_optimizers(self):
         opt_para = filter(lambda p: p.requires_grad, self.parameters())
@@ -149,27 +156,27 @@ class DistillModel(pl.LightningModule):
         )
         return [optimizer], [scheduler]
 
-    def log_heatmap(self, logits, stage, prefix):
+    def log_diag_score(self, logits, section, prefix):
         softmax_logits = nn.functional.softmax(logits, dim=1)
         softmax_mean_score = torch.diagonal(softmax_logits).mean()
         mean_score = torch.diagonal(logits).mean()
 
-        self.log(f'{stage}_{prefix}_softmax_mean_score', softmax_mean_score, batch_size=logits.shape[0], sync_dist=True)
-        self.log(f'{stage}_{prefix}_mean_score', mean_score, batch_size=logits.shape[0], sync_dist=True)
+        self.log(f'{section}/{prefix}_softmax_mean_score', softmax_mean_score, batch_size=logits.shape[0],
+                 sync_dist=True)
+        self.log(f'{section}/{prefix}_mean_score', mean_score, batch_size=logits.shape[0], sync_dist=True)
 
-        # self.logger.log_image(key=f"{stage}_{prefix}_logits",
-        #                       images=[plt.imshow(logits.detach().cpu()),
-        #                               plt.imshow(softmax_logits.detach().cpu())],
-        #                       caption=[f"{stage}_{prefix}_map", f"{stage}_{prefix}_softmax_map"])
+    def log_heatmap(self, logits, section, prefix):
+        softmax_logits = nn.functional.softmax(logits, dim=1)
+        self.logger.log_image(key=f"{section}_{prefix}_logits",
+                              images=[plt.imshow(logits.detach().cpu()),
+                                      plt.imshow(softmax_logits.detach().cpu())],
+                              caption=[f"{section}_{prefix}_map", f"{section}_{prefix}_softmax_map"])
 
-    def log_acc(self, logits, stage, prefix):
+    def log_acc(self, logits, section, prefix):
         label = torch.arange(logits.shape[0], device=self.device)
         for k in self.k_list:
             acc = accuracy(logits, label, top_k=k)
-            if stage == 'val':
-                self.log(f'hp_metric/{prefix}_acc_top{k}', acc, batch_size=logits.shape[0], sync_dist=True)
-            else:
-                self.log(f'{stage}/{stage}_{prefix}_acc_top{k}', acc, batch_size=logits.shape[0], sync_dist=True)
+            self.log(f'{section}/{prefix}_acc_top{k}', acc, batch_size=logits.shape[0], sync_dist=True)
 
     def freeze_image_embedding(self):
         student_weights = self.student.state_dict()
@@ -191,6 +198,7 @@ class DistillModel(pl.LightningModule):
             for n, p in self.student.named_parameters():
                 if n in freeze_key:
                     p.requires_grad = False
+
 
 def norm_and_logits(encode, stu_encode, tea_encode):
     encode = encode / encode.norm(dim=1, keepdim=True)
