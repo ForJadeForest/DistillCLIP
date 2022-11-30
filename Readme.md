@@ -108,6 +108,7 @@
       - [多GPU DDP 计算对比学习的损失](https://github.com/Lightning-AI/lightning/discussions/14390)
   - [ ] Weight share model 暂时不支持选用特定的layers蒸馏，所选的是全部层
   - [ ] 将logits图show出来
+  - [ ] 查看检索效果
   
   
 

@@ -18,7 +18,7 @@ model:
     warm_steps: 15
     total_steps: 1000
     weight_decay: 1.0e-2
-    lr: 1.0e-4
+    lr: 1.0e-3
 
 data:
   class_path: MainDataModule
@@ -46,7 +46,7 @@ trainer:
   accumulate_grad_batches: 1
   gradient_clip_val: 10
   accelerator: 'gpu'
-  devices: [ 4, 5, 6, 7 ]
+  devices: [ 6, 7 ]
   max_epochs: 1000
   log_every_n_steps: 30
   enable_progress_bar: True
