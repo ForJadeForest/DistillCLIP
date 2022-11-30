@@ -1,8 +1,8 @@
 model:
   loss_control_para:
     loss_name: [ 'out_l1', 'out_cos' ]
-  freeze_embed: False
-  norm: False
+  freeze_embed: false
+  norm: false
 
 trainer:
   logger:
