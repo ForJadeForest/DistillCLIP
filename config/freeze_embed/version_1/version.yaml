@@ -4,7 +4,6 @@ model:
   freeze_embed: False
   norm: False
 
-
 trainer:
   logger:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger

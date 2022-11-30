@@ -66,7 +66,6 @@ if __name__ == '__main__':
     elif args.ex_name and args.n_ver:
         ex_path = args.config / args.ex_name
         for n in args.n_ver:
-            assert int(n), f'the n must be a int num, but got {n}'
             ver_file = [file for file in sorted(ex_path.iterdir()) if file.is_dir()]
             if 0 <= int(n) < len(ver_file):
                 run_version(args.ex_name, f'version_{n}', args.config)
