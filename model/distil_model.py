@@ -8,30 +8,30 @@ from matplotlib import pyplot as plt
 from pytorch_lightning.loggers import WandbLogger, TensorBoardLogger
 from pytorch_lightning.utilities import rank_zero_only
 from torch import optim, nn
-from torchmetrics import Accuracy
 from torchmetrics.functional import accuracy
 
 from ._loss import LossCalculator
 from ._metrics import cal_speed, cal_flop
 from ._utils import teacher_load
+from .component.image_encoder import ImageEncoder
+from .component.weight_share_model import RepeatVisionTransformer
 
 
 class DistillModel(pl.LightningModule):
     def __init__(self, student_encoder: torch.nn.Module,
-                 teacher_name: str, loss_control_para: Dict, download_root: str, norm: bool,
-                 teacher_need_layers: List, model_type: str = 'text', map_type: str = 'mid', init_type=None,
-                 warm_steps=10, total_steps=200, weight_decay=1e-3, lr: float = 1e-3):
+                 teacher_name: str, loss_control_para: Dict, download_root: str, freeze_embed: bool,
+                 teacher_need_layers: List = None, model_type: str = 'image', map_type: str = None, init_type=None,
+                 warm_steps=10, total_steps=200, weight_decay=1e-3, lr: float = 1e-3, norm: bool = False):
         super().__init__()
         if model_type not in ['text', 'image']:
             raise ValueError(f"the model_type should in ['text', 'image'], bug got {model_type}")
         self.save_hyperparameters(ignore=['student_encoder'])
 
-        # 定义模型
         self.student = student_encoder
         self.teacher_name = teacher_name
         self.teacher = teacher_load(teacher_name, download_root, model_type,
                                     need_layers=teacher_need_layers)
-        if len(self.teacher.need_layers) != len(self.student.need_layers):
+        if isinstance(self.teacher, ImageEncoder) and len(self.teacher.need_layers) != len(self.student.need_layers):
             raise ValueError(
                 f'the teacher need_layers length is not equal to student need_layers length. '
                 f'But get teacher: {self.teacher.need_layers}, student: {self.student.need_layers}')
@@ -39,34 +39,32 @@ class DistillModel(pl.LightningModule):
         self.need_return_para = self.loss_control.get_control_output()
         for p in self.teacher.parameters():
             p.requires_grad = False
+        if model_type == 'image' and freeze_embed:
+            self.freeze_image_embedding()
 
-        # 定义指标
-        self.k_list = [i for i in [1, 2, 3, 4, 5, 10]]
-        self.acc_metrics = torch.nn.ModuleList()
-        for k in self.k_list:
-            self.acc_metrics.append(Accuracy(top_k=k))
+        # define metric
+        self.k_list = [i for i in [1, 3, 5, 10, 20, 50]]
 
     def on_train_start(self):
         self.logger_begin()
-        if self.hparams.model_type == 'image':
-            dummy_input = torch.rand(size=(1, 3, 224, 224), device=self.device)
-        else:
-            dummy_input = torch.rand(size=(1, 77), device=self.device)
-        self.speed_test(self.student, dummy_input, pre_fix='stu_')
-        self.speed_test(self.teacher, dummy_input, pre_fix='tea_')
+        # if self.hparams.model_type == 'image':
+        #     dummy_input = torch.rand(size=(1, 3, 224, 224), device=self.device)
+        # else:
+        #     dummy_input = torch.rand(size=(1, 77), device=self.device)
+        # self.speed_test(self.student, dummy_input, prefix='stu_')
+        # self.speed_test(self.teacher, dummy_input, prefix='tea_')
 
     @rank_zero_only
     def logger_begin(self):
         if isinstance(self.logger, WandbLogger):
             self.logger.log_hyperparams({'student_para': self.student.hyper_para()})
-            wandb.save('./*.py')
-            wandb.save('./data/*.py')
-            wandb.save('./model/*.py')
-            wandb.save('./model/component/*.py')
+            self.logger.experiment.log_code()
+            wandb.define_metric(name='val_stu_acc/stu_acc_top1', summary='max')
+            wandb.define_metric(name='val_stu_acc/stu_acc_top10', summary='max')
+            wandb.define_metric(name='val_stu_acc/stu_acc_top50', summary='max')
         elif isinstance(self.logger, TensorBoardLogger):
             self.logger.log_hyperparams(self.hparams, {"hp/stu_acc_top1": 0, "hp/stu_acc_top10": 0})
 
-    @rank_zero_only
     def speed_test(self, model, dummy_input, prefix):
         with torch.no_grad():
             flops, param = cal_flop(model, dummy_input)
@@ -78,13 +76,13 @@ class DistillModel(pl.LightningModule):
             f'{prefix}_std_times': std_syn,
             f'{prefix}_mean_fps': mean_fps
         }
-        self.log_dict(metric_dict, rank_zero_only=True, sync_dist=False)
+        self.log_dict(metric_dict, sync_dist=True)
 
     def forward(self, inputs):
 
         student_outs = self.student(inputs, self.need_return_para)
         teacher_outs = self.teacher(inputs, self.need_return_para)
-        if self.norm:
+        if self.hparams.norm:
             student_outs.last_representation /= student_outs.last_representation.norm(dim=-1, keepdim=True)
             teacher_outs.last_representation /= teacher_outs.last_representation.norm(dim=-1, keepdim=True)
         return student_outs, teacher_outs
@@ -93,11 +91,11 @@ class DistillModel(pl.LightningModule):
         self.teacher.eval()
         student_outs, teacher_outs = self.forward(inputs)
         loss, cal_res = self.loss_control(student_outs, teacher_outs, self.hparams.model_type)
-        self.log_info('train', loss, cal_res, batch_size=len(inputs))
+        self.log_info('train_loss', loss, cal_res, batch_size=len(inputs))
         return loss
 
     def validation_step(self, batch, batch_idx):
-        imgs, texts, sentence = batch
+        imgs, texts, _ = batch
         if self.hparams.model_type == 'text':
             inputs, contrary_rep = texts, imgs
         else:
@@ -105,7 +103,16 @@ class DistillModel(pl.LightningModule):
 
         student_outs, teacher_outs = self.forward(inputs)
         loss, cal_res = self.loss_control(student_outs, teacher_outs, self.hparams.model_type)
-        self.log_info('val', loss, cal_res, len(inputs))
+
+        stu_logits, tea_logits = norm_and_logits(
+            contrary_rep, student_outs.last_representation,
+            teacher_outs.last_representation)[:2]
+
+        self.log_info('val_loss', loss, cal_res, batch_size=len(batch))
+        self.log_acc(stu_logits, section='val_step', prefix='stu')
+        self.log_acc(tea_logits, section='val_step', prefix='tea')
+        self.log_diag_score(stu_logits, section='val_step', prefix='stu')
+
         return {
             'student': self.all_gather(student_outs.last_representation),
             'teacher': self.all_gather(teacher_outs.last_representation),
@@ -130,25 +137,24 @@ class DistillModel(pl.LightningModule):
         contrary_reps = torch.cat(contrary_reps, dim=0).float()
         stu_logits, tea_logits = norm_and_logits(contrary_reps, stu_outs, tea_outs)[:2]
 
-        self.log_acc(stu_logits, stage='val', prefix='stu')
-
-        if self.current_epoch % 50 == 0:
-            self.log_heatmap(stu_logits, stage='val', prefix='stu')
+        self.log_acc(stu_logits, section='val_stu_acc', prefix='stu')
+        self.log_diag_score(stu_logits, section='val_stu_score', prefix='stu')
 
         if self.current_epoch == 0:
-            self.log_heatmap(tea_logits, stage='val', prefix='tea')
-            self.log_acc(tea_logits, stage='val', prefix='tea')
-
+            self.log_diag_score(tea_logits, section='val_tea_score', prefix='tea')
+            self.log_acc(tea_logits, section='val_tea_acc', prefix='tea')
         return
 
-    def log_info(self, stage, loss, cal_res, batch_size):
+    def log_info(self, section, loss, cal_res, batch_size):
 
-        self.log("{}/loss".format(stage), loss, batch_size=batch_size, sync_dist=True)
+        self.log("{}/loss".format(section), loss, batch_size=batch_size, sync_dist=True)
         for loss_name, loss_res in cal_res.items():
-            self.log("{}/{}".format(stage, loss_name), loss_res, batch_size=batch_size, sync_dist=True)
+            self.log("{}/{}".format(section, loss_name), loss_res, batch_size=batch_size, sync_dist=True)
 
     def configure_optimizers(self):
-        optimizer = optim.AdamW(self.parameters(), lr=self.hparams.lr, weight_decay=self.hparams.weight_decay)
+        opt_para = filter(lambda p: p.requires_grad, self.parameters())
+        optimizer = optim.AdamW(opt_para, lr=self.hparams.lr, weight_decay=self.hparams.weight_decay)
+        # optimizer = optim.SGD(self.parameters(), lr=self.hparams.lr, weight_decay=self.hparams.weight_decay)
         scheduler = transformers.get_cosine_schedule_with_warmup(
             optimizer,
             num_warmup_steps=self.hparams.warm_steps,
@@ -156,27 +162,53 @@ class DistillModel(pl.LightningModule):
         )
         return [optimizer], [scheduler]
 
-    def log_heatmap(self, logits, stage, prefix):
+    def log_diag_score(self, logits, section, prefix):
         softmax_logits = nn.functional.softmax(logits, dim=1)
         softmax_mean_score = torch.diagonal(softmax_logits).mean()
         mean_score = torch.diagonal(logits).mean()
 
-        self.log(f'{stage}_{prefix}_softmax_mean_score', softmax_mean_score, batch_size=logits.shape[0], sync_dist=True)
-        self.log(f'{stage}_{prefix}_mean_score', mean_score, batch_size=logits.shape[0], sync_dist=True)
-        if self.global_rank == 0:
-            self.logger.log_image(key=f"{stage}_{prefix}_logits",
-                                  images=[plt.imshow(logits.detach().cpu()),
-                                          plt.imshow(softmax_logits.detach().cpu())],
-                                  caption=[f"{stage}_{prefix}_map", f"{stage}_{prefix}_softmax_map"])
+        self.log(f'{section}/{prefix}_softmax_mean_score', softmax_mean_score, batch_size=logits.shape[0],
+                 sync_dist=True)
+        self.log(f'{section}/{prefix}_mean_score', mean_score, batch_size=logits.shape[0], sync_dist=True)
 
-    def log_acc(self, logits, stage, prefix):
+    def log_heatmap(self, logits, section, prefix):
+        softmax_logits = nn.functional.softmax(logits, dim=1)
+        self.logger.log_image(key=f"{section}_{prefix}_logits",
+                              images=[plt.imshow(logits.detach().cpu()),
+                                      plt.imshow(softmax_logits.detach().cpu())],
+                              caption=[f"{section}_{prefix}_map", f"{section}_{prefix}_softmax_map"])
+
+    def log_acc(self, logits, section, prefix):
         label = torch.arange(logits.shape[0], device=self.device)
         for k in self.k_list:
             acc = accuracy(logits, label, top_k=k)
-            if stage == 'val':
-                self.log(f'hp_metric/{prefix}_acc_top{k}', acc, batch_size=logits.shape[0], sync_dist=True)
-            else:
-                self.log(f'{stage}/{stage}_{prefix}_acc_top{k}', acc, batch_size=logits.shape[0], sync_dist=True)
+            self.log(f'{section}/{prefix}_acc_top{k}', acc, batch_size=logits.shape[0], sync_dist=True)
+
+    def freeze_image_embedding(self):
+        student_weights = self.student.state_dict()
+        if isinstance(self.student, RepeatVisionTransformer):
+            stu_keys = ['patch_embed.proj.weight', 'cls_token', 'pos_embed']
+            tea_keys = ['visual.conv1.weight', 'visual.class_embedding', 'visual.positional_embedding']
+            for s_k, t_k in zip(stu_keys, tea_keys):
+                weights = self.teacher.state_dict()[t_k]
+                if 'cls_token' in s_k:
+                    weights = weights.unsqueeze(0).unsqueeze(0)
+                if 'pos_embed' in s_k:
+                    weights = weights.unsqueeze(0)
+                student_weights[s_k] = weights
+
+            self.student.load_state_dict(student_weights)
+            for n, p in self.student.named_parameters():
+                if n in stu_keys:
+                    p.requires_grad = False
+        elif isinstance(self.student, ImageEncoder):
+            freeze_key = ['visual.conv1.weight', 'visual.class_embedding', 'visual.positional_embedding']
+            for k in freeze_key:
+                student_weights[k] = self.teacher.state_dict()[k]
+            self.student.load_state_dict(student_weights)
+            for n, p in self.student.named_parameters():
+                if n in freeze_key:
+                    p.requires_grad = False
 
 
 def norm_and_logits(encode, stu_encode, tea_encode):

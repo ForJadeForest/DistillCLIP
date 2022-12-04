@@ -6,8 +6,10 @@ from .utils import IMAGE_MEAN, IMAGE_STD
 
 
 class COCODataset(datasets.CocoCaptions):
-    def __init__(self, root_path, annotation_path, train=True):
+    def __init__(self, root_path, annotation_path, need_type='all', train=True):
         from clip import tokenize
+        self.need_type = need_type
+        self.train = train
         self.tokenizer = tokenize
         self.img_mean, self.img_std = IMAGE_MEAN, IMAGE_STD
         self.trans = transforms.Compose([
@@ -34,4 +36,12 @@ class COCODataset(datasets.CocoCaptions):
         # TODO: can make use the other captions for one image
         image, caption = super(COCODataset, self).__getitem__(item)
         image, caption = image, self.tokenizer(caption[0], truncate=False)[0]
-        return image, caption
+        if self.need_type == 'all' or not self.train:
+            return image, caption
+        elif self.need_type == 'image':
+            return image
+        elif self.need_type == 'text':
+            return caption
+        else:
+            raise ValueError('the mscoco dataset need_type parameter should is [\'all\', \'text\', \'image\'], '
+                             f'bug get {self.need_type}')

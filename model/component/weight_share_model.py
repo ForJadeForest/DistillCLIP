@@ -329,7 +329,9 @@ class RepeatVisionTransformer(nn.Module):
         self.num_classes = num_classes
         self.head = nn.Linear(self.embed_dim, num_classes) if num_classes > 0 else nn.Identity()
 
-    def forward_features(self, x, control_output: ControlOutput):
+    def forward_features(self, x, control_output: ControlOutput = None):
+        if control_output is None:
+            control_output = ControlOutput()
         value_map = None
         attention_scores = []
         representations = []
@@ -365,7 +367,9 @@ class RepeatVisionTransformer(nn.Module):
                                        value_map=value_map,
                                        embedding=embedding)
 
-    def forward(self, x, control_output: ControlOutput):
+    def forward(self, x, control_output: ControlOutput = None):
+        if control_output is None:
+            control_output = ControlOutput()
         vit_output: VisionTransformerOutput = self.forward_features(x, control_output)
         return vit_output
 
@@ -499,7 +503,9 @@ class RepeatTextTransformer(nn.Module):
                                      value_map=value_map,
                                      embedding=embedding)
 
-    def forward(self, x, control_output: ControlOutput):
+    def forward(self, x, control_output: ControlOutput = None):
+        if control_output is None:
+            control_output = ControlOutput()
         text_output: TextTransformerOutput = self.forward_features(x, control_output)
         return text_output
 

@@ -1,21 +1,23 @@
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, List, Optional
 
 import torch
 from torch import nn
 from torch.nn import functional as f
 
-from .component.output import ControlOutput, CLIPOutput
+from .component.output import ControlOutput, CLIPOutput, VisionTransformerOutput, TextTransformerOutput
 
 LOSSNAME = ['out_l1', 'out_ce', 'out_kl', 'out_cos', 'embedding_mse', 'attention_score_mse',
             'attention_probs_mse', 'hidden_rep_mse', 'attention_probs_kl', 'last_value_map_kl',
             'vit_kd',
-            'hard_label', 'soft_label']
+            'hard_label', 'soft_label', 'fine_grain', 'logits_mse']
+
+IMAGE_TEXT_LOSS = ['hard_label', 'soft_label', 'logits_mse', 'fine_grain']
 
 
 class LossCalculator(nn.Module):
-    def __init__(self, loss_name, loss_scale: dict = None,
-                 temperature=None, percent=None, vit_kd_para: Dict = None, normalize=True):
+    def __init__(self, loss_name: List, loss_scale: dict = None,
+                 temperature=None, percent=None, vit_kd_para: Dict = None):
         super().__init__()
         self.loss_name = loss_name
         self.loss_scale = loss_scale
@@ -30,9 +32,9 @@ class LossCalculator(nn.Module):
                 vit_kd_para['low_layers_num'] = 2
             if 'high_layers_num' not in vit_kd_para:
                 vit_kd_para['high_layers_num'] = 1
-            self.vit_kd_para = vit_kd_para
+        self.vit_kd_para = vit_kd_para
+
         self.loss = self._init_loss()
-        self.normalize = normalize
         assert abs(sum([v for v in self.percent.values()]) - 1) <= 1e-5
         print(self.percent)
         print(self.loss_scale)
@@ -46,7 +48,7 @@ class LossCalculator(nn.Module):
             elif n == 'out_ce':
                 loss_function = OutCELoss()
             elif n == 'out_kl':
-                loss_function = OutKLLoss(self.temperature, )
+                loss_function = OutKLLoss(self.temperature)
             elif n == 'out_cos':
                 loss_function = OutCosLoss()
             elif n == 'embedding_mse':
@@ -64,11 +66,13 @@ class LossCalculator(nn.Module):
             elif n == 'hard_label':
                 loss_function = HardLabel()
             elif n == 'soft_label':
-                loss_function = SoftLabel()
+                loss_function = SoftLabel(self.temperature)
             elif n == 'vit_kd':
                 loss_function = ViTKDLoss(**self.vit_kd_para)
             elif n == 'logits_mse':
                 loss_function = LogitsMSE()
+            elif n == 'fine_grain':
+                loss_function = FineGrainLoss()
             else:
                 raise ValueError("Invalid Loss Type!")
             losses[n] = loss_function
@@ -110,19 +114,25 @@ class LossCalculator(nn.Module):
                 assert self.temperature
                 logits_kl_loss = \
                     0.5 * (loss(stu_out.i2t_logits, tea_out.i2t_logits)
-                           + loss(stu_out.t2i_logits, tea_out.i2t_lt2i_logits)) * self.temperature ** 2
+                           + loss(stu_out.t2i_logits, tea_out.t2i_logits)) * self.temperature ** 2
                 cal_res[loss_name] = logits_kl_loss
             elif loss_name == 'logits_mse':
                 cal_res[loss_name] = \
                     0.5 * (loss(stu_out.i2t_logits, tea_out.i2t_logits) + loss(stu_out.t2i_logits, tea_out.t2i_logits))
+            elif loss_name == 'fine_grain':
+                cal_res[loss_name] = loss(stu_out.visual_output.last_layer_output,
+                                          stu_out.text_output.last_layer_output)
+
         loss = 0.5 * (image_loss + text_loss)
         for (loss_name, scale) in self.loss_scale.items():
-            if loss_name == 'hard_label' or loss_name == 'soft_label':
+            if loss_name in IMAGE_TEXT_LOSS:
                 cal_res[loss_name] = cal_res[loss_name] * scale
                 loss += cal_res[loss_name] * self.percent[loss_name]
         return loss, cal_res
 
-    def cal_one_tower_loss(self, stu_out, tea_out):
+    def cal_one_tower_loss(self,
+                           stu_out: Optional[VisionTransformerOutput, TextTransformerOutput],
+                           tea_out: Optional[VisionTransformerOutput, TextTransformerOutput]):
         cal_res = {}
         for loss_name in self.loss:
             loss = self.loss[loss_name]
@@ -131,17 +141,13 @@ class LossCalculator(nn.Module):
             elif loss_name == 'out_ce':
                 cal_res[loss_name] = loss(stu_out.last_representation, tea_out.last_representation)
             elif loss_name == 'out_kl':
-                # calculate the pred loss
                 assert self.temperature, 'You should give the temperature for the kl loss'
-
                 cal_res[loss_name] = loss(stu_out.last_representation, tea_out.last_representation)
             elif loss_name == 'embedding_mse':
-                # calculate the embedding loss
                 cal_res[loss_name] = loss(stu_out.embedding, tea_out.embedding)
             elif loss_name == 'out_cos':
                 cal_res[loss_name] = loss(stu_out.last_representation, tea_out.last_representation)
             elif loss_name == 'attention_score_mse':
-                # attention loss
                 cal_res[loss_name] = loss(stu_out.attention_scores, tea_out.attention_scores)
             elif loss_name == 'attention_probs_mse':
                 cal_res[loss_name] = loss(stu_out.attention_probs, tea_out.attention_probs)
@@ -164,14 +170,16 @@ class LossCalculator(nn.Module):
                 cal_res[loss_name] = loss(pred_s, pred_t)
         loss = 0
         for (loss_name, scale) in self.loss_scale.items():
-            if loss_name == 'hard_label' or loss_name == 'soft_label' or loss_name == 'logits_mse':
+            if loss_name in IMAGE_TEXT_LOSS:
                 continue
             cal_res[loss_name] = cal_res[loss_name] * scale
             loss += cal_res[loss_name] * self.percent[loss_name]
 
         return loss, cal_res
 
-    def forward(self, stu_out, tea_out, model_type):
+    def forward(self, stu_out: Optional[CLIPOutput, VisionTransformerOutput, TextTransformerOutput],
+                tea_out: Optional[CLIPOutput, VisionTransformerOutput, TextTransformerOutput],
+                model_type: str):
         if model_type == 'all':
             return self.cal_tow_tower_loss(stu_out, tea_out)
         else:
@@ -191,6 +199,7 @@ class TotalLoss:
     attention_probs_kl = nn.KLDivLoss(reduction='batchmean')
     last_value_map_kl = nn.KLDivLoss(reduction='batchmean')
     hard_label = nn.CrossEntropyLoss(reduction='mean')
+    fine_grain = nn.CrossEntropyLoss(reduction='mean')
     soft_label = nn.KLDivLoss(reduction='batchmean')
     vit_kd = None
     logits_mse = nn.MSELoss()
@@ -357,9 +366,10 @@ class HardLabel(nn.Module):
 
 
 class SoftLabel(nn.Module):
-    def __init__(self):
+    def __init__(self, temperature):
         super(SoftLabel, self).__init__()
         self.loss = TotalLoss.soft_label
+        self.temperature = temperature
 
     def forward(self, stu_logits, tea_logits):
         logits_kl_loss = self.loss(
@@ -500,3 +510,32 @@ class ViTKDLoss(nn.Module):
         loss_gen = loss_mse(torch.mul(x, mask), torch.mul(tea_output, mask))
         loss_gen = loss_gen / B * self.beta_vitkd / self.lambda_vitkd
         return loss_gen
+
+
+class FineGrainLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.loss = TotalLoss.fine_grain
+
+    def forward(self, image_out, text_out):
+        def cal_similarity(query_features, respond_features):
+            """
+            query_features: [B, n1, d]
+            respond_features: [B, n2, d]
+            """
+            res = []
+            for q in query_features:
+                similarity = torch.matmul(q,
+                                          respond_features.permute(0, 2, 1))  # similarity for q to all respond_features
+                # similarity: [B, n1, n2]
+                max_res = similarity.max(dim=1).values
+                # max_res: [B, n2]
+                mean_res = max_res.mean(dim=1)
+                # mean_res: [B,]
+                res.append(mean_res)
+            similarity_total = torch.stack(res, dim=0)  # [B, B]
+            return similarity_total
+
+        i2t_similarity = cal_similarity(image_out, text_out)
+        t2i_similarity = cal_similarity(text_out, image_out)
+        return 0.5 * (self.loss(i2t_similarity) + self.loss(t2i_similarity))

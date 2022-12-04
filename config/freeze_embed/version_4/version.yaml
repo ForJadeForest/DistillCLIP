@@ -1,0 +1,54 @@
+model:
+  class_path: DistillModel
+  init_args:
+    loss_control_para:
+      loss_name: [ 'out_l1', 'out_cos' ]
+    freeze_embed: true
+    student_encoder:
+      class_path: model.component.weight_share_model.RepeatVisionTransformer
+      init_args:
+        img_size: 224
+        patch_size: 32
+        in_chans: 3
+        out_dim: 512
+        embed_dim: 768
+        depth: 4
+        num_heads: 24
+        mlp_ratio: 4.0
+        qkv_bias: True
+        qk_scale: null
+        drop_rate: 0.
+        attn_drop_rate: 0.
+        drop_path_rate: 0.
+        hybrid_backbone: null
+        rpe_config: null
+        repeated_times: 2
+        use_transform: True
+
+
+trainer:
+  logger:
+    class_path: pytorch_lightning.loggers.wandb.WandbLogger
+    init_args:
+      dir: '/data/pyz/result/dis_clip'
+      name: 'ws-l1-cos-imagenet'
+      project: 'CLIPDistillation'
+      log_model: false
+      group: weight_share
+      tags: [ 'weight share', 'loss change', 'change dataset' ]
+
+data:
+  class_path: MainDataModule
+  init_args:
+    num_workers: 12
+    dataset: '_dataset'
+    dataset_name: 'ImageDataset'
+    train_batch_size: 1600
+    val_batch_size: 1250
+    kwargs:
+      data_dir: '/data/pyz/data'
+      cache_dir: '/data/pyz/data/cache'
+      train_image_dir: '/home/pyz/combine_dataset/'
+      image_use: [ 'coco', 'imagenet' ]
+      cache_path: '/data/pyz/.cache/CLIPDistill'
+      overwrite: False

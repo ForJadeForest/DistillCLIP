@@ -59,9 +59,15 @@ class TransformerLayerOutput:
     attention_probs: torch.Tensor = None
     value_map: torch.Tensor = None
 
+
 @dataclass
 class CLIPOutput:
     visual_output: VisionTransformerOutput = None
     text_output: TextTransformerOutput = None
     i2t_logits: torch.Tensor = None
     t2i_logits: torch.Tensor = None
+
+
+@dataclass
+class ResnetOutput:
+    last_representation: torch.Tensor = None
