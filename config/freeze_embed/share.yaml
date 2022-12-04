@@ -84,15 +84,15 @@ trainer:
         max_depth: 2
     - class_path: ModelCheckpoint
       init_args:
-        filename: '{epoch}-val_acc{val_tea_acc/tea_acc_top1:.3f}-loss{val_loss/loss:.5f}'
-        monitor: 'val_tea_acc/tea_acc_top1'
+        filename: '{epoch}-val_acc{val_stu_acc/stu_acc_top1:.3f}-loss{val_loss/loss:.5f}'
+        monitor: 'val_stu_acc/stu_acc_top1'
         save_last: True
         save_top_k: 2
         mode: 'max'
         auto_insert_metric_name: false
     - class_path: ModelCheckpoint
       init_args:
-        filename: '{epoch}-val_acc{val_tea_acc/tea_acc_top1:.3f}-loss{val_loss/loss:.5f}'
+        filename: '{epoch}-val_acc{val_stu_acc/stu_acc_top1:.3f}-loss{val_loss/loss:.5f}'
         monitor: 'val_loss/loss'
         save_last: True
         save_top_k: 2

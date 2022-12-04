@@ -5,12 +5,13 @@ model:
   norm: false
 
 trainer:
+  precision: 32
   logger:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
       dir: '/data/pyz/result/dis_clip'
-      name: 'ws-l1-cos'
+      name: 'ws-l1-cos-precision32'
       project: 'CLIPDistillation'
       log_model: false
       group: weight_share
-      tags: [ 'weight share', 'loss change' ]
+      tags: [ 'weight share', 'loss change', 'precision' ]

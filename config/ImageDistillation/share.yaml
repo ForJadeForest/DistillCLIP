@@ -54,7 +54,6 @@ model:
         drop_path_rate: 0.
         hybrid_backbone: null
         rpe_config: null
-        use_cls_token: True
         repeated_times: 2
         use_transform: True
     norm: False
