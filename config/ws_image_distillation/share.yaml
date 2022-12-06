@@ -1,26 +1,4 @@
 model:
-  #     def __init__(self, student_encoder: nn.Module, teacher_name: str, loss_control_para: Dict, download_root: str,
-  #                 teacher_need_layers: Dict, model_type: str = 'text', map_type: str = 'mid', init_type=None,
-  #                 warm_steps=10, total_steps=200, weight_decay=1e-3, lr: float = 1e-3):
-  #    def __init__(self, input_resolution: int, patch_size: int, width: int, layers: int, heads: int, output_dim: int,
-  #                 need_layers: List, drop_out: float = 0.1):
-  #  loss_name, loss_scale: dict = None, temperature=None, percent=None, vit_kd_para=None
-  #
-  #  LOSSNAME = ['out_l1', 'out_ce', 'out_kl', 'out_cos', 'embedding_mse', 'attention_score_mse',
-  #            'attention_probs_mse', 'hidden_rep_mse', 'attention_probs_kl', 'last_value_map_kl',
-  #            'vit_kd',
-  #            'hard_label', 'soft_label']
-
-  #   def __init__(self,
-  #                 student_dims,
-  #                 teacher_dims,
-  #                 alpha_vitkd=0.00003,
-  #                 beta_vitkd=0.000003,
-  #                 lambda_vitkd=0.5,
-  #                 low_layers_num=2,
-  #                 high_layers_num=1,
-  #                 ):
-  #
   class_path: DistillModel
   init_args:
     student_encoder:
@@ -58,17 +36,13 @@ model:
         use_transform: True
     norm: False
     loss_control_para:
-#      loss_name: [ 'out_l1', 'out_ce', 'out_kl', 'out_cos', 'embedding_mse', 'attention_score_mse',
-#                   'attention_probs_mse', 'hidden_rep_mse', 'attention_probs_kl', 'last_value_map_kl',
-#                   'vit_kd' ]
-      loss_name: [ 'out_l1', 'out_cos']
+#LOSSNAME = ['out_l1', 'out_ce', 'out_kl', 'out_cos', 'embedding_mse', 'attention_score_mse',
+      #            'attention_probs_mse', 'hidden_rep_mse', 'attention_probs_kl', 'last_value_map_kl',
+      #            'vit_kd',
+      #            'hard_label', 'soft_label', 'fine_grain', 'logits_mse']
+      loss_name: [ 'out_l1', 'out_cos' ]
       temperature: 1
-      vit_kd_para:
-        student_dims: 768
-        teacher_dims: 768
-        low_layers_num: 2
-        high_layers_num: 1
-      normalize: False
+    freeze_embed: true
     teacher_name: ViT-B/32
     download_root: '/data/pyz/.cache'
     teacher_need_layers: [ 0, 1, 10, 11 ]
@@ -76,27 +50,26 @@ model:
     map_type: 'begin'
     init_type: null
     warm_steps: 15
-    total_steps: 300
+    total_steps: 500
     weight_decay: 1.0e-2
-    lr: 5.0e-3
+    lr: 4.0e-3
 
 
 
 
 data:
-  class_path: DistillationDataModule
+  class_path: MainDataModule
   init_args:
-    num_workers: 16
-    dataset: '_dataset'
+    num_workers: 8
+    dataset: 'image_dataset'
     dataset_name: 'ImageDataset'
     train_batch_size: 1600
     val_batch_size: 1250
-    kwargs:
-      data_dir: '/data/pyz/data'
-      cache_dir: '/data/pyz/data/cache'
-      train_image_dir: '/home/pyz/combine_dataset/'
-      image_use: [ 'coco', 'imagenet']
-      cache_path: '/data/pyz/.cache/CLIPDistill'
+    dataset_para:
+      data_dir: '/home/pyz/data_tmp'
+      cache_dir: '/data/pyz/.cache'
+      train_image_dir: '/home/pyz/data_tmp/combine_dataset/'
+      image_use: [ 'coco', 'imagenet' ]
       overwrite: False
 
 
@@ -104,14 +77,15 @@ data:
 
 
 trainer:
+  num_sanity_val_steps: 0
   auto_select_gpus: True
   accumulate_grad_batches: 1
   accelerator: 'gpu'
   devices: [ 0, 1, 2, 3 ]
   strategy: 'ddp_find_unused_parameters_false'
-  max_epochs: 300
+  max_epochs: 500
 #  limit_train_batches: 1
-  log_every_n_steps: 50
+  log_every_n_steps: 100
   enable_progress_bar: True
   check_val_every_n_epoch: 1
   precision: 16
@@ -123,7 +97,6 @@ trainer:
       project: 'ImageDistillation'
       log_model: false
       group: weight_share
-      version: 'baseline-weight share'
       tags: ['baseline', 'weight share']
 #      mode: 'online'
 
@@ -139,16 +112,16 @@ trainer:
         max_depth: 2
     - class_path: ModelCheckpoint
       init_args:
-        filename: '{epoch}-val_acc{hp_metric/stu_acc_top1:.2f}-loss{val/loss:.5f}'
-        monitor: 'hp_metric/stu_acc_top1'
+        filename: '{epoch}-val_acc{val_stu_acc/stu_acc_top1:.3f}-loss{val_loss/loss:.5f}'
+        monitor: 'val_stu_acc/stu_acc_top1'
         save_last: True
         save_top_k: 2
         mode: 'max'
         auto_insert_metric_name: false
     - class_path: ModelCheckpoint
       init_args:
-        filename: '{epoch}-val_acc{hp_metric/stu_acc_top1:.2f}-loss{val/loss:.5f}'
-        monitor: 'val/loss'
+        filename: '{epoch}-val_acc{val_stu_acc/stu_acc_top1:.3f}-loss{val_loss/loss:.5f}'
+        monitor: 'val_loss/loss'
         save_last: True
         save_top_k: 2
         mode: 'min'
