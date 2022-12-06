@@ -1,0 +1,108 @@
+model:
+  class_path: DistillModel
+  init_args:
+    student_encoder:
+      class_path: model.component.image_encoder.ImageEncoder
+      init_args:
+        is_student: True
+        tea_transformer_width: 768
+        vit_paras:
+          input_resolution: 224
+          patch_size: 32
+          width: 768
+          layers: 4
+          heads: 12
+          output_dim: 512
+          drop_out: 0
+          need_layers: null
+    norm: False
+    loss_control_para:
+      #LOSSNAME = ['out_l1', 'out_ce', 'out_kl', 'out_cos', 'embedding_mse', 'attention_score_mse',
+      #            'attention_probs_mse', 'hidden_rep_mse', 'attention_probs_kl', 'last_value_map_kl',
+      #            'vit_kd',
+      #            'hard_label', 'soft_label', 'fine_grain', 'logits_mse']
+      loss_name: [ 'out_l1', 'out_cos' ]
+      temperature: 1
+    freeze_embed: true
+    teacher_name: ViT-B/32
+    download_root: '/data/pyz/.cache'
+    teacher_need_layers: [ 0, 1, 10, 11 ]
+    model_type: 'image'
+    map_type: 'begin'
+    init_type: null
+    warm_steps: 15
+    total_steps: 500
+    weight_decay: 1.0e-2
+    lr: 4.0e-3
+
+
+
+
+data:
+  class_path: MainDataModule
+  init_args:
+    num_workers: 4
+    dataset: 'image_dataset'
+    dataset_name: 'ImageDataset'
+    train_batch_size: 1024
+    val_batch_size: 1250
+    dataset_para:
+      data_dir: '/home/pyz/data_tmp'
+      cache_dir: '/data/pyz/.cache'
+      train_image_dir: '/home/pyz/data_tmp/combine_dataset/'
+      image_use: [ 'coco', 'imagenet' ]
+      overwrite: False
+
+
+
+
+
+trainer:
+  num_sanity_val_steps: 0
+  auto_select_gpus: True
+  accumulate_grad_batches: 1
+  accelerator: 'gpu'
+  devices: [ 0, 1, 2, 3 ]
+  strategy: 'ddp'
+  max_epochs: 500
+  #  limit_train_batches: 1
+  log_every_n_steps: 100
+  enable_progress_bar: True
+  check_val_every_n_epoch: 1
+  precision: 16
+  logger:
+    class_path: pytorch_lightning.loggers.wandb.WandbLogger
+    init_args:
+      dir: '/data/pyz/result/dis_clip'
+      name: 'l1-cos-4layers-test'
+      project: 'CLIPDistillation'
+      log_model: false
+      group: weight_share
+      tags: [ 'no-ws', 'test' ]
+
+  callbacks:
+    - class_path: LearningRateMonitor
+    #    - class_path: EarlyStopping
+    #      init_args:
+    #        monitor: 'val/loss'
+    #        patience: 15
+
+    - class_path: ModelSummary
+      init_args:
+        max_depth: 2
+    - class_path: ModelCheckpoint
+      init_args:
+        filename: '{epoch}-val_acc{val_stu_acc/stu_acc_top1:.3f}-loss{val_loss/loss:.5f}'
+        monitor: 'val_stu_acc/stu_acc_top1'
+        save_last: True
+        save_top_k: 2
+        mode: 'max'
+        auto_insert_metric_name: false
+    - class_path: ModelCheckpoint
+      init_args:
+        filename: '{epoch}-val_acc{val_stu_acc/stu_acc_top1:.3f}-loss{val_loss/loss:.5f}'
+        monitor: 'val_loss/loss'
+        save_last: True
+        save_top_k: 2
+        mode: 'min'
+        auto_insert_metric_name: false

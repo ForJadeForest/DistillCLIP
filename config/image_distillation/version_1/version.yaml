@@ -1,0 +1,31 @@
+model:
+  class_path: DistillModel
+  init_args:
+    student_encoder:
+      class_path: model.component.image_encoder.ImageEncoder
+      init_args:
+        is_student: True
+        tea_transformer_width: 768
+        vit_paras:
+          input_resolution: 224
+          patch_size: 32
+          width: 768
+          layers: 4
+          heads: 12
+          output_dim: 512
+          drop_out: 0
+          need_layers: null
+    warm_steps: 5
+    total_steps: 100
+
+trainer:
+  max_epochs: 100
+  logger:
+    class_path: pytorch_lightning.loggers.wandb.WandbLogger
+    init_args:
+      dir: '/data/pyz/result/dis_clip'
+      name: 'l1-cos-4layers-less-epoch'
+      project: 'CLIPDistillation'
+      log_model: false
+      group: no-ws
+      tags: [ 'no-ws' ]
