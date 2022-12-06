@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Union
 
 import torch
 from torch import nn
@@ -131,8 +131,8 @@ class LossCalculator(nn.Module):
         return loss, cal_res
 
     def cal_one_tower_loss(self,
-                           stu_out: Optional[VisionTransformerOutput, TextTransformerOutput],
-                           tea_out: Optional[VisionTransformerOutput, TextTransformerOutput]):
+                           stu_out: Union[VisionTransformerOutput, TextTransformerOutput],
+                           tea_out: Union[VisionTransformerOutput, TextTransformerOutput]):
         cal_res = {}
         for loss_name in self.loss:
             loss = self.loss[loss_name]
@@ -177,8 +177,8 @@ class LossCalculator(nn.Module):
 
         return loss, cal_res
 
-    def forward(self, stu_out: Optional[CLIPOutput, VisionTransformerOutput, TextTransformerOutput],
-                tea_out: Optional[CLIPOutput, VisionTransformerOutput, TextTransformerOutput],
+    def forward(self, stu_out: Union[CLIPOutput, VisionTransformerOutput, TextTransformerOutput],
+                tea_out: Union[CLIPOutput, VisionTransformerOutput, TextTransformerOutput],
                 model_type: str):
         if model_type == 'all':
             return self.cal_tow_tower_loss(stu_out, tea_out)
@@ -190,17 +190,17 @@ class LossCalculator(nn.Module):
 class TotalLoss:
     out_l1 = nn.L1Loss()
     out_ce = nn.CrossEntropyLoss(reduction='mean')
-    out_kl = nn.KLDivLoss(reduction='batchmean')
+    out_kl = nn.KLDivLoss(reduction='sum')
     out_cos = nn.CosineEmbeddingLoss()
     embedding_mse = nn.MSELoss()
     attention_score_mse = nn.MSELoss()
     attention_probs_mse = nn.MSELoss()
     hidden_rep_mse = nn.MSELoss()
-    attention_probs_kl = nn.KLDivLoss(reduction='batchmean')
-    last_value_map_kl = nn.KLDivLoss(reduction='batchmean')
+    attention_probs_kl = nn.KLDivLoss(reduction='sum')
+    last_value_map_kl = nn.KLDivLoss(reduction='sum')
     hard_label = nn.CrossEntropyLoss(reduction='mean')
     fine_grain = nn.CrossEntropyLoss(reduction='mean')
-    soft_label = nn.KLDivLoss(reduction='batchmean')
+    soft_label = nn.KLDivLoss(reduction='sum')
     vit_kd = None
     logits_mse = nn.MSELoss()
 
