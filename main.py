@@ -8,6 +8,7 @@ import os
 
 # os.environ['JSONARGPARSE_DEBUG'] = 'true'
 
+# os.environ['TORCH_DISTRIBUTED_DEBUG'] = 'INFO'
 
 class MyLightningCLI(LightningCLI):
     @staticmethod

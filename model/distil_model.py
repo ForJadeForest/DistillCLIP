@@ -29,8 +29,7 @@ class DistillModel(pl.LightningModule):
 
         self.student = student_encoder
         self.teacher_name = teacher_name
-        self.teacher = teacher_load(teacher_name, download_root, model_type,
-                                    need_layers=teacher_need_layers)
+        self.teacher = teacher_load(teacher_name, download_root, model_type, need_layers=teacher_need_layers)
         if isinstance(self.teacher, ImageEncoder) and len(self.teacher.need_layers) != len(self.student.need_layers):
             raise ValueError(
                 f'the teacher need_layers length is not equal to student need_layers length. '
