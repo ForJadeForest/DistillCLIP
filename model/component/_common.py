@@ -169,7 +169,7 @@ class Transformer(nn.Module):
 
 class VisionTransformer(nn.Module):
     def __init__(self, input_resolution: int, patch_size: int, width: int, layers: int, heads: int, output_dim: int,
-                 need_layers: Optional[List], drop_out: float = 0.1):
+                 need_layers: Optional[List], drop_out: float = 0):
         super().__init__()
         self.input_resolution = input_resolution
         self.output_dim = output_dim
@@ -200,7 +200,11 @@ class VisionTransformer(nn.Module):
             [self.class_embedding.to(x.dtype) + torch.zeros(x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device),
              x], dim=1)  # shape = [*, grid ** 2 + 1, width]
         x = x + self.positional_embedding.to(x.dtype)
-        embeddings = x
+
+        embeddings = None
+        if control_output.need_emb:
+            embeddings = x
+
         x = self.ln_pre(x)
         vision_output: TransformerOutput = self.transformer(x, control_output)
         x = self.ln_post(vision_output.last_layer_output)
