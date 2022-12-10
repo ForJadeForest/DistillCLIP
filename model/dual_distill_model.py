@@ -22,7 +22,7 @@ from .component.weight_share_model import RepeatVisionTransformer
 class DualDistillModel(pl.LightningModule):
     def __init__(self, image_student: nn.Module, text_student: nn.Module, teacher_need_layers: List, teacher_name: str,
                  loss_control_para: Dict, freeze_embed: bool, warm_steps, total_steps, weight_decay, lr: float,
-                 download_root: str, norm=False):
+                 download_root: str, norm=False, unfreeze_epoch: int = None):
         super().__init__()
         self.save_hyperparameters(ignore=['image_student', 'text_student'])
 
@@ -56,6 +56,8 @@ class DualDistillModel(pl.LightningModule):
             wandb.define_metric(name='val_stu_acc/stu_acc_top1', summary='max')
             wandb.define_metric(name='val_stu_acc/stu_acc_top10', summary='max')
             wandb.define_metric(name='val_stu_acc/stu_acc_top50', summary='max')
+            wandb.define_metric(name='val_stu_image_tea_text/stu_image_tea_text', summary='max')
+            wandb.define_metric(name='val_stu_text_tea_image/stu_text_tea_image', summary='max')
 
         elif isinstance(self.logger, TensorBoardLogger):
             self.logger.log_hyperparams(self.hparams, {"hp/stu_acc_top1": 0, "hp/stu_acc_top10": 0})
@@ -80,6 +82,12 @@ class DualDistillModel(pl.LightningModule):
         if self.hparams.norm:
             student_outs, teacher_outs = norm_last_representation(student_outs, teacher_outs)
         return student_outs, teacher_outs
+
+    def on_train_epoch_start(self) -> None:
+        if self.hparams.unfreeze_epoch:
+            if self.current_epoch >= self.unfreeze_epoch:
+                self.unfreeze_embed()
+                self.hparams.unfreeze_epoch = False
 
     def training_step(self, inputs, batch_idx):
         self.teacher.eval()
@@ -194,6 +202,10 @@ class DualDistillModel(pl.LightningModule):
         for k in self.k_list:
             acc = accuracy(logits, label, top_k=k)
             self.log(f'{section}/{prefix}_acc_top{k}', acc, batch_size=logits.shape[0], sync_dist=True)
+
+    def unfreeze_embed(self):
+        for n, p in self.student.named_parameters():
+            p.requires_grad = True
 
     def freeze_image_embedding(self):
         freeze_key = ['visual.conv1.weight', 'visual.class_embedding', 'visual.positional_embedding']

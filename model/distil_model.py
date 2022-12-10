@@ -21,7 +21,8 @@ class DistillModel(pl.LightningModule):
     def __init__(self, student_encoder: torch.nn.Module,
                  teacher_name: str, loss_control_para: Dict, download_root: str, freeze_embed: bool,
                  teacher_need_layers: List = None, model_type: str = 'image', map_type: str = None, init_type=None,
-                 warm_steps=10, total_steps=200, weight_decay=1e-3, lr: float = 1e-3, norm: bool = False):
+                 warm_steps=10, total_steps=200, weight_decay=1e-3, lr: float = 1e-3, norm: bool = False,
+                 unfreeze_epoch=None):
         super().__init__()
         if model_type not in ['text', 'image']:
             raise ValueError(f"the model_type should in ['text', 'image'], bug got {model_type}")
@@ -30,12 +31,14 @@ class DistillModel(pl.LightningModule):
         self.student = student_encoder
         self.teacher_name = teacher_name
         self.teacher = teacher_load(teacher_name, download_root, model_type, need_layers=teacher_need_layers)
-        if isinstance(self.teacher, ImageEncoder) and len(self.teacher.need_layers) != len(self.student.need_layers):
+        self.loss_control = LossCalculator(**loss_control_para)
+        self.need_return_para = self.loss_control.get_control_output()
+
+        if isinstance(self.student, ImageEncoder) and len(self.teacher.need_layers) != len(self.student.need_layers):
             raise ValueError(
                 f'the teacher need_layers length is not equal to student need_layers length. '
                 f'But get teacher: {self.teacher.need_layers}, student: {self.student.need_layers}')
-        self.loss_control = LossCalculator(**loss_control_para)
-        self.need_return_para = self.loss_control.get_control_output()
+
         for p in self.teacher.parameters():
             p.requires_grad = False
         if model_type == 'image' and freeze_embed:
@@ -80,11 +83,18 @@ class DistillModel(pl.LightningModule):
     def forward(self, inputs):
 
         student_outs = self.student(inputs, self.need_return_para)
-        teacher_outs = self.teacher(inputs, self.need_return_para)
+        with torch.no_grad():
+            teacher_outs = self.teacher(inputs, self.need_return_para)
         if self.hparams.norm:
             student_outs.last_representation /= student_outs.last_representation.norm(dim=-1, keepdim=True)
             teacher_outs.last_representation /= teacher_outs.last_representation.norm(dim=-1, keepdim=True)
         return student_outs, teacher_outs
+
+    def on_train_epoch_start(self) -> None:
+        if self.hparams.unfreeze_epoch:
+            if self.current_epoch >= self.unfreeze_epoch:
+                self.unfreeze_embed()
+                self.hparams.unfreeze_epoch = False
 
     def training_step(self, inputs, batch_idx):
         self.teacher.eval()
@@ -104,8 +114,7 @@ class DistillModel(pl.LightningModule):
         loss, cal_res = self.loss_control(student_outs, teacher_outs, self.hparams.model_type)
 
         stu_logits, tea_logits = norm_and_logits(
-            contrary_rep, student_outs.last_representation,
-            teacher_outs.last_representation)[:2]
+            contrary_rep, student_outs.last_representation, teacher_outs.last_representation)[:2]
 
         self.log_info('val_loss', loss, cal_res, batch_size=len(batch))
         self.log_acc(stu_logits, section='val_step', prefix='stu')
@@ -182,6 +191,10 @@ class DistillModel(pl.LightningModule):
         for k in self.k_list:
             acc = accuracy(logits, label, top_k=k)
             self.log(f'{section}/{prefix}_acc_top{k}', acc, batch_size=logits.shape[0], sync_dist=True)
+
+    def unfreeze_embed(self):
+        for n, p in self.student.named_parameters():
+            p.requires_grad = True
 
     def freeze_image_embedding(self):
         student_weights = self.student.state_dict()
