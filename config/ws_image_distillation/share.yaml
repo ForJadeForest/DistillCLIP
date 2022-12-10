@@ -2,19 +2,6 @@ model:
   class_path: DistillModel
   init_args:
     student_encoder:
-#      class_path: model.component.image_encoder.ImageEncoder
-#      init_args:
-#        is_student: True
-#        tea_transformer_width: 768
-#        vit_paras:
-#          input_resolution: 224
-#          patch_size: 32
-#          width: 768
-#          layers: 4
-#          heads: 12
-#          output_dim: 512
-#          drop_out: 0
-#          need_layers: null
       class_path: model.component.weight_share_model.RepeatVisionTransformer
       init_args:
         img_size: 224
@@ -50,9 +37,9 @@ model:
     map_type: 'begin'
     init_type: null
     warm_steps: 15
-    total_steps: 500
+    total_steps: 300
     weight_decay: 1.0e-2
-    lr: 4.0e-3
+    lr: 5.0e-4
 
 
 
@@ -63,7 +50,7 @@ data:
     num_workers: 8
     dataset: 'image_dataset'
     dataset_name: 'ImageDataset'
-    train_batch_size: 1600
+    train_batch_size: 1024
     val_batch_size: 1250
     dataset_para:
       data_dir: '/home/pyz/data_tmp'
@@ -81,9 +68,9 @@ trainer:
   auto_select_gpus: True
   accumulate_grad_batches: 1
   accelerator: 'gpu'
-  devices: [ 0, 1, 2, 3 ]
+  devices: [ 4, 5, 6, 7 ]
   strategy: 'ddp_find_unused_parameters_false'
-  max_epochs: 500
+  max_epochs: 300
 #  limit_train_batches: 1
   log_every_n_steps: 100
   enable_progress_bar: True
@@ -97,15 +84,16 @@ trainer:
       project: 'ImageDistillation'
       log_model: false
       group: weight_share
-      tags: ['baseline', 'weight share']
-#      mode: 'online'
+      # the covered tags should be same length with the tags in share.yaml
+  #      tags: ['baseline', 'weight share']
+  #      mode: 'online'
 
   callbacks:
     - class_path: LearningRateMonitor
-#    - class_path: EarlyStopping
-#      init_args:
-#        monitor: 'val/loss'
-#        patience: 15
+    #    - class_path: EarlyStopping
+    #      init_args:
+    #        monitor: 'val/loss'
+    #        patience: 15
 
     - class_path: ModelSummary
       init_args:

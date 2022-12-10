@@ -2,27 +2,34 @@ model:
   class_path: DistillModel
   init_args:
     student_encoder:
-      class_path: model.component.image_encoder.ImageEncoder
+      class_path: model.component.weight_share_model.RepeatVisionTransformer
       init_args:
-        is_student: True
-        tea_transformer_width: 768
-        vit_paras:
-          input_resolution: 224
-          patch_size: 32
-          width: 768
-          layers: 4
-          heads: 12
-          output_dim: 512
-          drop_out: 0
-          need_layers: null
+        img_size: 224
+        patch_size: 32
+        in_chans: 3
+        out_dim: 512
+        embed_dim: 768
+        depth: 6
+        num_heads: 16
+        mlp_ratio: 4.0
+        qkv_bias: True
+        qk_scale: null
+        drop_rate: 0.
+        attn_drop_rate: 0.
+        drop_path_rate: 0.
+        hybrid_backbone: null
+        rpe_config: null
+        repeated_times: 2
+        use_transform: True
+    freeze_embed: false
 
 trainer:
   logger:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
       dir: '/data/pyz/result/dis_clip'
-      name: 'l1-cos-4layers'
+      name: 'ws-l1-cos-imagenet-6layers-768embed'
       project: 'CLIPDistillation'
       log_model: false
       group: weight_share
-      tags: [ 'no-ws' ]
+      tags: [ 'weight share', 'change dataset', 'image_encoder', 'big scale' ]
