@@ -9,8 +9,8 @@ from .component.output import ControlOutput, CLIPOutput, VisionTransformerOutput
 
 LOSSNAME = ['out_l1', 'out_ce', 'out_kl', 'out_cos', 'embedding_mse', 'attention_score_mse',
             'attention_probs_mse', 'hidden_rep_mse', 'attention_probs_kl', 'last_value_map_kl',
-            'vit_kd',
-            'hard_label', 'soft_label', 'fine_grain', 'logits_mse']
+            'vit_kd', 'smd'
+                      'hard_label', 'soft_label', 'fine_grain', 'logits_mse']
 
 IMAGE_TEXT_LOSS = ['hard_label', 'soft_label', 'logits_mse', 'fine_grain']
 
@@ -73,6 +73,8 @@ class LossCalculator(nn.Module):
                 loss_function = LogitsMSE()
             elif n == 'fine_grain':
                 loss_function = FineGrainLoss()
+            elif n == 'smd':
+                loss_function = SMD()
             else:
                 raise ValueError("Invalid Loss Type!")
             losses[n] = loss_function
@@ -168,6 +170,8 @@ class LossCalculator(nn.Module):
                 pred_s = [stu_low_rep, stu_high_rep]
                 pred_t = [tea_low_rep, tea_high_rep]
                 cal_res[loss_name] = loss(pred_s, pred_t)
+            elif loss_name == 'smd':
+                cal_res[loss_name] = loss(stu_out.last_representation, tea_out.last_representation)
         loss = 0
         for (loss_name, scale) in self.loss_scale.items():
             if loss_name in IMAGE_TEXT_LOSS:
@@ -201,7 +205,6 @@ class TotalLoss:
     hard_label = nn.CrossEntropyLoss(reduction='mean')
     fine_grain = nn.CrossEntropyLoss(reduction='mean')
     soft_label = nn.KLDivLoss(reduction='sum')
-    vit_kd = None
     logits_mse = nn.MSELoss()
 
 
@@ -539,3 +542,54 @@ class FineGrainLoss(nn.Module):
         i2t_similarity = cal_similarity(image_out, text_out)
         t2i_similarity = cal_similarity(text_out, image_out)
         return 0.5 * (self.loss(i2t_similarity) + self.loss(t2i_similarity))
+
+
+class SMD(nn.Module):
+
+    def __init__(self, tau=0.04):
+        super(SMD, self).__init__()
+        self.loss = nn.CrossEntropyLoss()
+        self.tau = tau
+
+    def forward(self, teacher_inputs, inputs, normalized=True):
+        n = inputs.size(0)
+
+        if normalized:
+            inputs = torch.nn.functional.normalize(inputs, dim=1)
+            teacher_inputs = torch.nn.functional.normalize(teacher_inputs, dim=1)
+
+        x1 = torch.pow(teacher_inputs, 2).sum(dim=1, keepdim=True).expand(n, n)
+        dist_t = x1 + x1.t()
+        dist_t.addmm_(teacher_inputs, teacher_inputs.t(), beta=1, alpha=-2)
+        dist_t = dist_t.clamp(min=1e-12).sqrt()  # for numerical stability
+
+        # Compute pairwise distance
+        x1 = torch.pow(teacher_inputs, 2).sum(dim=1, keepdim=True).expand(n, n)
+        x2 = torch.pow(inputs, 2).sum(dim=1, keepdim=True).expand(n, n)
+        dist = x1 + x2.t()
+        dist.addmm_(teacher_inputs, inputs.t(), beta=1, alpha=-2)
+        dist = dist.clamp(min=1e-12).sqrt()  # for numerical stability
+
+        # For each anchor, find the hardest positive and negative
+        negative_index = (dist_t > torch.diag(dist).expand(n, n).t()).float()
+        negative = dist * negative_index
+        negative[negative_index == 0] = 1e5
+        positive_index = 1 - negative_index
+        positive = dist * positive_index
+
+        dist_an = torch.min(negative, dim=1)
+        dist_ap = torch.max(positive, dim=1)
+
+        an_t = torch.gather(dist_t, 1, dist_an.indices.unsqueeze(1)).squeeze()
+        ap_t = torch.gather(dist_t, 1, dist_ap.indices.unsqueeze(1)).squeeze()
+
+        weight_an = torch.clamp_min(an_t.detach() - dist_an.values.detach(), min=0.)
+        weight_ap = torch.clamp_min(dist_ap.values.detach() - ap_t.detach(), min=0.)
+
+        weight_dist_an = weight_an * dist_an.values / self.tau
+        weight_dist_ap = weight_ap * dist_ap.values / self.tau
+
+        logits = torch.cat([weight_dist_an.unsqueeze(-1), weight_dist_ap.unsqueeze(-1)], dim=1)
+        labels = torch.zeros(weight_dist_an.shape[0], dtype=torch.long).cuda()
+
+        return self.loss(logits, labels)
