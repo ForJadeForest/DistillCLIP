@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import Dict, List, Union
-
+from collections import defaultdict
 import torch
 from torch import nn
 from torch.nn import functional as f
@@ -20,12 +20,28 @@ class LossCalculator(nn.Module):
                  temperature=None, percent=None, vit_kd_para: Dict = None):
         super().__init__()
         self.loss_name = loss_name
-        self.loss_scale = loss_scale
-        if self.loss_scale is None:
-            self.loss_scale = {n: 1 for n in self.loss_name}
+        self.loss_scale = {}
+
+        if loss_scale is None:
+            loss_scale = {n: 1 for n in self.loss_name}
+        for n in loss_name:
+            self.loss_scale[n] = loss_scale.get(n, 1)
+
+        if percent is None:
+            percent = {n: 1 / len(loss_name) for n in self.loss_name}
         self.percent = percent
-        if self.percent is None:
-            self.percent = {n: 1 / len(loss_name) for n in loss_name}
+        default_value = (1 - sum(self.percent.values())) / len(self.percent)
+        if len(loss_name) != len(self.percent.keys()) and default_value <= 0:
+            raise ValueError(
+                f"there are some loss default percent is negative. "
+                f"Please check the sum of the percent {percent}"
+                f"the default_value is {default_value} = (1 - sum(percent.values())) / len(percent)"
+            )
+        for n in loss_name:
+            if n not in self.percent:
+                self.percent[n] = default_value
+        assert abs(sum(self.percent.values()) - 1) <= 1e-5
+
         self.temperature = temperature
         if vit_kd_para is not None:
             if 'low_layers_num' not in vit_kd_para:
@@ -35,7 +51,7 @@ class LossCalculator(nn.Module):
         self.vit_kd_para = vit_kd_para
 
         self.loss = self._init_loss()
-        assert abs(sum([v for v in self.percent.values()]) - 1) <= 1e-5
+
         print(self.percent)
         print(self.loss_scale)
 
@@ -188,6 +204,12 @@ class LossCalculator(nn.Module):
             return self.cal_tow_tower_loss(stu_out, tea_out)
         else:
             return self.cal_one_tower_loss(stu_out, tea_out)
+
+    def set_percent(self, new_percent):
+        self.percent = new_percent
+
+    def set_scale(self, new_scale):
+        self.loss_scale = new_scale
 
 
 @dataclass
