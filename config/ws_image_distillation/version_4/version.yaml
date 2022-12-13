@@ -9,7 +9,7 @@ model:
         in_chans: 3
         out_dim: 512
         embed_dim: 768
-        depth: 8
+        depth: 6
         num_heads: 24
         mlp_ratio: 4.0
         qkv_bias: True
@@ -19,7 +19,7 @@ model:
         drop_path_rate: 0.
         hybrid_backbone: null
         rpe_config: null
-        repeated_times: 4
+        repeated_times: 3
         use_transform: True
     freeze_embed: true
     loss_control_para:
