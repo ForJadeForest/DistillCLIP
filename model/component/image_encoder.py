@@ -29,6 +29,10 @@ class ImageEncoder(nn.Module):
     def need_layers(self):
         return self.vit_paras['need_layers']
 
+    @property
+    def output_layer(self):
+        return self.visual.proj
+
     def initialize_parameters(self):
         nn.init.normal_(self.visual.class_embedding, std=0.02)
         nn.init.normal_(self.visual.positional_embedding, std=0.01)

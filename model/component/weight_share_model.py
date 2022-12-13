@@ -325,6 +325,10 @@ class RepeatVisionTransformer(nn.Module):
     def get_classifier(self):
         return self.head
 
+    @property
+    def output_layer(self):
+        return self.head
+
     def reset_classifier(self, num_classes, global_pool=''):
         self.num_classes = num_classes
         self.head = nn.Linear(self.embed_dim, num_classes) if num_classes > 0 else nn.Identity()
