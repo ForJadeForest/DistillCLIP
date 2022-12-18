@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import Dict, List, Union
-from collections import defaultdict
+
 import torch
 from torch import nn
 from torch.nn import functional as f
@@ -17,7 +17,7 @@ IMAGE_TEXT_LOSS = ['hard_label', 'soft_label', 'logits_mse', 'fine_grain']
 
 class LossCalculator(nn.Module):
     def __init__(self, loss_name: List, loss_scale: dict = None,
-                 temperature=None, percent=None, vit_kd_para: Dict = None):
+                 temperature=None, percent=None, smd_tau: float = 0.04, vit_kd_para: Dict = None):
         super().__init__()
         self.loss_name = loss_name
         self.loss_scale = {}
@@ -49,7 +49,7 @@ class LossCalculator(nn.Module):
             if 'high_layers_num' not in vit_kd_para:
                 vit_kd_para['high_layers_num'] = 1
         self.vit_kd_para = vit_kd_para
-
+        self.smd_tau = smd_tau
         self.loss = self._init_loss()
 
         print(self.percent)
@@ -90,7 +90,7 @@ class LossCalculator(nn.Module):
             elif n == 'fine_grain':
                 loss_function = FineGrainLoss()
             elif n == 'smd':
-                loss_function = SMD()
+                loss_function = SMD(self.smd_tau)
             else:
                 raise ValueError("Invalid Loss Type!")
             losses[n] = loss_function
@@ -550,12 +550,12 @@ class FineGrainLoss(nn.Module):
             """
             res = []
             for q in query_features:
-                similarity = torch.matmul(q,
-                                          respond_features.permute(0, 2, 1))  # similarity for q to all respond_features
-                # similarity: [B, n1, n2]
-                max_res = similarity.max(dim=1).values
-                # max_res: [B, n2]
-                mean_res = max_res.mean(dim=1)
+                # similarity for q to all respond_features: [B, n1, n2]
+                similarity = torch.matmul(q, respond_features.permute(0, 2, 1))
+
+                max_res = similarity.max(dim=-1).values
+                # max_res: [B, n1]
+                mean_res = max_res.mean(dim=-1)
                 # mean_res: [B,]
                 res.append(mean_res)
             similarity_total = torch.stack(res, dim=0)  # [B, B]
@@ -563,7 +563,9 @@ class FineGrainLoss(nn.Module):
 
         i2t_similarity = cal_similarity(image_out, text_out)
         t2i_similarity = cal_similarity(text_out, image_out)
-        return 0.5 * (self.loss(i2t_similarity) + self.loss(t2i_similarity))
+
+        label = torch.arange(i2t_similarity.shape[0], device=i2t_similarity.device)
+        return 0.5 * (self.loss(i2t_similarity, label) + self.loss(t2i_similarity, label))
 
 
 class SMD(nn.Module):
