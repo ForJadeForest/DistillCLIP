@@ -19,14 +19,29 @@ from .component.output import CLIPOutput
 from .component.weight_share_model import RepeatVisionTransformer
 
 
+def load_weight(image_student, text_student, load_path):
+    def load_one_model(model: nn.Module, cpk: Optional[str]):
+        if cpk is None:
+            return model
+        save_res = torch.load(cpk)
+        model.load_state_dict(save_res['state_dic'])
+        return model
+
+    image_student = load_one_model(image_student, load_path['image'])
+    text_student = load_one_model(text_student, load_path['text'])
+    return image_student, text_student
+
+
 class DualDistillModel(pl.LightningModule):
     def __init__(self, image_student: nn.Module, text_student: nn.Module, teacher_need_layers: List, teacher_name: str,
                  loss_control_para: Dict, freeze_embed: bool, warm_steps, total_steps, weight_decay, lr: float,
-                 download_root: str, norm=False, unfreeze_epoch: int = None):
+                 download_root: str, norm=False, unfreeze_epoch: int = None, load_path: Dict = None):
         super().__init__()
         self.save_hyperparameters(ignore=['image_student', 'text_student'])
 
         # define model
+        if load_path:
+            image_student, text_student = load_weight(image_student, text_student, load_path)
         self.student = CLIPModel(True, image_student, text_student, norm)
         self.teacher_name = teacher_name
         self.teacher = teacher_load(teacher_name, download_root, 'all', need_layers=teacher_need_layers)
