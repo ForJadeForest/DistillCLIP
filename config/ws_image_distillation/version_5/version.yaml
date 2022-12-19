@@ -28,19 +28,14 @@ model:
         out_l1: 1
         out_cos: 1
         smd: 0.02
-      percent:
-        out_l1: 0.1
-        out_cos: 0.1
-        smd: 0.8
-    norm: false
 
 trainer:
   logger:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
       dir: '/data/pyz/result/dis_clip'
-      name: 'ws-l1-cos-imagenet-6layers-768embed-smd'
+      name: 'ws-6layer-24head-smd-freeze'
       project: 'CLIPDistillation'
       log_model: false
-      group: weight_share
-      tags: [ 'ws image encoder', 'freeze_embed', 'big scale', 'loss_change', 'lr change' ]
+      group: ws_image_encoder
+      tags: [ 'ws_image_encoder', 'model change', 'loss change', 'freeze_embed change' ]

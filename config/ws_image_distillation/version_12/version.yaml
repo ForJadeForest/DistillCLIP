@@ -28,15 +28,15 @@ model:
         out_l1: 1
         out_cos: 1
         smd: 0.02
-    lr: 3.0e-3
+    weight_decay: 1.0e-4
 
 trainer:
   logger:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
       dir: '/data/pyz/result/dis_clip'
-      name: 'ws-6layers-24head-smd_loss-freeze-3e-3lr'
+      name: 'ws-6layers-24head-smd_loss-freeze-weight_decay1e-4'
       project: 'CLIPDistillation'
       log_model: false
       group: ws_image_encoder
-      tags: [ 'ws image encoder', 'freeze_embed', 'model change', 'loss_change', 'lr change' ]
+      tags: [ 'ws image encoder', 'freeze_embed', 'model change', 'loss_change', 'weight_decay change' ]
