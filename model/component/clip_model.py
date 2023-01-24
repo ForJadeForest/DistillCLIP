@@ -13,9 +13,13 @@ class CLIPModel(nn.Module):
         self.norm = norm
 
     def encode_image(self, image, control_output: ControlOutput):
+        if control_output is None:
+            control_output = ControlOutput()
         return self.image_encoder(image, control_output)
 
     def encode_text(self, text, control_output: ControlOutput):
+        if control_output is None:
+            control_output = ControlOutput()
         return self.text_encoder(text, control_output)
 
     def forward(self, text, image, control_output: Optional[ControlOutput] = None):

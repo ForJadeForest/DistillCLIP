@@ -13,6 +13,11 @@ from model.dual_distill_model import DualDistillModel
 
 device = 'cuda:0'
 checkpoint = r'D:\Code\Dis_CLIP\temp\cpk\895-val_acc0.076-loss0.12050.ckpt'
+encode_path = '../temp/encode_file'
+file_path = r'D:\data\mscoco\val2017'
+
+query = 'A woman sitting on a bench and a woman standing waiting for the bus.'
+res_save_path = '2'
 
 _visual = RepeatVisionTransformer(
     img_size=224, patch_size=32, in_chans=3, out_dim=512, embed_dim=768, depth=4, num_heads=12, mlp_ratio=4.0,
@@ -25,12 +30,6 @@ model = DualDistillModel.load_from_checkpoint(checkpoint, torch.device('cpu'), i
                                               text_student=_text)
 image = model.student.image_encoder.to(device)
 text = model.student.text_encoder.to(device)
-
-encode_path = '../temp/encode_file'
-file_path = r'D:\data\mscoco\val2017'
-
-query = 'A woman sitting on a bench and a woman standing waiting for the bus.'
-res_save_path = '2'
 
 
 def imageQuery(query, image, text, encodes_path, file_path, device, save_path):
