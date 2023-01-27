@@ -11,8 +11,10 @@ model2company = {
     'kolarmartin': 'Brno University',
     'karpathy': 'NeuralTalk',
     'rakshithShetty': 'PicSOM',
-    # 'junhuaMao': 'm-RNN',
-    'junhuaMao': 'm-RNN (Baidu/ UCLA)',
+    # 作者在附录中提到JunhuaMao 和mRNN_Share.JMao的val输出数据是一样的
+    # 但是在测试集上的评分有所差异。因此在junhuaMao上也用m-RNN进行结果的计算
+    'junhuaMao': 'm-RNN',
+    # 'junhuaMao': 'm-RNN (Baidu/ UCLA)',
     'OriolVinyals': 'Google',
     'myamaguchi': 'MIL',
     'Q.Wu': 'ACVT',
@@ -25,6 +27,7 @@ model2company = {
 
 
 model_list = model2company.keys()
+
 
 def cal_metric(model_name, clip_model, images_root_dir):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -42,6 +45,7 @@ def cal_metric(model_name, clip_model, images_root_dir):
     text = [id2text[k] for k in image_id_list]
 
     return get_clip_score(clip_model, images_path, text, device)
+
 
 def main():
     clip_model = get_model()
