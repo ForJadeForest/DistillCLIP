@@ -1,11 +1,13 @@
 from random import random
 
 import torch
-import scipy
+from scipy.io import loadmat
 import os
 
 from PIL.Image import Image
 from torchvision.transforms import transforms
+from .clip_score import get_clip_score, get_refonlyclipscore
+from .utils import get_model
 
 
 class Pascal50sDataset(torch.utils.data.Dataset):
@@ -21,16 +23,18 @@ class Pascal50sDataset(torch.utils.data.Dataset):
         self.read_score(root)
         # self.transforms = keys_to_transforms([], size=media_size)
         self.transforms = transforms.Compose([
-            transforms.Resize(media_size, media_size)
+            transforms.Resize(media_size)
         ])
 
-    @staticmethod
-    def loadmat(path):
-        return scipy.io.loadmat(path)
-
     def read_data(self, root):
-        mat = self.loadmat(
+        mat = loadmat(
             os.path.join(root, "pyCIDErConsensus/pair_pascal.mat"))
+        # self.data 中每一行包含了 image_id, sent1, sent2，一共有4000个句子对
+        # self.categories 中包含句子对的标签？有四种 {1: 'HC', 2: 'HI', 3: 'HM', 4: 'MM'}
+        # HC 是两个人类正确句子对
+        # HI 是两个人类错误的句子对（意思是一个句子描述图像，另一个句子描述另外一张图像）
+        # HM 是一个人类描述的句子和一个机器生成描述同一张图像的句子
+        # MM 是描述两个机器生成的描述同一张图像的句子
         self.data = mat["new_input"][0]
         self.categories = mat["category"][0]
         # sanity check
@@ -48,8 +52,14 @@ class Pascal50sDataset(torch.utils.data.Dataset):
         assert 0 == chk.abs().sum(), chk
 
     def read_score(self, root):
-        mat = self.loadmat(
+        mat = loadmat(
             os.path.join(root, "pyCIDErConsensus/consensus_pascal.mat"))
+        # pascal-50s 就是每一张图像有50个ref
+        # data 192000（4000 * 48）个数据，是人工标注的ref
+        # 每一行有三句话 + 一个 rate 列
+        # 其中第一句话应该是ref，第二三句是描述该图像的50ref除去这48个之后得到的也就是每48个数据B，C列的都是相同的
+        # 对每一个ref，测评员需要去对其进行选择B，C哪一个和A更加相似。
+        # 因此对于一张image的48个标准 ref 进行投票，最终票数多的作为label（个人估计实验中就是把他作为candidate）
         data = mat["triplets"][0]
         self.labels = []
         self.references = []
@@ -57,7 +67,7 @@ class Pascal50sDataset(torch.utils.data.Dataset):
             votes = {}
             refs = []
             for j in range(i * 48, (i + 1) * 48):
-                a,b,c,d = [x[0][0] for x in data[j]]
+                a, b, c, d = [x[0][0] for x in data[j]]
                 key = b[0].strip() if 1 == d else c[0].strip()
                 refs.append(a[0].strip())
                 votes[key] = votes.get(key, 0) + 1
@@ -73,7 +83,7 @@ class Pascal50sDataset(torch.utils.data.Dataset):
                 print(votes)
                 exit()
             # Ties are broken randomly.
-            label = 0 if vote_a > vote_b + random.random() - .5 else 1
+            label = 0 if vote_a > vote_b + random() - .5 else 1
             self.labels.append(label)
             self.references.append(refs)
 
@@ -88,9 +98,47 @@ class Pascal50sDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx: int):
         vid, a, b = [x[0] for x in self.data[idx]]
         label = self.labels[idx]
-        feat = self.get_image(vid)
+        # feat = self.get_image(vid)
+        feat = 0
         a = a.strip()
         b = b.strip()
         references = self.references[idx]
         category = self.categories[idx]
         return feat, a, b, references, category, label
+
+
+if __name__ == '__main__':
+    dataset = Pascal50sDataset(root='test_dataset/Pascal-50s')
+    model = get_model()
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    idx2cat = dataset.idx2cat
+    keys = idx2cat.values()
+    correct, ref_correct, total = ({k: 0 for k in keys} for _ in range(3))
+    for data in dataset:
+        image, candidate1, candidate2, refs, category, label = data
+        score1 = get_clip_score(model, image, candidate1, device)
+        score2 = get_clip_score(model, image, candidate2, device)
+        ref_score1 = get_refonlyclipscore(model, refs, candidate1, device)
+        ref_score2 = get_refonlyclipscore(model, refs, candidate1, device)
+        if score1 > score2:
+            pred = 0
+        else:
+            pred = 1
+
+        if ref_score1 > ref_score2:
+            ref_pred = 0
+        else:
+            ref_pred = 1
+
+        if pred == label:
+            correct[idx2cat[category]] += 1
+        if ref_pred == 1:
+            ref_correct[idx2cat[category]] += 1
+
+        total[idx2cat[category]] += 1
+
+    for k, v in correct.items():
+        print(f'the result {k} acc: {v / total[k]}')
+
+    for k, v in correct.items():
+        print(f'the result {k} with refs acc: {v / total[k]}')
