@@ -145,7 +145,6 @@ def process_composite():
                              'caption': d['candidate3'],
                              'rating': float(d['rating3'])})
                 else:
-                    # print(d['candidate1'],d['rating1'])
                     all_index[d['image_id']]['human_judgement'].append(
                         {'image_id': d['image_id'],
                          'image_path': d['image_path'],
