@@ -1,6 +1,6 @@
 '''
 Computes the metrics for composite.
-Highlight: clipscore exclude the ground truth?
+image_path!
 
 '''
 import sys
@@ -32,8 +32,8 @@ def compute_human_correlation(input_json, image_directory, tauvariant='c'):
             if np.isnan(human_judgement['rating']):
                 print('NaN')
                 continue
-            images.append(image_directory + '/' + v['image_path'])
-            # refs.append([' '.join(gt.split()) for gt in v['ground_truth']])
+            images.append(image_directory + '/' + v['image_path']) # image_path need to be changed in preprocess module
+            refs.append([' '.join(gt.split()) for gt in v['ground_truth']])
             candidates.append(' '.join(human_judgement['caption'].split()))
             human_scores.append(human_judgement['rating'])
 
@@ -81,7 +81,7 @@ def compute_human_correlation(input_json, image_directory, tauvariant='c'):
 
 def main():
     if not os.path.exists('composite.json'):
-        print('Please run download.py')
+        print('Please run composite_preprocess.py')
         quit()
     print('composite (Tau-c)')
     compute_human_correlation('composite.json', 'composite/', tauvariant='c')
