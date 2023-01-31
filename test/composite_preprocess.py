@@ -166,7 +166,6 @@ def process_composite():
                          'caption': d['candidate4'],
                          'rating': float(d['rating4'])})
 
-            print('For 8k,we skip {} ground truth.(it should be 158)'.format(skip))
             print('For expert, we are dumping {} judgments between {} images'.format(
             len(all_corpus)*3,
             len(all_index)))
