@@ -21,7 +21,7 @@ def encode_images(path_list, teacher_name: str):
     for path in tqdm(path_list):
         image = preprocess(Image.open(path)).unsqueeze(0).to(device)
         with torch.no_grad():
-            image_features = model.encode_image(image).float()
+            image_features = model.encode_image(image).float().to('cpu')
             image_encode.append(image_features)
     return torch.cat(image_encode, dim=0)
 

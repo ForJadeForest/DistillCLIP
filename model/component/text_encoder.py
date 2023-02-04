@@ -53,7 +53,9 @@ class TextEncoder(nn.Module):
         mask.triu_(1)  # zero out the lower diagonal
         return mask
 
-    def encode_text(self, text, control_output: ControlOutput):
+    def encode_text(self, text, control_output: ControlOutput = None):
+        if control_output is None:
+            control_output = ControlOutput()
         embedding = self.token_embedding(text)  # [batch_size, n_ctx, d_model]
         x = embedding + self.positional_embedding
         embedding_res = x

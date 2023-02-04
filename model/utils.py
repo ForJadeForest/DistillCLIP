@@ -166,7 +166,7 @@ def load_text(teacher_name, download_root, need_layers):
     return teacher_model
 
 
-def teacher_load(teacher_name: str, download_root, model_type, need_layers=None):
+def teacher_load(teacher_name: str, download_root, model_type, need_layers=None, only_last_rep=False):
     if model_type == 'text':
         return load_text(teacher_name, download_root, need_layers)
     elif model_type == 'image':
@@ -176,6 +176,6 @@ def teacher_load(teacher_name: str, download_root, model_type, need_layers=None)
         from .component.clip_model import CLIPModel
         image_encoder = load_image(teacher_name, download_root, need_layers)
         text_encoder = load_text(teacher_name, download_root, need_layers)
-        teacher_model = CLIPModel(False, image_encoder, text_encoder)
+        teacher_model = CLIPModel(False, image_encoder, text_encoder, only_last_rep)
 
         return teacher_model

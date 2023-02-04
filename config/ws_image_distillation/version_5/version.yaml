@@ -1,28 +1,41 @@
 model:
-  loss_control_para:
-    loss_name: [ 'out_l1', 'out_cos' ]
-    loss_scale:
-      out_l1: 1
-      out_cos: 1
-
-    temperature: 1
-    vit_kd_para:
-      student_dims: 768
-      teacher_dims: 768
-      low_layers_num: 2
-      high_layers_num: 1
-    normalize: False
-  warm_steps: 15
-  total_steps: 2000
+  class_path: DistillModel
+  init_args:
+    student_encoder:
+      class_path: model.component.weight_share_model.RepeatVisionTransformer
+      init_args:
+        img_size: 224
+        patch_size: 32
+        in_chans: 3
+        out_dim: 512
+        embed_dim: 768
+        depth: 6
+        num_heads: 24
+        mlp_ratio: 4.0
+        qkv_bias: True
+        qk_scale: null
+        drop_rate: 0.
+        attn_drop_rate: 0.
+        drop_path_rate: 0.
+        hybrid_backbone: null
+        rpe_config: null
+        repeated_times: 2
+        use_transform: True
+    freeze_embed: true
+    loss_control_para:
+      loss_name: [ 'out_l1', 'out_cos', 'smd' ]
+      loss_scale:
+        out_l1: 1
+        out_cos: 1
+        smd: 0.02
 
 trainer:
-  max_epochs: 2000
   logger:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
       dir: '/data/pyz/result/dis_clip'
-      name: 'ws-l1-cos-1000epoch'
+      name: 'ws-6layer-24head-smd-freeze'
       project: 'CLIPDistillation'
       log_model: false
-      group: weight_share
-      tags: [ 'weight share', 'loss change' ]
+      group: ws_image_encoder
+      tags: [ 'ws_image_encoder', 'model change', 'loss change', 'freeze_embed change' ]
