@@ -12,7 +12,7 @@ from torchmetrics.functional import accuracy
 
 from ._loss import LossCalculator
 from ._metrics import cal_speed, cal_flop
-from ._utils import teacher_load
+from .utils import teacher_load
 from .component.image_encoder import ImageEncoder
 from .component.weight_share_model import RepeatVisionTransformer
 

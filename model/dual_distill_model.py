@@ -12,7 +12,7 @@ from torchmetrics.functional import accuracy
 
 from ._loss import LossCalculator
 from ._metrics import cal_flop, cal_speed
-from ._utils import teacher_load
+from .utils import teacher_load
 from .component.clip_model import CLIPModel
 from .component.image_encoder import ImageEncoder
 from .component.output import CLIPOutput
