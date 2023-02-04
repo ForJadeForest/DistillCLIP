@@ -22,10 +22,10 @@ class TextDataset(Dataset):
             self.cache_dir.mkdir()
         self.train = train
         self.tokenizer = tokenize
+        self.teacher_name = teacher_name
         if self.train:
             self.tokenize_text = self.load(overwrite)
         else:
-            self.teacher_name = teacher_name
             self.img_mean = IMAGE_MEAN
             self.img_std = IMAGE_STD
             self.sentences, self.captions, self.path_list, self.image_rep = self.load(overwrite)
@@ -34,8 +34,8 @@ class TextDataset(Dataset):
     def process(self):
         if self.train:
             raw_text = []
-            coco2017_file = self.data_dir / 'COCO' / 'annotations' / 'captions_train2017.json'
-            cc_file = self.data_dir / 'CC' / 'Train_GCC-training.tsv'
+            coco2017_file = self.data_dir / 'mscoco' / 'annotations' / 'captions_train2017.json'
+            cc_file = self.data_dir / 'cc' / 'train_cc3m.tsv'
             logging.info(f'read coco2017 text data: {str(coco2017_file)}')
             with cc_file.open('r', encoding='utf8') as f:
                 for content in f.readlines():
@@ -51,11 +51,11 @@ class TextDataset(Dataset):
                 tokenize_text.append(self.tokenizer(text, truncate=True).squeeze())
             return torch.stack(tokenize_text)
         else:
-            val_image_file_list_path = self.data_dir / 'COCO' / 'val2017'
+            val_image_file_list_path = self.data_dir / 'mscoco' / 'val2017'
             path_list = []
             tokenized_sentence = []
             captions = []
-            file_dir = self.data_dir / 'COCO' / 'annotations' / 'captions_val2017.json'
+            file_dir = self.data_dir / 'mscoco' / 'annotations' / 'captions_val2017.json'
             with file_dir.open('r', encoding='utf8') as f:
                 data = json.load(f)
             images = data['images']
@@ -75,8 +75,8 @@ class TextDataset(Dataset):
             return captions, tokenized_sentence, path_list, image_rep
 
     def load(self, overwirite):
-        cache_path = self.cache_dir / f'cache-train-{self.teacher_name}.pth' \
-            if self.train else self.cache_dir / f'cache-val-{self.teacher_name}.pth'
+        cache_path = self.cache_dir / f'text-cache-train-{self.teacher_name.replace("/", "-")}.pth' \
+            if self.train else self.cache_dir / f'text-cache-val-{self.teacher_name.replace("/", "-")}.pth'
 
         if overwirite or not cache_path.exists():
             logging.info('重写/不存在缓存文件，开始处理文件')
