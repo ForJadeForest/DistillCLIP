@@ -1,17 +1,20 @@
 from random import random
 
+import numpy as np
 import torch
 from scipy.io import loadmat
 import os
 
-from PIL.Image import Image
+from PIL import Image
 from torchvision.transforms import transforms
-from .clip_score import get_clip_score, get_refonlyclipscore
-from .utils import get_model
+from test.clip_score import get_clip_score, get_refonlyclipscore
+from test.utils import get_model
+from torch.utils.data import Dataset
+
+idx2cat = {1: 'HC', 2: 'HI', 3: 'HM', 4: 'MM'}
 
 
-class Pascal50sDataset(torch.utils.data.Dataset):
-    idx2cat = {1: 'HC', 2: 'HI', 3: 'HM', 4: 'MM'}
+class Pascal50sDataset(Dataset):
 
     def __init__(self,
                  root: str = "data/Pascal-50s/",
@@ -92,14 +95,16 @@ class Pascal50sDataset(torch.utils.data.Dataset):
 
     def get_image(self, filename: str):
         path = os.path.join(self.voc_path, "JPEGImages")
-        img = Image.open(os.path.join(path, filename)).convert('RGB')
-        return self.transforms(img)
+        path = os.path.join(path, filename)
+        # img = Image.open(os.path.join(path, filename)).convert('RGB')
+        # return self.transforms(img)
+        return path
 
     def __getitem__(self, idx: int):
         vid, a, b = [x[0] for x in self.data[idx]]
         label = self.labels[idx]
-        # feat = self.get_image(vid)
-        feat = 0
+        feat = self.get_image(vid)
+        # feat = 0
         a = a.strip()
         b = b.strip()
         references = self.references[idx]
@@ -107,38 +112,65 @@ class Pascal50sDataset(torch.utils.data.Dataset):
         return feat, a, b, references, category, label
 
 
-if __name__ == '__main__':
-    dataset = Pascal50sDataset(root='test_dataset/Pascal-50s')
-    model = get_model()
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    idx2cat = dataset.idx2cat
+def cal_acc(pascal_dataset):
     keys = idx2cat.values()
+    image_path_list = []
+    candidate1_list = []
+    candidate2_list = []
+    refs_list = []
+    category_list = []
+    label_list = []
     correct, ref_correct, total = ({k: 0 for k in keys} for _ in range(3))
-    for data in dataset:
+    for data in pascal_dataset:
         image, candidate1, candidate2, refs, category, label = data
-        score1 = get_clip_score(model, image, candidate1, device)
-        score2 = get_clip_score(model, image, candidate2, device)
-        ref_score1 = get_refonlyclipscore(model, refs, candidate1, device)
-        ref_score2 = get_refonlyclipscore(model, refs, candidate1, device)
-        if score1 > score2:
-            pred = 0
-        else:
-            pred = 1
-
-        if ref_score1 > ref_score2:
-            ref_pred = 0
-        else:
-            ref_pred = 1
-
+        image_path_list.append(image)
+        candidate1_list.append(candidate1)
+        candidate2_list.append(candidate2)
+        refs_list.append(refs)
+        category_list.append(category)
+        label_list.append(label)
+    with torch.autocast('cuda'):
+        score1 = get_clip_score(model, image_path_list, candidate1_list, device)[1]
+        score2 = get_clip_score(model, image_path_list, candidate2_list, device)[1]
+        # ref_score1 = get_refonlyclipscore(model, refs, [candidate1], device)
+        # ref_score2 = get_refonlyclipscore(model, refs, [candidate1], device)
+    preds = (score1 < score2).astype('int').tolist()
+    for pred, label, category in zip(preds, label_list, category_list):
         if pred == label:
             correct[idx2cat[category]] += 1
-        if ref_pred == 1:
-            ref_correct[idx2cat[category]] += 1
 
         total[idx2cat[category]] += 1
 
+    acc = {}
     for k, v in correct.items():
-        print(f'the result {k} acc: {v / total[k]}')
+        acc[k] = v / total[k]
 
     for k, v in correct.items():
-        print(f'the result {k} with refs acc: {v / total[k]}')
+        print(f'the result {k} acc: {v / total[k]}')
+    return acc
+
+
+if __name__ == '__main__':
+    device = 'cuda:4' if torch.cuda.is_available() else 'cpu'
+    image_cpk = ''
+    text_cpk = ''
+    model = get_model(device)
+
+    repeat_times = 10
+    acc_list = []
+    for i in range(repeat_times):
+        dataset = Pascal50sDataset(root='test_dataset/Pascal-50s', voc_path='/data/pyz/data/VOC/VOC2010')
+        acc = cal_acc(dataset)
+        acc_list.append(acc)
+
+    res = {k: 0 for k in idx2cat.values()}
+    for key in idx2cat.values():
+        for acc in acc_list:
+            res[key] += acc[key]
+        res[key] /= repeat_times
+
+    print('the final result: ')
+    for k, v in res.items():
+        print(f'the result {k} acc: {v}')
+
+    print(f'the mean value of the acc is {sum(res.values()) / len(res.values())}')

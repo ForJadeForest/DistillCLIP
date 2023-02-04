@@ -30,7 +30,7 @@ def compute_human_correlation(input_json, image_directory, tauvariant='c'):
             if np.isnan(human_judgement['rating']):
                 print('NaN')
                 continue
-            images.append(image_directory + '/' + v['image_path'])
+            images.append(image_directory + '/' + v['image_path'].replace('Flicker8k', 'Flickr8k'))
             refs.append([' '.join(gt.split()) for gt in v['ground_truth']])
             candidates.append(' '.join(human_judgement['caption'].split()))
             human_scores.append(human_judgement['rating'])
@@ -78,14 +78,17 @@ def compute_human_correlation(input_json, image_directory, tauvariant='c'):
 
 
 def main():
-    if not os.path.exists('flickr8k/flickr8k.json'):
+    image_directory = '/data/pyz/data/flickr8k'
+    if not os.path.exists('test_dataset/flickr8k/flickr8k.json'):
         print('Please run download.py')
         quit()
     print('Flickr8K Expert (Tau-c)')
-    compute_human_correlation('flickr8k/flickr8k.json', 'flickr8k/', tauvariant='c')
+    flickr8k_expert_file = os.path.join(image_directory, 'flickr8k.json')
+    compute_human_correlation(flickr8k_expert_file, image_directory, tauvariant='c')
 
     print('Flickr8K CrowdFlower (Tau-b)')
-    compute_human_correlation('flickr8k/crowdflower_flickr8k.json', 'flickr8k/', tauvariant='b')
+    flickr8k_crowdflower_file = os.path.join(image_directory, 'crowdflower_flickr8k.json')
+    compute_human_correlation(flickr8k_crowdflower_file, image_directory, tauvariant='b')
 
 
 if __name__ == '__main__':
