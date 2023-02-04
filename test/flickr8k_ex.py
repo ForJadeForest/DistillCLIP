@@ -35,7 +35,7 @@ def compute_human_correlation(input_json, image_directory, tauvariant='c'):
             candidates.append(' '.join(human_judgement['caption'].split()))
             human_scores.append(human_judgement['rating'])
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = "cuda:4" if torch.cuda.is_available() else "cpu"
     if device == 'cpu':
         warnings.warn(
             'CLIP runs in full float32 on CPU. Results in paper were computed on GPU, which uses float16. '

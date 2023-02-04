@@ -52,10 +52,11 @@ trainer:
   strategy: 'ddp_find_unused_parameters_false'
   max_epochs: 500
   precision: 16
-  #  limit_train_batches: 1
+#    limit_train_batches: 1
   log_every_n_steps: 100
   enable_progress_bar: True
   check_val_every_n_epoch: 1
+
 
   logger:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
