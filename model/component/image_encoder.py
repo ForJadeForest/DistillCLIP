@@ -47,7 +47,9 @@ class ImageEncoder(nn.Module):
             nn.init.normal_(block.mlp.c_fc.weight, std=fc_std)
             nn.init.normal_(block.mlp.c_proj.weight, std=proj_std)
 
-    def encode_image(self, image, control_output: ControlOutput):
+    def encode_image(self, image, control_output: ControlOutput = None):
+        if control_output is None:
+            control_output = ControlOutput()
         vit_output: VisionTransformerOutput = self.visual(image, control_output)
         if self.is_student and not self.no_trans:
             if control_output.need_rep:

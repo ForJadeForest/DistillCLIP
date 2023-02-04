@@ -19,7 +19,7 @@ from .component.weight_share_model import RepeatVisionTransformer
 
 class DistillModel(pl.LightningModule):
     def __init__(self, student_encoder: torch.nn.Module,
-                 teacher_name: str, loss_control_para: Dict, download_root: str, freeze_embed: bool,
+                 teacher_name: str, loss_control_para: Dict, download_root: str, freeze_embed: bool = False,
                  teacher_need_layers: List = None, model_type: str = 'image', map_type: str = None, init_type=None,
                  warm_steps=10, total_steps=200, weight_decay=1e-3, lr: float = 1e-3, norm: bool = False,
                  unfreeze_epoch=None):
@@ -189,7 +189,7 @@ class DistillModel(pl.LightningModule):
     def log_acc(self, logits, section, prefix):
         label = torch.arange(logits.shape[0], device=self.device)
         for k in self.k_list:
-            acc = accuracy(logits, label, top_k=k)
+            acc = accuracy(logits, label, top_k=k, task='multiclass', num_classes=logits.shape[0])
             self.log(f'{section}/{prefix}_acc_top{k}', acc, batch_size=logits.shape[0], sync_dist=True)
 
     def unfreeze_embed(self):
