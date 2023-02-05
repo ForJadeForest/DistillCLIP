@@ -1,15 +1,29 @@
 import torch
 from model.component.clip_model import CLIPModel
 from model.utils import teacher_load
+from model.component.weight_share_model import RepeatVisionTransformer, RepeatTextTransformer
 
 
 def load_image_encoder(cpk_path):
-    return torch.load(cpk_path)
+    cpk = torch.load(cpk_path)
+    visual_encoder = RepeatVisionTransformer(
+        img_size=224, patch_size=32, in_chans=3, out_dim=512, embed_dim=768, depth=6, num_heads=24, mlp_ratio=4.0,
+        qkv_bias=True, repeated_times=2, use_transform=True
+    )
+    state_dict = {k.replace('student.', ''): v for k, v in cpk['state_dict'].items() if k.startswith('student')}
+    visual_encoder.load_state_dict(state_dict)
+    return visual_encoder
 
 
 def load_text_encoder(cpk_path):
-    return torch.load(cpk_path)
-
+    cpk = torch.load(cpk_path)
+    text_encoder = RepeatTextTransformer(
+        depth=4, repeated_times=2,
+        use_transform=True
+    )
+    state_dict = {k.replace('student.', ''): v for k, v in cpk['state_dict'].items() if k.startswith('student')}
+    text_encoder.load_state_dict(state_dict)
+    return text_encoder
 
 def get_model(device, image_path=None, text_path=None, use_fp16=True) -> CLIPModel:
     """

@@ -1,12 +1,12 @@
 import os
-from random import random
+from random import random, sample
 
 import torch
 from scipy.io import loadmat
 from torch.utils.data import Dataset
 from torchvision.transforms import transforms
-
-from test.clip_score import get_clip_score, get_refonlyclipscore
+import numpy as np
+from test.clip_score import get_clip_score, get_ref_clip_score
 from test.utils import get_model
 
 idx2cat = {1: 'HC', 2: 'HI', 3: 'HM', 4: 'MM'}
@@ -145,8 +145,7 @@ def logout(acc_list):
     print('=' * 80)
 
 
-def cal_clip_score(pascal_dataset):
-    keys = idx2cat.values()
+def cal_clip_score(pascal_dataset, model):
     image_path_list = []
     candidate1_list = []
     candidate2_list = []
@@ -158,32 +157,27 @@ def cal_clip_score(pascal_dataset):
         image_path_list.append(image)
         candidate1_list.append(candidate1)
         candidate2_list.append(candidate2)
-        refs_list.append(refs)
+        # refs_list.append(refs)
+        refs_list.append(sample(refs, 5))
         category_list.append(category)
         label_list.append(label)
     with torch.autocast('cuda'):
         score1 = get_clip_score(model, image_path_list, candidate1_list, device)[1]
         score2 = get_clip_score(model, image_path_list, candidate2_list, device)[1]
-        ref_score1 = get_refonlyclipscore(model, refs_list, candidate1_list, device)[1]
-        ref_score2 = get_refonlyclipscore(model, refs_list, candidate2_list, device)[1]
+        ref_score1 = np.array(get_ref_clip_score(model, image_path_list, refs_list, candidate1_list, device))
+        ref_score2 = np.array(get_ref_clip_score(model, image_path_list, refs_list, candidate2_list, device))
 
     acc = cal_acc(score1, score2, label_list, category_list)
     ref_acc = cal_acc(ref_score1, ref_score2, label_list, category_list)
     return acc, ref_acc
 
 
-if __name__ == '__main__':
-    device = 'cuda:4' if torch.cuda.is_available() else 'cpu'
-    image_cpk = ''
-    text_cpk = ''
-    model = get_model(device)
-
-    repeat_times = 10
+def cal_one_model_res(clip_model, repeat_times):
     acc_list = []
     ref_acc_list = []
     for i in range(repeat_times):
         dataset = Pascal50sDataset(root='test_dataset/Pascal-50s', voc_path='/data/pyz/data/VOC/VOC2010')
-        acc, ref_acc = cal_clip_score(dataset)
+        acc, ref_acc = cal_clip_score(dataset, clip_model)
         acc_list.append(acc)
         ref_acc_list.append(ref_acc)
 
@@ -191,3 +185,23 @@ if __name__ == '__main__':
     logout(acc_list)
     print('The ref acc result')
     logout(ref_acc_list)
+
+
+if __name__ == '__main__':
+    device = 'cuda:4' if torch.cuda.is_available() else 'cpu'
+    repeat_times = 5
+
+    print('\n' + '=' * 80)
+    print('Now is original version')
+    image_path = None
+    text_path = None
+    model = get_model(device, image_path, text_path)
+
+    cal_one_model_res(model, repeat_times)
+
+    print('\n' + '=' * 80)
+    print('Now is distillation version')
+    image_path = '/home/pyz32/code/Dis_CLIP/test/test_checkpoint/image/ws_best/234-val_acc0.262-loss0.11146.ckpt'
+    text_path = '/home/pyz32/code/Dis_CLIP/CLIPDistillation/k0n6x46s/checkpoints/85-val_acc0.301-loss0.03612.ckpt'
+    model = get_model(device, image_path, text_path)
+    cal_one_model_res(model, repeat_times)
