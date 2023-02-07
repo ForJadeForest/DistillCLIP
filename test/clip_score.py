@@ -104,7 +104,7 @@ class CLIPImageDataset(torch.utils.data.Dataset):
         return len(self.data)
 
 
-def extract_all_captions(captions, model, device, batch_size=256, num_workers=8):
+def extract_all_captions(captions, model, device, batch_size=2048, num_workers=8):
     data = torch.utils.data.DataLoader(
         CLIPCapDataset(captions),
         batch_size=batch_size, num_workers=num_workers, shuffle=False)
@@ -117,7 +117,7 @@ def extract_all_captions(captions, model, device, batch_size=256, num_workers=8)
     return all_text_features
 
 
-def extract_all_images(images, model, device, batch_size=64, num_workers=8):
+def extract_all_images(images, model, device, batch_size=2048, num_workers=8):
     data = torch.utils.data.DataLoader(
         CLIPImageDataset(images),
         batch_size=batch_size, num_workers=num_workers, shuffle=False)
@@ -125,7 +125,7 @@ def extract_all_images(images, model, device, batch_size=64, num_workers=8):
     with torch.no_grad():
         for b in tqdm.tqdm(data):
             b = b['image'].to(device)
-            if device == 'cuda':
+            if 'cuda' in device:
                 b = b.to(torch.float16)
             all_image_features.append(model.encode_image(b).cpu().numpy())
     all_image_features = np.vstack(all_image_features)
@@ -204,12 +204,13 @@ def get_refonlyclipscore(model, references, candidates, device):
 
 
 def get_ref_clip_score(model, images, references, candidates, device, w=2.5):
-    image_feats = extract_all_images(
-        images, model, device, batch_size=64, num_workers=8)
+    if isinstance(images, list):
+        # need to extract image features
+        images = extract_all_images(images, model, device)
 
     # get image-text clipscore
     _, per_instance_image_text, candidate_feats = get_clip_score(
-        model, image_feats, candidates, device, w)
+        model, images, candidates, device, w)
 
     # get text-text clipscore
     _, per_instance_text_text = get_refonlyclipscore(

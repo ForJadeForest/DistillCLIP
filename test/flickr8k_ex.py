@@ -80,7 +80,7 @@ def main():
             'If you\'re reporting results on CPU, please note this when you report.')
 
     print('Now is the Distillation model')
-    image_path = '/home/pyz32/code/Dis_CLIP/test/test_checkpoint/image/ws_best/234-val_acc0.262-loss0.11146.ckpt'
+    image_path = '/home/pyz32/code/Dis_CLIP/test/test_checkpoint/image/ws_no_smd/174-val_acc0.243-loss0.13381.ckpt'
     text_path = '/home/pyz32/code/Dis_CLIP/CLIPDistillation/k0n6x46s/checkpoints/85-val_acc0.301-loss0.03612.ckpt'
     model = get_model(device, image_path, text_path)
 
