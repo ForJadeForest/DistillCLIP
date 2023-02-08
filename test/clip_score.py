@@ -220,7 +220,7 @@ def get_ref_clip_score(model, images, references, candidates, device, w=2.5):
     refclipscores = 2 * per_instance_image_text * per_instance_text_text / (
             per_instance_image_text + per_instance_text_text)
 
-    return refclipscores
+    return np.mean(refclipscores), refclipscores
 
 
 def main():

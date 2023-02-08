@@ -12,13 +12,14 @@ model2company = {
     'rakshithShetty': 'PicSOM',
     # 作者在附录中提到JunhuaMao 和mRNN_Share.JMao的val输出数据是一样的
     # 但是在测试集上的评分有所差异。因此在junhuaMao上也用m-RNN进行结果的计算
-    'junhua.mao': 'm-RNN',
-    # 'junhuaMao': 'm-RNN (Baidu/ UCLA)',
+    # 'junhua.mao': 'm-RNN',
+    'junhua.mao': 'm-RNN (Baidu/ UCLA)',
     'OriolVinyals': 'Google',
     'myamaguchi': 'MIL',
     'Q.Wu': 'ACVT',
     'jeffdonahue': 'Berkeley LRCN',
-    'mRNN_share.JMao': 'm-RNN',
+    # 'mRNN_share.JMao': 'm-RNN',
+    'mRNN_share.JMao': 'm-RNN (Baidu/ UCLA)',
     'TsinghuaBigeye': 'Tsinghua Bigeye',
     'ryank': 'MLBL',
     'kelvin_xu': 'Montreal/Toronto'
@@ -36,7 +37,7 @@ def filename2id(filename):
 def init_image_features(clip_model, images_root_dir, device):
     images_id_list = sorted(list(images_root_dir.iterdir()))
     images_path = [images_root_dir / p for p in images_id_list]
-    with torch.autocast(device[:4]):
+    with torch.autocast('cuda' if 'cuda' in device else 'cpu'):
         image_features = extract_all_images(images_path, clip_model, device=device)
     return images_id_list, image_features
 
@@ -69,6 +70,7 @@ def cal_metric(model_name, clip_model, images_filename, device, image_features):
 def main():
     device = 'cuda:4' if torch.cuda.is_available() else 'cpu'
     clip_model = get_model(device)
+
     images_root_dir = Path(r'/data/pyz/data/mscoco/val2014')
     images_filename, images_features = init_image_features(clip_model, images_root_dir, device)
 
@@ -101,9 +103,9 @@ def main():
     print(f'CLIPScore for M2 pearsonr: {m2_pearsonr}, p-value: {m2_p_value}')
 
     ref_m1_pearsonr, m1_p_value = stats.pearsonr(ref_clip_score_res, human_metric_res_m1)
-    print(f'CLIPScore for M1 pearsonr: {ref_m1_pearsonr}, p-value: {m1_p_value}')
+    print(f'Ref CLIPScore for M1 pearsonr: {ref_m1_pearsonr}, p-value: {m1_p_value}')
     ref_m2_pearsonr, m2_p_value = stats.pearsonr(ref_clip_score_res, human_metric_res_m2)
-    print(f'CLIPScore for M2 pearsonr: {ref_m2_pearsonr}, p-value: {m2_p_value}')
+    print(f'Ref CLIPScore for M2 pearsonr: {ref_m2_pearsonr}, p-value: {m2_p_value}')
 
 if __name__ == '__main__':
     main()
