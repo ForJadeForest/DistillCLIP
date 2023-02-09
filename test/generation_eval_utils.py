@@ -25,6 +25,7 @@ def get_all_metrics(refs, cands, return_per_cap=False):
                                (Spice(), 'spice')]
 
     for scorer, name in pycoco_eval_cap_scorers:
+        print(name)
         overall, per_cap = pycoco_eval(scorer, refs, cands)
         if return_per_cap:
             metrics.append(per_cap)
