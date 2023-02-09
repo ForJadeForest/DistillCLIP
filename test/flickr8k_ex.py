@@ -5,14 +5,12 @@ import sys
 
 sys.path.append('../')
 import clip_score
-import generation_eval_utils
 import scipy.stats
 import os
 import json
 import numpy as np
 import torch
-import warnings
-from test.utils import get_model
+from test.utils import get_model, get_all_metrics, get_args
 
 
 def compute_human_correlation(model, device, input_json, image_directory, tauvariant='c'):
@@ -49,8 +47,8 @@ def compute_human_correlation(model, device, input_json, image_directory, tauvar
 
     # F-score
     refclipscores = 2 * per_instance_image_text * per_instance_text_text / (
-                per_instance_image_text + per_instance_text_text)
-    other_metrics = generation_eval_utils.get_all_metrics(refs, candidates, return_per_cap=True)
+            per_instance_image_text + per_instance_text_text)
+    other_metrics = get_all_metrics(refs, candidates, return_per_cap=True)
 
     print('CLIPScore Tau-{}: {:.3f}'.format(tauvariant, 100 *
                                             scipy.stats.kendalltau(per_instance_image_text, human_scores,
@@ -70,43 +68,29 @@ def compute_human_correlation(model, device, input_json, image_directory, tauvar
                                          100 * scipy.stats.kendalltau(v, human_scores, variant=tauvariant)[0]))
 
 
+def flickr8k_ex(model, device, root_dir):
+    print('Flickr8K Expert (Tau-c)')
+    flickr8k_expert_file = os.path.join(root_dir, 'flickr8k.json')
+    compute_human_correlation(model, device, flickr8k_expert_file, root_dir, tauvariant='c')
+
+    print('Flickr8K CrowdFlower (Tau-b)')
+    flickr8k_crowdflower_file = os.path.join(root_dir, 'crowdflower_flickr8k.json')
+    compute_human_correlation(model, device, flickr8k_crowdflower_file, root_dir, tauvariant='b')
+
+
 def main():
-    image_directory = '/data/pyz/data/flickr8k'
-
-    device = "cuda:4" if torch.cuda.is_available() else "cpu"
-    if device == 'cpu':
-        warnings.warn(
-            'CLIP runs in full float32 on CPU. Results in paper were computed on GPU, which uses float16. '
-            'If you\'re reporting results on CPU, please note this when you report.')
-
-    print('Now is the Distillation model')
-    image_path = '/home/pyz32/code/Dis_CLIP/test/test_checkpoint/image/ws_no_smd/174-val_acc0.243-loss0.13381.ckpt'
-    text_path = '/home/pyz32/code/Dis_CLIP/CLIPDistillation/k0n6x46s/checkpoints/85-val_acc0.301-loss0.03612.ckpt'
-    model = get_model(device, image_path, text_path)
-
-    if not os.path.exists('test_dataset/flickr8k/flickr8k.json'):
-        print('Please run download.py')
-        quit()
-    print('Flickr8K Expert (Tau-c)')
-    flickr8k_expert_file = os.path.join(image_directory, 'flickr8k.json')
-    compute_human_correlation(model, device, flickr8k_expert_file, image_directory, tauvariant='c')
-
-    print('Flickr8K CrowdFlower (Tau-b)')
-    flickr8k_crowdflower_file = os.path.join(image_directory, 'crowdflower_flickr8k.json')
-    compute_human_correlation(model, device, flickr8k_crowdflower_file, image_directory, tauvariant='b')
-
-    print('Now is the Original model')
-    del model
+    root_dir = '/data/pyz/data/flickr8k'
+    args = get_args()
+    device = args.device
+    print('=' * 10 + 'begin original model flickr8k ex!' + '=' * 10)
     model = get_model(device)
+    flickr8k_ex(model, device, root_dir)
 
-    print('Flickr8K Expert (Tau-c)')
-    flickr8k_expert_file = os.path.join(image_directory, 'flickr8k.json')
-    compute_human_correlation(model, device, flickr8k_expert_file, image_directory, tauvariant='c')
-
-    print('Flickr8K CrowdFlower (Tau-b)')
-    flickr8k_crowdflower_file = os.path.join(image_directory, 'crowdflower_flickr8k.json')
-    compute_human_correlation(model, device, flickr8k_crowdflower_file, image_directory, tauvariant='b')
-
+    print('=' * 10 + 'begin distillation model flickr8k ex!' + '=' * 10)
+    image_path = args.image_path
+    text_path = args.text_path
+    model = get_model(device, image_path, text_path)
+    flickr8k_ex(model, device, root_dir)
 
 if __name__ == '__main__':
     main()

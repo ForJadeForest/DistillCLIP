@@ -3,7 +3,7 @@ from pathlib import Path
 import pandas as pd
 from scipy import stats
 import torch.cuda
-from utils import get_model
+from utils import get_model, get_args
 from clip_score import get_clip_score, extract_all_images, get_ref_clip_score
 
 model2company = {
@@ -11,7 +11,7 @@ model2company = {
     'karpathy': 'NeuralTalk',
     'rakshithShetty': 'PicSOM',
     # 作者在附录中提到JunhuaMao 和mRNN_Share.JMao的val输出数据是一样的
-    # 但是在测试集上的评分有所差异。因此在junhuaMao上也用m-RNN进行结果的计算
+    # 但是在测试集上的评分有所差异。因此在junhuaMao上也用m-RNN (Baidu/ UCLA)进行结果的计算
     # 'junhua.mao': 'm-RNN',
     'junhua.mao': 'm-RNN (Baidu/ UCLA)',
     'OriolVinyals': 'Google',
@@ -26,7 +26,6 @@ model2company = {
 }
 
 model_list = model2company.keys()
-
 
 def filename2id(filename):
     import re
@@ -67,12 +66,9 @@ def cal_metric(model_name, clip_model, images_filename, device, image_features):
     return res, ref_res
 
 
-def main():
-    device = 'cuda:4' if torch.cuda.is_available() else 'cpu'
-    clip_model = get_model(device)
-
+def cal_coco_ex(model, device):
     images_root_dir = Path(r'/data/pyz/data/mscoco/val2014')
-    images_filename, images_features = init_image_features(clip_model, images_root_dir, device)
+    images_filename, images_features = init_image_features(model, images_root_dir, device)
 
     human_metric = pd.read_csv('./test_dataset/coco_captioning_challenge/leaderboard.csv').dropna(axis=1)
     human_metric = human_metric.set_index('Unnamed: 1').T
@@ -81,7 +77,7 @@ def main():
     human_metric_res_m1 = []
     human_metric_res_m2 = []
     for model_name in model_list:
-        mean_score, ref_mean_score = cal_metric(model_name, clip_model, images_filename, device, images_features)
+        mean_score, ref_mean_score = cal_metric(model_name, model, images_filename, device, images_features)
         clip_score_res.append(mean_score)
         ref_clip_score_res.append(ref_mean_score)
         human_metric_res_m1.append(human_metric[model2company[model_name]]['M1'])
@@ -106,6 +102,21 @@ def main():
     print(f'Ref CLIPScore for M1 pearsonr: {ref_m1_pearsonr}, p-value: {m1_p_value}')
     ref_m2_pearsonr, m2_p_value = stats.pearsonr(ref_clip_score_res, human_metric_res_m2)
     print(f'Ref CLIPScore for M2 pearsonr: {ref_m2_pearsonr}, p-value: {m2_p_value}')
+
+
+def main():
+    args = get_args()
+    device = args.device
+    clip_model = get_model(device, use_fp16=args.fp16)
+    print('=' * 10 + 'begin original model coco ex!' + '=' * 10)
+    cal_coco_ex(clip_model, device)
+
+    image_path = args.image_path
+    text_path = args.text_path
+    clip_model = get_model(device, image_path, text_path, use_fp16=args.fp16)
+    print('=' * 10 + 'begin distillation model coco ex!' + '=' * 10)
+    cal_coco_ex(clip_model, device)
+
 
 if __name__ == '__main__':
     main()

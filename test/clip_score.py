@@ -8,23 +8,23 @@ Code for CLIPScore (https://arxiv.org/abs/2104.08718)
 }
 '''
 import argparse
-import clip
-import torch
-from PIL import Image
-from sklearn.preprocessing import normalize
-from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize
-import torch
-import tqdm
-import numpy as np
-import sklearn.preprocessing
 import collections
+import json
 import os
 import pathlib
-import json
-import generation_eval_utils
-import pprint
 import warnings
+
+import clip
+import numpy as np
+import sklearn.preprocessing
+import torch
+import tqdm
+from PIL import Image
 from packaging import version
+from sklearn.preprocessing import normalize
+from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize
+
+from utils import get_all_metrics
 
 
 def parse_args():
@@ -98,7 +98,7 @@ class CLIPImageDataset(torch.utils.data.Dataset):
         c_data = self.data[idx]
         image = Image.open(c_data)
         image = self.preprocess(image)
-        return {'image':image}
+        return {'image': image}
 
     def __len__(self):
         return len(self.data)
@@ -145,7 +145,7 @@ def get_clip_score(model, images, candidates, device, w=2.5):
 
     candidates = extract_all_captions(candidates, model, device)
 
-    #as of numpy 1.21, normalize doesn't work properly for float16
+    # as of numpy 1.21, normalize doesn't work properly for float16
     if version.parse(np.__version__) < version.parse('1.21'):
         images = sklearn.preprocessing.normalize(images, axis=1)
         candidates = sklearn.preprocessing.normalize(candidates, axis=1)
@@ -153,10 +153,10 @@ def get_clip_score(model, images, candidates, device, w=2.5):
         warnings.warn(
             'due to a numerical instability, new numpy normalization is slightly different than paper results. '
             'to exactly replicate paper results, please use numpy version less than 1.21, e.g., 1.20.3.')
-        images = images / np.sqrt(np.sum(images**2, axis=1, keepdims=True))
-        candidates = candidates / np.sqrt(np.sum(candidates**2, axis=1, keepdims=True))
+        images = images / np.sqrt(np.sum(images ** 2, axis=1, keepdims=True))
+        candidates = candidates / np.sqrt(np.sum(candidates ** 2, axis=1, keepdims=True))
 
-    per = w*np.clip(np.sum(images * candidates, axis=1), 0, None)
+    per = w * np.clip(np.sum(images * candidates, axis=1), 0, None)
     return np.mean(per), per, candidates
 
 
@@ -183,8 +183,8 @@ def get_refonlyclipscore(model, references, candidates, device):
             'due to a numerical instability, new numpy normalization is slightly different than paper results. '
             'to exactly replicate paper results, please use numpy version less than 1.21, e.g., 1.20.3.')
 
-        candidates = candidates / np.sqrt(np.sum(candidates**2, axis=1, keepdims=True))
-        flattened_refs = flattened_refs / np.sqrt(np.sum(flattened_refs**2, axis=1, keepdims=True))
+        candidates = candidates / np.sqrt(np.sum(candidates ** 2, axis=1, keepdims=True))
+        flattened_refs = flattened_refs / np.sqrt(np.sum(flattened_refs ** 2, axis=1, keepdims=True))
 
     cand_idx2refs = collections.defaultdict(list)
     for ref_feats, cand_idx in zip(flattened_refs, flattened_refs_idxs):
@@ -261,7 +261,8 @@ def main():
         _, per_instance_text_text = get_refonlyclipscore(
             model, references, candidate_feats, device)
         # F-score
-        refclipscores = 2 * per_instance_image_text * per_instance_text_text / (per_instance_image_text + per_instance_text_text)
+        refclipscores = 2 * per_instance_image_text * per_instance_text_text / (
+                per_instance_image_text + per_instance_text_text)
         scores = {image_id: {'CLIPScore': float(clipscore), 'RefCLIPScore': float(refclipscore)}
                   for image_id, clipscore, refclipscore in
                   zip(image_ids, per_instance_image_text, refclipscores)}
@@ -274,11 +275,11 @@ def main():
 
     if args.references_json:
         if args.compute_other_ref_metrics:
-            other_metrics = generation_eval_utils.get_all_metrics(references, candidates)
+            other_metrics = get_all_metrics(references, candidates)
             for k, v in other_metrics.items():
                 if k == 'bleu':
                     for bidx, sc in enumerate(v):
-                        print('BLEU-{}: {:.4f}'.format(bidx+1, sc))
+                        print('BLEU-{}: {:.4f}'.format(bidx + 1, sc))
                 else:
                     print('{}: {:.4f}'.format(k.upper(), v))
         print('CLIPScore: {:.4f}'.format(np.mean([s['CLIPScore'] for s in scores.values()])))
