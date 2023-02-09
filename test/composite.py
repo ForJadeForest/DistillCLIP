@@ -32,10 +32,11 @@ def compute_human_correlation(input_json, image_directory, tauvariant='c'):
             if np.isnan(human_judgement['rating']):
                 print('NaN')
                 continue
-            images.append(image_directory + '/' + v['image_path']) # image_path need to be changed in preprocess module
+            images.append(v['image_path'])  # image_path need to be changed in preprocess module
             refs.append([' '.join(gt.split()) for gt in v['ground_truth']])
             candidates.append(' '.join(human_judgement['caption'].split()))
             human_scores.append(human_judgement['rating'])
+
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     if device == 'cpu':
@@ -46,7 +47,7 @@ def compute_human_correlation(input_json, image_directory, tauvariant='c'):
     model.eval()
 
     image_feats = clip_score.extract_all_images(
-        images, model, device, batch_size=64, num_workers=8)
+        images, model, device, batch_size=64, num_workers=4)
 
     # get image-text clipscore
     _, per_instance_image_text, candidate_feats = clip_score.get_clip_score(
@@ -59,7 +60,7 @@ def compute_human_correlation(input_json, image_directory, tauvariant='c'):
     # F-score
     refclipscores = 2 * per_instance_image_text * per_instance_text_text / (
                 per_instance_image_text + per_instance_text_text)
-    other_metrics = generation_eval_utils.get_all_metrics(refs, candidates, return_per_cap=True)
+    
 
     print('CLIPScore Tau-{}: {:.3f}'.format(tauvariant, 100 *
                                             scipy.stats.kendalltau(per_instance_image_text, human_scores,
@@ -68,6 +69,7 @@ def compute_human_correlation(input_json, image_directory, tauvariant='c'):
                                                scipy.stats.kendalltau(refclipscores, human_scores, variant=tauvariant)[
                                                    0]))
 
+    other_metrics = generation_eval_utils.get_all_metrics(refs, candidates, return_per_cap=True)
     for k, v in other_metrics.items():
         if k == 'bleu':
             v = v[-1]  # just do BLEU-4
@@ -80,11 +82,11 @@ def compute_human_correlation(input_json, image_directory, tauvariant='c'):
 
 
 def main():
-    if not os.path.exists('composite.json'):
+    if not os.path.exists("/data/ll/composite/composite.json"):
         print('Please run composite_preprocess.py')
         quit()
     print('composite (Tau-c)')
-    compute_human_correlation('composite.json', 'composite/', tauvariant='c')
+    compute_human_correlation("/data/ll/composite/composite.json", 'composite/', tauvariant='c')
 
 
 if __name__ == '__main__':
