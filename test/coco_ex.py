@@ -108,8 +108,9 @@ def main():
     args = get_args()
     device = args.device
     clip_model = get_model(device, use_fp16=args.fp16)
-    print('=' * 10 + 'begin original model coco ex!' + '=' * 10)
-    cal_coco_ex(clip_model, device)
+    if args.use_origin:
+        print('=' * 10 + 'begin original model coco ex!' + '=' * 10)
+        cal_coco_ex(clip_model, device)
 
     image_path = args.image_path
     text_path = args.text_path

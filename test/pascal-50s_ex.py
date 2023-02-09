@@ -89,13 +89,13 @@ if __name__ == '__main__':
     args = get_args()
     device = args.device
     repeat_times = 5
+    if args.use_origin:
+        print('=' * 10 + 'begin original model pascal-50s ex!' + '=' * 10)
+        model = get_model(device, use_fp16=args.fp16)
+        cal_one_model_res(model, repeat_times)
 
     print('=' * 10 + 'begin distillation model pascal-50s ex!' + '=' * 10)
     image_path = args.image_path
     text_path = args.text_path
     model = get_model(device, image_path, text_path, use_fp16=args.fp16)
-    cal_one_model_res(model, repeat_times)
-
-    print('=' * 10 + 'begin original model pascal-50s ex!' + '=' * 10)
-    model = get_model(device, use_fp16=args.fp16)
     cal_one_model_res(model, repeat_times)

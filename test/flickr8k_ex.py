@@ -82,9 +82,10 @@ def main():
     root_dir = '/data/pyz/data/flickr8k'
     args = get_args()
     device = args.device
-    print('=' * 10 + 'begin original model flickr8k ex!' + '=' * 10)
-    model = get_model(device)
-    flickr8k_ex(model, device, root_dir)
+    if args.use_origin:
+        print('=' * 10 + 'begin original model flickr8k ex!' + '=' * 10)
+        model = get_model(device)
+        flickr8k_ex(model, device, root_dir)
 
     print('=' * 10 + 'begin distillation model flickr8k ex!' + '=' * 10)
     image_path = args.image_path
