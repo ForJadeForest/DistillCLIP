@@ -15,3 +15,4 @@ from smd import SMD
 from smd_multi_model import SMDMultiModel
 from vit_kd import ViTKDLoss
 from soft_label import SoftLabel
+from clip_cos_diff import CLIPCosDiff

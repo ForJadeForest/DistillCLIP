@@ -90,6 +90,8 @@ class LossCalculator(nn.Module):
                 loss_function = FineGrainLoss()
             elif n == 'smd':
                 loss_function = SMD(self.smd_tau)
+            elif n == 'cos_diff':
+                loss_function = CLIPCosDiff()
             else:
                 raise ValueError("Invalid Loss Type!")
             losses[n] = loss_function
@@ -139,6 +141,9 @@ class LossCalculator(nn.Module):
             elif loss_name == 'fine_grain':
                 cal_res[loss_name] = loss(stu_out.visual_output.last_layer_output,
                                           stu_out.text_output.last_layer_output)
+            elif loss_name == 'cos_diff':
+                cal_res[loss_name] = 0.5 * (loss(stu_out.i2t_logits, tea_out.i2t_logits) \
+                                            + loss(stu_out.t2i_logits, tea_out.t2i_logits))
 
         loss = 0.5 * (image_loss + text_loss)
         for (loss_name, scale) in self.loss_scale.items():

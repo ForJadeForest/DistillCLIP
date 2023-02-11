@@ -1,8 +1,8 @@
 import torch
 from torch import nn
 
-from ._common import Transformer, LayerNorm
-from .output import ControlOutput, TransformerOutput, TextTransformerOutput
+from model.component._common import Transformer, LayerNorm
+from model.component.output import ControlOutput, TransformerOutput, TextTransformerOutput
 
 
 class TextEncoder(nn.Module):
