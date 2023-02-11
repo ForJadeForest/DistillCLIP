@@ -15,13 +15,14 @@ class SMD(nn.Module):
         if normalized:
             inputs = torch.nn.functional.normalize(inputs, dim=1)
             teacher_inputs = torch.nn.functional.normalize(teacher_inputs, dim=1)
-
+        # 计算teacher inputs的每一个样本之间的距离 dist_t.shape [n, n]
         x1 = torch.pow(teacher_inputs, 2).sum(dim=1, keepdim=True).expand(n, n)
         dist_t = x1 + x1.t()
         dist_t.addmm_(teacher_inputs, teacher_inputs.t(), beta=1, alpha=-2)
         dist_t = dist_t.clamp(min=1e-12).sqrt()  # for numerical stability
 
         # Compute pairwise distance
+        # 计算inputs之间的点和teacher inputs每一个点的距离 dist.shape [n, n]
         x1 = torch.pow(teacher_inputs, 2).sum(dim=1, keepdim=True).expand(n, n)
         x2 = torch.pow(inputs, 2).sum(dim=1, keepdim=True).expand(n, n)
         dist = x1 + x2.t()
