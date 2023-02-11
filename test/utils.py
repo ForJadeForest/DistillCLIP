@@ -61,18 +61,18 @@ def get_model(device, image_path=None, text_path=None, use_fp16=True) -> CLIPMod
 # /data/share/pyz/Dis_CLIP/final/image/ws_best/234-val_acc0.262-loss0.11146.ckpt  (smd image)
 # /data/share/pyz/Dis_CLIP/final/image/ws_no_smd/174-val_acc0.243-loss0.13381.ckpt   (no smd image)
 # /data/share/pyz/Dis_CLIP/final/text/ws_best/225-val_acc0.301-loss0.03477.ckpt  (smd text)
-
+# /data/share/pyz/Dis_CLIP/final/text/ws_text_no_smd/131-val_acc0.300-loss0.03917.ckpt (no smd text)
 
 def get_args():
     parse = argparse.ArgumentParser()
     parse.add_argument('-i', '--image_path', type=str, help='The image encoder checkpoint path',
-                       default='/data/share/pyz/Dis_CLIP/final/image/ws_best/234-val_acc0.262-loss0.11146.ckpt')
+                       default='/data/share/pyz/Dis_CLIP/final/image/ws_no_smd/174-val_acc0.243-loss0.13381.ckpt')
     parse.add_argument('-t', '--text_path', type=str, help='The text encoder checkpoint path',
-                       default='/data/share/pyz/Dis_CLIP/final/text/ws_best/225-val_acc0.301-loss0.03477.ckpt')
+                       default='/data/share/pyz/Dis_CLIP/final/text/ws_text_no_smd/131-val_acc0.300-loss0.03917.ckpt')
     parse.add_argument('-d', '--device', type=str, help='The device(Gpu or Cpu)', default='cuda')
     parse.add_argument('-p', '--fp16', action='store_true', help='Whether use the fp16', default=True)
     parse.add_argument('-o', '--use_origin', action='store_true',
-                       help='Whether use the origin clip model to do test', default=True)
+                       help='Whether use the origin clip model to do test', default=False)
     return parse.parse_args()
 
 
