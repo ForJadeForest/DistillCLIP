@@ -11,7 +11,7 @@ LOSSNAME = ['out_l1', 'out_ce', 'out_kl', 'out_cos', 'embedding_mse', 'attention
             'vit_kd', 'smd'
                       'hard_label', 'soft_label', 'fine_grain', 'logits_mse']
 
-IMAGE_TEXT_LOSS = ['hard_label', 'soft_label', 'logits_mse', 'fine_grain']
+IMAGE_TEXT_LOSS = ['hard_label', 'soft_label', 'logits_mse', 'fine_grain', 'cos_diff']
 
 
 class LossCalculator(nn.Module):
