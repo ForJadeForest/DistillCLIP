@@ -31,8 +31,8 @@ class CLIPModel(nn.Module):
     def forward(self, text, image, control_output: Optional[ControlOutput] = None):
         if control_output is None:
             control_output = ControlOutput()
-        image_output = self.encode_image(image, control_output, self.only_last_rep)
-        text_output = self.encode_text(text, control_output, self.only_last_rep)
+        image_output = self.encode_image(image, control_output)
+        text_output = self.encode_text(text, control_output)
         if not self.only_last_rep:
             image_feature = image_output.last_representation / image_output.last_representation.norm(dim=1,
                                                                                                      keepdim=True)
