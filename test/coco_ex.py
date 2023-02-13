@@ -107,9 +107,9 @@ def cal_coco_ex(model, device):
 def main():
     args = get_args()
     device = args.device
-    clip_model = get_model(device, use_fp16=args.fp16)
     if args.use_origin:
         print('=' * 10 + 'begin original model coco ex!' + '=' * 10)
+        clip_model = get_model(device, use_fp16=args.fp16)
         cal_coco_ex(clip_model, device)
 
     image_path = args.image_path

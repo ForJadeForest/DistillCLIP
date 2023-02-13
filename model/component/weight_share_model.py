@@ -390,8 +390,7 @@ class RepeatTextTransformer(nn.Module):
     def __init__(self, need_layers: Optional[List] = None, vocab_size=49408, context_length=77, out_dim=512,
                  embed_dim=768, depth=12, num_heads=12, mlp_ratio=4.,
                  qkv_bias=False, qk_scale=None, drop_rate=0., attn_drop_rate=0., drop_path_rate=0., rpe_config=None,
-                 repeated_times=1,
-                 use_transform=False):
+                 repeated_times=1, use_transform=False, compression_embedding=False, embedding_compression_dim=256):
         super().__init__()
         norm_layer = nn.LayerNorm
         if need_layers is None:
@@ -400,7 +399,12 @@ class RepeatTextTransformer(nn.Module):
         self.num_classes = out_dim
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
         self.context_length = context_length
-        self.patch_embed = nn.Embedding(vocab_size, embed_dim)
+        if compression_embedding:
+            self.patch_embed = nn.ModuleList([
+                nn.Embedding(vocab_size, embedding_compression_dim),
+                nn.Linear(embedding_compression_dim, embed_dim)])
+        else:
+            self.patch_embed = nn.Embedding(vocab_size, embed_dim)
         self.pos_embed = nn.Parameter(torch.empty(self.context_length, embed_dim))
         self.pos_drop = nn.Dropout(p=drop_rate)
 

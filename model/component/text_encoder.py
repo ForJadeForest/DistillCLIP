@@ -1,13 +1,14 @@
 import torch
 from torch import nn
 
-from ._common import Transformer, LayerNorm
-from .output import ControlOutput, TransformerOutput, TextTransformerOutput
+from model.component._common import Transformer, LayerNorm
+from model.component.output import ControlOutput, TransformerOutput, TextTransformerOutput
 
 
 class TextEncoder(nn.Module):
     def __init__(self, transformer_width, transformer_layers, transformer_heads, context_length, need_layers,
-                 vocab_size, embed_dim, tea_transformer_width=None, is_student=True, drop_out=0.):
+                 vocab_size, embed_dim, tea_transformer_width=None, is_student=True, drop_out=0.,
+                 compression_embedding=False, embedding_compression_dim=256):
         super().__init__()
         self.context_length = context_length
         self.transformer_width = transformer_width
@@ -16,7 +17,12 @@ class TextEncoder(nn.Module):
         self.embed_dim = embed_dim
         self.layers = transformer_layers
 
-        self.token_embedding = nn.Embedding(vocab_size, transformer_width)
+        if compression_embedding:
+            self.token_embedding = nn.ModuleList([
+                nn.Embedding(vocab_size, embedding_compression_dim),
+                nn.Linear(embedding_compression_dim, embed_dim)])
+        else:
+            self.token_embedding = nn.Embedding(vocab_size, transformer_width)
         self.positional_embedding = nn.Parameter(torch.empty(self.context_length, transformer_width))
         self.ln_final = LayerNorm(transformer_width)
         self.text_projection = nn.Parameter(torch.empty(transformer_width, embed_dim))

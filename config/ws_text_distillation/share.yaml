@@ -61,7 +61,7 @@ trainer:
   logger:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
-      dir: '/data/pyz/result/dis_clip'
+      dir: '/data/pyz/result/Dis_CLIP'
       name: 'weight-share-text-baseline'
       project: 'CLIPDistillation'
       log_model: false

@@ -1,5 +1,0 @@
-This ex is to train a Transformer student model of the CLIP.
-
-Just test model parameters.
-
-the teacher model will use eval mode.
