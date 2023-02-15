@@ -12,23 +12,45 @@ from torchmetrics.functional import accuracy
 
 from ._loss import LossCalculator
 from ._metrics import cal_flop, cal_speed
-from ._utils import teacher_load
+from .utils import teacher_load
 from .component.clip_model import CLIPModel
 from .component.image_encoder import ImageEncoder
 from .component.output import CLIPOutput
 from .component.weight_share_model import RepeatVisionTransformer
 
 
+def load_weight(image_student, text_student, load_path):
+    def load_one_model(model: nn.Module, cpk: Optional[str]):
+        if cpk is None:
+            raise ValueError('the cpk is None! if you set the load_path parameter in model,'
+                             ' you should give the image and text checkpoint path')
+        save_res = torch.load(cpk)
+        state_dict = {
+            k.replace('student.', ''): v
+            for k, v in save_res['state_dict'].items() if k.startswith('student')
+        }
+
+        model.load_state_dict(state_dict)
+        return model
+
+    image_student = load_one_model(image_student, load_path['image'])
+    text_student = load_one_model(text_student, load_path['text'])
+    return image_student, text_student
+
+
 class DualDistillModel(pl.LightningModule):
-    def __init__(self, image_student: nn.Module, text_student: nn.Module, teacher_need_layers: List, teacher_name: str,
-                 loss_control_para: Dict, freeze_embed: bool, warm_steps, total_steps, weight_decay, lr: float,
-                 download_root: str, norm=False, unfreeze_epoch: int = None):
+    def __init__(self, image_student: nn.Module, text_student: nn.Module,
+                 loss_control_para: Dict, warm_steps, total_steps, weight_decay, lr: float,
+                 download_root: str, norm=False, teacher_name: str = 'ViT-B/32', freeze_embed: bool = False,
+                 unfreeze_epoch: int = None, load_path: Dict = None, teacher_need_layers: List = None):
         super().__init__()
         self.save_hyperparameters(ignore=['image_student', 'text_student'])
 
         # define model
+        if load_path:
+            image_student, text_student = load_weight(image_student, text_student, load_path)
         self.student = CLIPModel(True, image_student, text_student, norm)
-        self.teacher_name = teacher_name
+
         self.teacher = teacher_load(teacher_name, download_root, 'all', need_layers=teacher_need_layers)
         for p in self.teacher.parameters():
             p.requires_grad = False
@@ -37,8 +59,9 @@ class DualDistillModel(pl.LightningModule):
         self.need_return_para = self.loss_control.get_control_output()
         if freeze_embed:
             self.freeze_image_embedding()
+        self.unfreeze_epoch = unfreeze_epoch
 
-        # define metric
+        # define acc top k
         self.k_list = [i for i in [1, 3, 5, 10, 20, 50]]
 
     def on_train_start(self):
@@ -84,10 +107,10 @@ class DualDistillModel(pl.LightningModule):
         return student_outs, teacher_outs
 
     def on_train_epoch_start(self) -> None:
-        if self.hparams.unfreeze_epoch:
+        if self.unfreeze_epoch:
             if self.current_epoch >= self.unfreeze_epoch:
                 self.unfreeze_embed()
-                self.hparams.unfreeze_epoch = False
+                self.unfreeze_epoch = False
 
     def training_step(self, inputs, batch_idx):
         self.teacher.eval()
@@ -200,7 +223,7 @@ class DualDistillModel(pl.LightningModule):
     def log_acc(self, logits, section, prefix):
         label = torch.arange(logits.shape[0], device=self.device)
         for k in self.k_list:
-            acc = accuracy(logits, label, top_k=k)
+            acc = accuracy(logits, label, top_k=k, task='multiclass', num_classes=logits.shape[0])
             self.log(f'{section}/{prefix}_acc_top{k}', acc, batch_size=logits.shape[0], sync_dist=True)
 
     def unfreeze_embed(self):

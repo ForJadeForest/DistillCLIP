@@ -3,8 +3,8 @@ trainer:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
       dir: '/data/pyz/result/dis_clip'
-      name: 'ws-l1-cos-imagenet'
+      name: 'ws_baseline'
       project: 'CLIPDistillation'
       log_model: false
-      group: image_encoder
-      tags: [ 'weight share', 'change dataset', 'image_encoder' ]
+      group: ws_image_encoder
+      tags: [ 'ws_image_encoder', 'baseline' ]
