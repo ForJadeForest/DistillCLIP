@@ -3,7 +3,7 @@ from pathlib import Path
 import pandas as pd
 from scipy import stats
 import torch.cuda
-from utils import get_model, get_args
+from utils import get_model, get_args, Model_Type_List, total_ex
 from clip_score import get_clip_score, extract_all_images, get_ref_clip_score
 
 model2company = {
@@ -104,20 +104,15 @@ def cal_coco_ex(model, device):
     print(f'Ref CLIPScore for M2 pearsonr: {ref_m2_pearsonr}, p-value: {m2_p_value}')
 
 
-def main():
-    args = get_args()
+def main(args):
     device = args.device
-    if args.use_origin:
-        print('=' * 10 + 'begin original model coco ex!' + '=' * 10)
-        clip_model = get_model(device, use_fp16=args.fp16)
-        cal_coco_ex(clip_model, device)
-
     image_path = args.image_path
     text_path = args.text_path
-    clip_model = get_model(device, image_path, text_path, use_fp16=args.fp16)
-    print('=' * 10 + 'begin distillation model coco ex!' + '=' * 10)
+    clip_path = args.clip_path
+    clip_model = get_model(device, False, clip_path, image_path, text_path, args.fp16)
     cal_coco_ex(clip_model, device)
 
 
 if __name__ == '__main__':
-    main()
+    args = get_args()
+    total_ex(args, main)

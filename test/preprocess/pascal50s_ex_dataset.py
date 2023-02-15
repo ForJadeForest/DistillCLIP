@@ -79,7 +79,7 @@ class Pascal50sDataset(Dataset):
                 print(votes)
                 exit()
             # Ties are broken randomly.
-            label = 0 if vote_a > vote_b + random() - .5 else 1
+            label = 0 if vote_a > vote_b else 1
             self.labels.append(label)
             self.references.append(refs)
 

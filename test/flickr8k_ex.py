@@ -10,7 +10,7 @@ import os
 import json
 import numpy as np
 import torch
-from test.utils import get_model, get_all_metrics, get_args
+from test.utils import get_model, get_all_metrics, total_ex, get_args
 
 
 def compute_human_correlation(model, device, input_json, image_directory, tauvariant='c'):
@@ -78,20 +78,17 @@ def flickr8k_ex(model, device, root_dir):
     compute_human_correlation(model, device, flickr8k_crowdflower_file, root_dir, tauvariant='b')
 
 
-def main():
+def main(args):
     root_dir = '/data/pyz/data/flickr8k'
-    args = get_args()
     device = args.device
-    if args.use_origin:
-        print('=' * 10 + 'begin original model flickr8k ex!' + '=' * 10)
-        model = get_model(device)
-        flickr8k_ex(model, device, root_dir)
-
-    print('=' * 10 + 'begin distillation model flickr8k ex!' + '=' * 10)
     image_path = args.image_path
     text_path = args.text_path
-    model = get_model(device, image_path, text_path)
+    clip_path = args.clip_path
+    load_teacher = args.load_teacher
+    model = get_model(device, load_teacher, clip_path, image_path, text_path)
     flickr8k_ex(model, device, root_dir)
 
+
 if __name__ == '__main__':
-    main()
+    args = get_args()
+    total_ex(args, main)
