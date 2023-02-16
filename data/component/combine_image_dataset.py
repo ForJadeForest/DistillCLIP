@@ -25,7 +25,7 @@ def prepare(prepare_args):
     teacher_name = prepare_args['teacher_name']
     overwrite = prepare_args['overwrite']
 
-    cache_path = cache_dir / f'cache-val-{teacher_name.replace("/", "-")}.pth'
+    cache_path = cache_dir / f'image-cache-val-{teacher_name.replace("/", "-")}.pth'
     if not cache_path.exists() or overwrite:
         logging.info('the cache_dir not exists or you set overwrite')
         val_image_file_list_path = raw_data_dir / 'mscoco' / 'val2017'
@@ -62,11 +62,10 @@ class CombineImageDataset(Dataset):
         self.train = train
         self.img_mean = IMAGE_MEAN
         self.img_std = IMAGE_STD
-        self.cache_dir = Path(cache_dir)
         self.teacher_name = teacher_name
 
+        cache_path = Path(cache_dir) / f'image-cache-val-{teacher_name.replace("/", "-")}.pth'
         if not train:
-            cache_path = self.cache_dir / f'cache-val-{self.teacher_name.replace("/", "-")}.pth'
             self.path_list, self.captions_rep, self.captions = torch.load(cache_path)
         else:
             self.train_image_file_path = Path(combine_dataset_path)
