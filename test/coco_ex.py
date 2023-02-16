@@ -3,7 +3,7 @@ from pathlib import Path
 import pandas as pd
 from scipy import stats
 import torch.cuda
-from utils import get_model, get_args, Model_Type_List, total_ex
+from utils import get_model, get_args, total_ex
 from clip_score import get_clip_score, extract_all_images, get_ref_clip_score
 
 model2company = {
@@ -109,7 +109,7 @@ def main(args):
     image_path = args.image_path
     text_path = args.text_path
     clip_path = args.clip_path
-    clip_model = get_model(device, False, clip_path, image_path, text_path, args.fp16)
+    clip_model = get_model(device, args.load_teacher, clip_path, image_path, text_path, args.fp16)
     cal_coco_ex(clip_model, device)
 
 
