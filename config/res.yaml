@@ -11,12 +11,10 @@ model:
     norm: False
     loss_control_para:
       loss_name: [ 'out_l1', 'out_cos' ]
-      temperature: 1
-      normalize: False
     teacher_name: RN101
     download_root: '/data/pyz/.cache'
     warm_steps: 15
-    total_steps: 1000
+    total_steps: 500
     weight_decay: 1.0e-2
     lr: 1.0e-3
 
@@ -25,16 +23,15 @@ data:
   init_args:
     num_workers: 16
     dataset: 'image_dataset'
-    dataset_name: 'ImageDataset'
-    train_batch_size: 128
+    dataset_name: 'CombineImageDataset'
+    train_batch_size: 256
     val_batch_size: 1250
     dataset_para:
-      data_dir: '/home/pyz/data_tmp'
+      data_dir: '/home/pyz32/data_tmp'
       cache_dir: '/data/pyz/data/cache'
-      train_image_dir: '/home/pyz/combine_dataset/'
+      train_image_dir: '/home/pyz32/data_tmp/combine_dataset/'
       image_use: [ 'coco' ]
-      cache_path: '/data/pyz/.cache/CLIPDistill'
-      #      overwrite: True
+      overwrite: True
       teacher_name: RN101
 
 
@@ -46,17 +43,16 @@ trainer:
   accumulate_grad_batches: 1
   gradient_clip_val: 10
   accelerator: 'gpu'
-  devices: [ 6, 7 ]
-  max_epochs: 1000
+  max_epochs: 500
   log_every_n_steps: 30
   enable_progress_bar: True
   check_val_every_n_epoch: 1
-  precision: 32
+  precision: 16
   logger:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
-      dir: '/data/pyz/result/dis_clip'
-      name: 'resnet'
+      dir: '/data/pyz/result/Dis_CLIP'
+      name: 'resnet-baseline'
       project: 'CLIPDistillation'
       log_model: false
       group: resnet
@@ -72,16 +68,16 @@ trainer:
         max_depth: 2
     - class_path: ModelCheckpoint
       init_args:
-        filename: '{epoch}-val_acc{hp_metric/stu_acc_top1:.3f}-loss{val/loss:.5f}'
-        monitor: 'hp_metric/stu_acc_top1'
+        filename: '{epoch}-val_acc{val_stu_acc/stu_acc_top1:.3f}-loss{val_loss/loss:.5f}'
+        monitor: 'val_stu_acc/stu_acc_top1'
         save_last: True
         save_top_k: 2
         mode: 'max'
         auto_insert_metric_name: false
     - class_path: ModelCheckpoint
       init_args:
-        filename: '{epoch}-val_acc{hp_metric/stu_acc_top1:.3f}-loss{val/loss:.5f}'
-        monitor: 'val/loss'
+        filename: '{epoch}-val_acc{val_stu_acc/stu_acc_top1:.3f}-loss{val_loss/loss:.5f}'
+        monitor: 'val_loss/loss'
         save_last: True
         save_top_k: 2
         mode: 'min'

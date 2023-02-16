@@ -45,7 +45,7 @@ data:
     batch_size: 512
     kwargs:
       data_dir: '/data/pyz/data'
-      dataset_name: 'ImageDataset'
+      dataset_name: 'CombineImageDataset'
       cache_dir: '/data/pyz/data/cache3'
       train_dir: '/data/pyz/combine_dataset/'
 

@@ -34,8 +34,6 @@ model:
     download_root: '/data/pyz/.cache'
     teacher_need_layers: [ 0, 1, 10, 11 ]
     model_type: 'image'
-    map_type: 'begin'
-    init_type: null
     warm_steps: 5
     total_steps: 100
     weight_decay: 1.0e-2
@@ -48,16 +46,19 @@ data:
   class_path: MainDataModule
   init_args:
     num_workers: 6
-    dataset: 'image_dataset'
-    dataset_name: 'ImageDataset'
+    dataset: 'combine_image_dataset'
+    dataset_name: 'CombineImageDataset'
     train_batch_size: 1024
     val_batch_size: 1250
-    dataset_para:
-      data_dir: '/home/pyz32/data_tmp'
-      cache_dir: '/data/pyz/.cache'
-      train_image_dir: '/home/pyz32/data_tmp/combine_dataset/'
-      image_use: [ 'coco', 'imagenet' ]
+    prepare_para:
       overwrite: False
+      raw_data_dir: '/home/pyz32/data_tmp'
+    dataset_para:
+      cache_dir: '/data/pyz/.cache'
+      combine_dataset_path: '/home/pyz32/data_tmp/combine_dataset/'
+      image_use: [ 'coco', 'imagenet' ]
+      teacher_name: 'ViT-B/32'
+
 
 
 
