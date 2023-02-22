@@ -21,8 +21,8 @@ def prepare(prepare_args):
 
     train_cache_path = cache_dir / f'text-cache-train-{teacher_name.replace("/", "-")}.pth'
     val_cache_path = cache_dir / f'text-cache-val-{teacher_name.replace("/", "-")}.pth'
-    logging.info('重写/不存在 Train data 缓存文件，开始处理文件')
     if overwrite or not train_cache_path.exists():
+        logging.info('重写/不存在 Train data 缓存文件，开始处理文件')
         raw_text = []
         coco2017_file = raw_data_dir / 'mscoco' / 'annotations' / 'captions_train2017.json'
         cc_file = raw_data_dir / 'cc' / 'train_cc3m.tsv'
@@ -41,9 +41,10 @@ def prepare(prepare_args):
             tokenize_text.append(tokenize(text, truncate=True).squeeze())
 
         tokenize_text = torch.stack(tokenize_text)
-        torch.save({'data_set': tokenize_text}, train_cache_path)
-    logging.info('重写/不存在 Val data 缓存文件，开始处理文件')
+        torch.save(tokenize_text, train_cache_path)
+
     if overwrite or not val_cache_path.exists():
+        logging.info('重写/不存在 Val data 缓存文件，开始处理文件')
         val_image_file_list_path = raw_data_dir / 'mscoco' / 'val2017'
         path_list = []
         tokenized_sentence = []
@@ -67,6 +68,7 @@ def prepare(prepare_args):
         image_rep = encode_images(path_list, teacher_name)
         torch.save([captions, tokenized_sentence, path_list, image_rep], val_cache_path)
     logging.info('Cache生成完成')
+
 
 class CombineTextDataset(Dataset):
     def __init__(self, cache_dir='cache', train=True, teacher_name='ViT-B/32'):
