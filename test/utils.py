@@ -146,11 +146,11 @@ def change_args(args, model_type):
     return args
 
 
-def total_ex(args, ex_function, **kwargs):
+def total_ex(args_control, ex_function, *args, **kwargs):
     for model_type in Model_Type_List:
         print('=' * 10 + f'[INFO] ==> begin Test {model_type} CLIP Model' + '=' * 10)
-        args = change_args(args, model_type)
-        ex_function(args, **kwargs)
+        args_control = change_args(args_control, model_type)
+        ex_function(args_control, *args, **kwargs)
         print('*==*' * 20)
 
 
