@@ -400,7 +400,7 @@ class RepeatTextTransformer(nn.Module):
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
         self.context_length = context_length
         if compression_embedding:
-            self.patch_embed = nn.ModuleList([
+            self.patch_embed = nn.Sequential(*[
                 nn.Embedding(vocab_size, embedding_compression_dim),
                 nn.Linear(embedding_compression_dim, embed_dim)])
         else:
