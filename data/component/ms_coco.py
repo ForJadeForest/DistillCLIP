@@ -1,8 +1,8 @@
 import os.path
 
 from torchvision import datasets, transforms
-from .rand_augment import RandAugment
-from .utils import IMAGE_MEAN, IMAGE_STD
+from data.component.rand_augment import RandAugment
+from data.component.utils import IMAGE_MEAN, IMAGE_STD
 
 
 class COCODataset(datasets.CocoCaptions):
