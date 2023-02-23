@@ -75,7 +75,6 @@ def compute_human_correlation(input_json, model, device, tauvariant='c'):
 
 
 def composite_ex(clip_model, device, root_dir):
-    print('composite (Tau-c)')
     composite_file = os.path.join(root_dir, 'composite.json')
     if not os.path.exists(composite_file):
         print('Please run composite_preprocess.py')
