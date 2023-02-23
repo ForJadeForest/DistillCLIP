@@ -1,11 +1,10 @@
 import collections
 import json
-# import warnings
 import torch
-import clip
 import clip_score
 from sklearn import metrics
-import utils
+
+from utils import get_model, get_args, get_all_metrics, total_ex
 
 mode = 0  # 1:1 ref 0:4 ref
 
@@ -41,7 +40,6 @@ def computeAccOfFOIL(model, device, mode):
     ref_set = preprocessCOCO()
     pair_set = preprocessFOIL()
 
-
     raw_images = list(pair_set.keys())
 
     for image_id in raw_images:
@@ -63,16 +61,6 @@ def computeAccOfFOIL(model, device, mode):
             images.append('/data/pyz/data/mscoco/val2014/COCO_val2014_' + str(image_id).zfill(12) + '.jpg')
             candidates.append(' '.join(caption[1].split()))
 
-
-    '''device = "cuda" if torch.cuda.is_available() else "cpu"
-
-    if device == 'cpu':
-        warnings.warn(
-            'CLIP runs in full float32 on CPU. Results in paper were computed on GPU, which uses float16. '
-            'If you\'re reporting results on CPU, please note this when you report.')
-    model, transform = clip.load("ViT-B/32", device=device, jit=False)
-    model.eval()'''
-
     with torch.autocast('cuda'):
         image_feats = clip_score.extract_all_images(
             images, model, device, batch_size=1024, num_workers=8)
@@ -89,9 +77,8 @@ def computeAccOfFOIL(model, device, mode):
     refclipscores = 2 * per_instance_image_text * per_instance_text_text / (
             per_instance_image_text + per_instance_text_text)
 
-
     clip_labels = []
-    for num,clip_result in enumerate(per_instance_image_text):
+    for num, clip_result in enumerate(per_instance_image_text):
         if (num % 2) == 0:
             if clip_result >= per_instance_image_text[num + 1]:
                 clip_labels.append(1)
@@ -110,8 +97,7 @@ def computeAccOfFOIL(model, device, mode):
 
     print("Refclipscore accuracy is ", metrics.accuracy_score(labels, refClip_labels))
 
-
-    other_metrics = utils.get_all_metrics(refs, candidates, return_per_cap=False)
+    other_metrics = get_all_metrics(refs, candidates, return_per_cap=False)
     for k, v in other_metrics.items():
         if k == 'bleu':
             v = v[-1]  # just do BLEU-4
@@ -129,22 +115,16 @@ def computeAccOfFOIL(model, device, mode):
         print("{} accuracy is ".format(k), metrics.accuracy_score(labels, metric_labels))
 
 
-def main():
-
-    args = utils.get_args()
+def main(args):
     device = args.device
-    #clip_model = utils.get_model(device, use_fp16=args.fp16)
-    clip_model = []
-    if args.use_origin:
-        print("=" * 10 + "composite Tau-c; Using model: origin" + "=" * 10)
-        computeAccOfFOIL(clip_model, device, mode)
     image_path = args.image_path
     text_path = args.text_path
-    clip_model = utils.get_model(device, image_path, text_path, use_fp16=args.fp16)
-    print("=" * 10 + "composite Tau-c; Using model: distilled" + "=" * 10)
-    computeAccOfFOIL(clip_model, device, mode)
-
+    clip_path = args.clip_path
+    load_teacher = args.load_teacher
+    model = get_model(device, load_teacher, clip_path, image_path, text_path)
+    computeAccOfFOIL(model, device, mode)
 
 
 if __name__ == '__main__':
-    main()
+    args = get_args()
+    total_ex(args, main, repeat_times=1)
