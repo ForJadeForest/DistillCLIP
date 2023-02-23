@@ -88,7 +88,7 @@ def process_composite():
                     if corpus[:2] == '8k':
                         all_corpus.append({
                             'image_id': real_ann[0].split("/")[-1].split(".")[0],
-                            'image_path': '/data/pyz/data/flickr8k/Images/' + real_ann[0].split("/")[-1],   # here need to be updated in real image dataset
+                            'image_path': '/data/pyz/data/flickr8k/Flickr8k_Dataset/' + real_ann[0].split("/")[-1],   # here need to be updated in real image dataset
                             'candidate1' : real_ann[1],
                             'candidate2' : real_ann[2],
                             'candidate3' : real_ann[3],
