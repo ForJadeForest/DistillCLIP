@@ -28,10 +28,12 @@ class MainDataModule(pl.LightningDataModule):
         self.train_batch_size = train_batch_size
         self.val_batch_size = val_batch_size
         self.data_module = self.load_data_module()
+
         self.prepare_function = self.load_prepare()
-        if prepare_para:
-            self.prepare_function_args = prepare_para
-        self.prepare_function_args.update(dataset_para)
+        self.prepare_function_args = prepare_para
+        if self.prepare_function_args:
+            self.prepare_function_args.update(dataset_para)
+
         self.save_hyperparameters()
 
     def prepare_data(self) -> None:
