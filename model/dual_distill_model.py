@@ -42,7 +42,8 @@ class DualDistillModel(pl.LightningModule):
     def __init__(self, image_student: nn.Module, text_student: nn.Module,
                  loss_control_para: Dict, warm_steps, total_steps, weight_decay, lr: float,
                  download_root: str, norm=False, teacher_name: str = 'ViT-B/32', freeze_embed: bool = False,
-                 unfreeze_epoch: int = None, load_path: Dict = None, teacher_need_layers: List = None):
+                 unfreeze_epoch: int = None, load_path: Dict = None, teacher_need_layers: List = None,
+                 freeze_prefix: List = None):
         super().__init__()
         self.save_hyperparameters(ignore=['image_student', 'text_student'])
 
@@ -61,6 +62,7 @@ class DualDistillModel(pl.LightningModule):
             self.freeze_image_embedding()
         self.unfreeze_epoch = unfreeze_epoch
 
+        self.freeze_with_prefix(prefix_list=freeze_prefix)
         # define acc top k
         self.k_list = [i for i in [1, 3, 5, 10, 20, 50]]
 
@@ -229,6 +231,16 @@ class DualDistillModel(pl.LightningModule):
     def unfreeze_embed(self):
         for n, p in self.student.named_parameters():
             p.requires_grad = True
+
+    def freeze_with_prefix(self, prefix_list):
+        if prefix_list is None:
+            return
+
+        for n, p in self.student.named_parameters():
+            for prefix in prefix_list:
+                if n.startswith(prefix):
+                    print(f'freeze {n}')
+                    p.requires_grad = False
 
     def freeze_image_embedding(self):
         freeze_key = ['visual.conv1.weight', 'visual.class_embedding', 'visual.positional_embedding']
