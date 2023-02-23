@@ -27,7 +27,9 @@ model:
 
 
     loss_control_para:
-      loss_name: [ 'out_l1', 'out_cos', 'cos_diff', 'hard_label', 'soft_label' ]
+      loss_name: [ 'out_l1', 'out_cos', 'cos_diff' ]
+      loss_scale:
+        cos_diff: 0.1
       temperature: 2
 
 
@@ -36,7 +38,7 @@ model:
     warm_steps: 15
     total_steps: 300
     weight_decay: 1.0e-3
-    lr: 5.0e-3
+    lr: 1.0e-4
 
 data:
   class_path: MainDataModule
