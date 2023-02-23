@@ -12,7 +12,8 @@ from model.component.clip_model import CLIPModel
 from model.component.weight_share_model import RepeatVisionTransformer, RepeatTextTransformer
 from model.utils import teacher_load
 
-Model_Type_List = ['baseline', 'smd', 'cos_diff', 'teacher']
+Model_Type_List = ['baseline', 'smd', 'cos_diff', 'compression_text', 'teacher']
+# Model_Type_List = ['compression_text']
 
 
 def mini_vision_encoder():
@@ -31,6 +32,16 @@ def mini_text_encoder():
     return text_encoder
 
 
+def mini_compression_text_encoder():
+    text_encoder = RepeatTextTransformer(
+        depth=4, repeated_times=2,
+        use_transform=True,
+        compression_embedding=True,
+        embedding_compression_dim=256
+    )
+    return text_encoder
+
+
 def load_image_encoder(cpk_path):
     cpk = torch.load(cpk_path)
     visual_encoder = mini_vision_encoder()
@@ -40,10 +51,16 @@ def load_image_encoder(cpk_path):
 
 
 def load_text_encoder(cpk_path):
-    cpk = torch.load(cpk_path)
-    text_encoder = mini_text_encoder()
-    state_dict = {k.replace('student.', ''): v for k, v in cpk['state_dict'].items() if k.startswith('student')}
-    text_encoder.load_state_dict(state_dict)
+    try:
+        cpk = torch.load(cpk_path)
+        text_encoder = mini_text_encoder()
+        state_dict = {k.replace('student.', ''): v for k, v in cpk['state_dict'].items() if k.startswith('student')}
+        text_encoder.load_state_dict(state_dict)
+    except:
+        cpk = torch.load(cpk_path)
+        text_encoder = mini_compression_text_encoder()
+        state_dict = {k.replace('student.', ''): v for k, v in cpk['state_dict'].items() if k.startswith('student')}
+        text_encoder.load_state_dict(state_dict)
     return text_encoder
 
 
@@ -77,6 +94,15 @@ def get_model(device, load_teacher=False, clip_path=None, image_path=None, text_
     clip_model.eval()
     clip_model.only_last_rep = True
     return clip_model
+
+
+def load_compression_text_clip_model(args):
+    print("[INFO] ==> Now load the compression_text clip model!")
+    args.image_path = '/data/share/pyz/Dis_CLIP/final/image/ws_no_smd/174-val_acc0.243-loss0.13381.ckpt'
+    args.text_path = '/data/share/pyz/Dis_CLIP/final/text/compression/201-val_acc0.299-loss0.04052.ckpt'
+    args.clip_path = None
+    args.load_teacher = False
+    return args
 
 
 def load_cos_diff_clip_model(args):
@@ -141,8 +167,10 @@ def change_args(args, model_type):
         args = load_cos_diff_clip_model(args)
     elif model_type == 'teacher':
         args = load_original_clip(args)
+    elif model_type == 'compression_text':
+        args = load_compression_text_clip_model(args)
     else:
-        raise ValueError(f'the model_type should in ["baseline", "smd", "cos_diff"], instead of {args.model_type}')
+        raise ValueError(f'the model_type should in {Model_Type_List}, instead of {args.model_type}')
     return args
 
 
