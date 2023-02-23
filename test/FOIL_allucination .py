@@ -5,7 +5,7 @@ import torch
 import clip
 import clip_score
 from sklearn import metrics
-import generation_eval_utils
+from utils import get_all_metrics, get_args, get_model
 
 mode = 1  # 1:1 ref 0:4 ref
 
@@ -110,8 +110,7 @@ def computeAccOfFOIL(mode):
 
     print("Refclipscore accuracy is ", metrics.accuracy_score(labels, refClip_labels))
 
-
-    other_metrics = generation_eval_utils.get_all_metrics(refs, candidates, return_per_cap=True)
+    other_metrics = get_all_metrics(refs, candidates, return_per_cap=True)
     for k, v in other_metrics.items():
         if k == 'bleu':
             v = v[-1]  # just do BLEU-4
@@ -131,7 +130,6 @@ def computeAccOfFOIL(mode):
 
 def main():
     computeAccOfFOIL(mode)
-
 
 
 if __name__ == '__main__':
