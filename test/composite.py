@@ -35,16 +35,9 @@ def compute_human_correlation(input_json, model, device, tauvariant='c'):
             candidates.append(' '.join(human_judgement['caption'].split()))
             human_scores.append(human_judgement['rating'])
 
-    '''device = "cuda" if torch.cuda.is_available() else "cpu"
-    if device == 'cpu':
-        warnings.warn(
-            'CLIP runs in full float32 on CPU. Results in paper were computed on GPU, which uses float16. '
-            'If you\'re reporting results on CPU, please note this when you report.')
-    model, transform = clip.load("ViT-B/32", device=device, jit=False)
-    model.eval()'''
     with torch.autocast('cuda'):
         image_feats = clip_score.extract_all_images(
-            images, model, device, batch_size=64, num_workers=8)
+            images, model, device, batch_size=2048, num_workers=8)
 
         # get image-text clipscore
         _, per_instance_image_text, candidate_feats = clip_score.get_clip_score(
