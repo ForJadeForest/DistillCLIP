@@ -1,13 +1,13 @@
 import collections
 import json
-import warnings
+# import warnings
 import torch
 import clip
 import clip_score
 from sklearn import metrics
-import generation_eval_utils
+import utils
 
-mode = 1  # 1:1 ref 0:4 ref
+mode = 0  # 1:1 ref 0:4 ref
 
 
 # extract reference
@@ -32,7 +32,7 @@ def preprocessFOIL():
     return all_index  # {image_id: [['False',"",foil_id],['True',"",foil_id]]} foil_id == pair
 
 
-def computeAccOfFOIL(mode):
+def computeAccOfFOIL(model, device, mode):
     images = []
     refs = []
     candidates = []
@@ -57,33 +57,33 @@ def computeAccOfFOIL(mode):
                     refs.append([' '.join(gt.split()) for gt in ref])
                     refs.append([' '.join(gt.split()) for gt in ref])
                 else:
-                    refs.append([' '.join(ref[0].split())])
-                    refs.append([' '.join(ref[0].split())])
+                    refs.append([' '.join(ref[2].split())])
+                    refs.append([' '.join(ref[2].split())])
                 labels.append(1)
             images.append('/data/pyz/data/mscoco/val2014/COCO_val2014_' + str(image_id).zfill(12) + '.jpg')
             candidates.append(' '.join(caption[1].split()))
 
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    '''device = "cuda" if torch.cuda.is_available() else "cpu"
 
     if device == 'cpu':
         warnings.warn(
             'CLIP runs in full float32 on CPU. Results in paper were computed on GPU, which uses float16. '
             'If you\'re reporting results on CPU, please note this when you report.')
     model, transform = clip.load("ViT-B/32", device=device, jit=False)
-    model.eval()
+    model.eval()'''
 
+    with torch.autocast('cuda'):
+        image_feats = clip_score.extract_all_images(
+            images, model, device, batch_size=1024, num_workers=8)
 
-    image_feats = clip_score.extract_all_images(
-        images, model, device, batch_size=1024, num_workers=4)
+        # get image-text clipscore
+        _, per_instance_image_text, candidate_feats = clip_score.get_clip_score(
+            model, image_feats, candidates, device)
 
-    # get image-text clipscore
-    _, per_instance_image_text, candidate_feats = clip_score.get_clip_score(
-        model, image_feats, candidates, device)
-
-    # get text-text clipscore
-    _, per_instance_text_text = clip_score.get_refonlyclipscore(
-        model, refs, candidate_feats, device)
+        # get text-text clipscore
+        _, per_instance_text_text = clip_score.get_refonlyclipscore(
+            model, refs, candidate_feats, device)
 
     # F-score
     refclipscores = 2 * per_instance_image_text * per_instance_text_text / (
@@ -111,7 +111,7 @@ def computeAccOfFOIL(mode):
     print("Refclipscore accuracy is ", metrics.accuracy_score(labels, refClip_labels))
 
 
-    other_metrics = generation_eval_utils.get_all_metrics(refs, candidates, return_per_cap=True)
+    other_metrics = utils.get_all_metrics(refs, candidates, return_per_cap=False)
     for k, v in other_metrics.items():
         if k == 'bleu':
             v = v[-1]  # just do BLEU-4
@@ -130,7 +130,19 @@ def computeAccOfFOIL(mode):
 
 
 def main():
-    computeAccOfFOIL(mode)
+
+    args = utils.get_args()
+    device = args.device
+    #clip_model = utils.get_model(device, use_fp16=args.fp16)
+    clip_model = []
+    if args.use_origin:
+        print("=" * 10 + "composite Tau-c; Using model: origin" + "=" * 10)
+        computeAccOfFOIL(clip_model, device, mode)
+    image_path = args.image_path
+    text_path = args.text_path
+    clip_model = utils.get_model(device, image_path, text_path, use_fp16=args.fp16)
+    print("=" * 10 + "composite Tau-c; Using model: distilled" + "=" * 10)
+    computeAccOfFOIL(clip_model, device, mode)
 
 
 

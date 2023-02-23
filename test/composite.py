@@ -7,7 +7,8 @@ import sys
 
 sys.path.append('../')
 import clip_score
-import generation_eval_utils
+import utils
+# from utils import get_all_metrics
 import scipy.stats
 import os
 import json
@@ -17,7 +18,7 @@ import warnings
 import clip
 
 
-def compute_human_correlation(input_json, image_directory, tauvariant='c'):
+def compute_human_correlation(input_json, model, device, tauvariant='c'):
     data = {}
     with open(input_json) as f:
         data.update(json.load(f))
@@ -38,24 +39,24 @@ def compute_human_correlation(input_json, image_directory, tauvariant='c'):
             human_scores.append(human_judgement['rating'])
 
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    '''device = "cuda" if torch.cuda.is_available() else "cpu"
     if device == 'cpu':
         warnings.warn(
             'CLIP runs in full float32 on CPU. Results in paper were computed on GPU, which uses float16. '
             'If you\'re reporting results on CPU, please note this when you report.')
     model, transform = clip.load("ViT-B/32", device=device, jit=False)
-    model.eval()
+    model.eval()'''
+    with torch.autocast('cuda'):
+        image_feats = clip_score.extract_all_images(
+            images, model, device, batch_size=64, num_workers=8)
 
-    image_feats = clip_score.extract_all_images(
-        images, model, device, batch_size=64, num_workers=4)
+        # get image-text clipscore
+        _, per_instance_image_text, candidate_feats = clip_score.get_clip_score(
+            model, image_feats, candidates, device)
 
-    # get image-text clipscore
-    _, per_instance_image_text, candidate_feats = clip_score.get_clip_score(
-        model, image_feats, candidates, device)
-
-    # get text-text clipscore
-    _, per_instance_text_text = clip_score.get_refonlyclipscore(
-        model, refs, candidate_feats, device)
+        # get text-text clipscore
+        _, per_instance_text_text = clip_score.get_refonlyclipscore(
+            model, refs, candidate_feats, device)
 
     # F-score
     refclipscores = 2 * per_instance_image_text * per_instance_text_text / (
@@ -65,11 +66,15 @@ def compute_human_correlation(input_json, image_directory, tauvariant='c'):
     print('CLIPScore Tau-{}: {:.3f}'.format(tauvariant, 100 *
                                             scipy.stats.kendalltau(per_instance_image_text, human_scores,
                                                                    variant=tauvariant)[0]))
+    print('Only-ref CLIPScore Tau-{}: {:.3f}'.format(tauvariant, 100 *
+                                            scipy.stats.kendalltau(per_instance_text_text, human_scores,
+                                                                   variant=tauvariant)[0]))
+
     print('RefCLIPScore Tau-{}: {:.3f}'.format(tauvariant, 100 *
                                                scipy.stats.kendalltau(refclipscores, human_scores, variant=tauvariant)[
                                                    0]))
 
-    other_metrics = generation_eval_utils.get_all_metrics(refs, candidates, return_per_cap=True)
+    other_metrics = utils.get_all_metrics(refs, candidates, return_per_cap=True)
     for k, v in other_metrics.items():
         if k == 'bleu':
             v = v[-1]  # just do BLEU-4
@@ -86,8 +91,20 @@ def main():
         print('Please run composite_preprocess.py')
         quit()
     print('composite (Tau-c)')
-    compute_human_correlation("/data/ll/composite/composite.json", 'composite/', tauvariant='c')
 
+    args = utils.get_args()
+    device = args.device
+    clip_model = utils.get_model(device, use_fp16= args.fp16)
+
+    if args.use_origin:
+        print("=" * 10 + "composite Tau-c; Using model: origin" + "=" * 10)
+        compute_human_correlation("/data/ll/composite/composite.json", clip_model, device,  tauvariant='c')
+
+    image_path = args.image_path
+    text_path = args.text_path
+    clip_model = utils.get_model(device, image_path, text_path, use_fp16=args.fp16)
+    print("=" * 10 + "composite Tau-c; Using model: distilled" + "=" * 10)
+    compute_human_correlation("/data/ll/composite/composite.json", clip_model, device, tauvariant='c')
 
 if __name__ == '__main__':
     main()
