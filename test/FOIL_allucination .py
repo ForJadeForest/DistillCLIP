@@ -63,7 +63,7 @@ def computeAccOfFOIL(model, device, mode):
 
     with torch.autocast('cuda'):
         image_feats = clip_score.extract_all_images(
-            images, model, device, batch_size=1024, num_workers=8)
+            images, model, device, batch_size=2048, num_workers=16)
 
         # get image-text clipscore
         _, per_instance_image_text, candidate_feats = clip_score.get_clip_score(
@@ -127,4 +127,4 @@ def main(args):
 
 if __name__ == '__main__':
     args = get_args()
-    total_ex(args, main, repeat_times=1)
+    total_ex(args, main)
