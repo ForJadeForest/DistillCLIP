@@ -17,6 +17,7 @@ import torch
 
 def compute_human_correlation(input_json, model, device, tauvariant='c'):
     data = {}
+    final_result = {}
     with open(input_json) as f:
         data.update(json.load(f))
     print('Loaded {} images'.format(len(data)))
@@ -51,16 +52,15 @@ def compute_human_correlation(input_json, model, device, tauvariant='c'):
     refclipscores = 2 * per_instance_image_text * per_instance_text_text / (
             per_instance_image_text + per_instance_text_text)
 
-    print('CLIPScore Tau-{}: {:.3f}'.format(tauvariant, 100 *
-                                            scipy.stats.kendalltau(per_instance_image_text, human_scores,
-                                                                   variant=tauvariant)[0]))
-    print('Only-ref CLIPScore Tau-{}: {:.3f}'.format(tauvariant, 100 *
-                                                     scipy.stats.kendalltau(per_instance_text_text, human_scores,
-                                                                            variant=tauvariant)[0]))
-
-    print('RefCLIPScore Tau-{}: {:.3f}'.format(tauvariant, 100 *
-                                               scipy.stats.kendalltau(refclipscores, human_scores, variant=tauvariant)[
-                                                   0]))
+    tau = 100 * scipy.stats.kendalltau(per_instance_image_text, human_scores, variant=tauvariant)[0]
+    final_result['clip_score_kenalltau'] = round(tau, 2)
+    print('CLIPScore Tau-{}: {:.3f}'.format(tauvariant, tau))
+    # print('Only-ref CLIPScore Tau-{}: {:.3f}'.format(tauvariant, 100 *
+    #                                                  scipy.stats.kendalltau(per_instance_text_text, human_scores,
+    #                                                                         variant=tauvariant)[0]))
+    tau = 100 * scipy.stats.kendalltau(refclipscores, human_scores, variant=tauvariant)[0]
+    final_result['ref_clip_score'] = round(tau, 2)
+    print('RefCLIPScore Tau-{}: {:.3f}'.format(tauvariant, tau))
 
     other_metrics = get_all_metrics(refs, candidates, return_per_cap=True)
     for k, v in other_metrics.items():
@@ -69,17 +69,20 @@ def compute_human_correlation(input_json, model, device, tauvariant='c'):
             k = 'bleu-4'
         if k == 'spice':
             v = [float(item['All']['f']) for item in v]
-
-        print('{} Tau-{}: {:.3f}'.format(k, tauvariant,
-                                         100 * scipy.stats.kendalltau(v, human_scores, variant=tauvariant)[0]))
+        tau = 100 * scipy.stats.kendalltau(v, human_scores, variant=tauvariant)[0]
+        final_result[k] = round(tau, 2)
+        print('{} Tau-{}: {:.3f}'.format(k, tauvariant, tau))
+    return final_result
 
 
 def composite_ex(clip_model, device, root_dir):
+    final_res = {}
     composite_file = os.path.join(root_dir, 'composite.json')
     if not os.path.exists(composite_file):
         print('Please run composite_preprocess.py')
         quit()
-    compute_human_correlation(composite_file, clip_model, device, tauvariant='c')
+    final_res['Composite'] = compute_human_correlation(composite_file, clip_model, device, tauvariant='c')
+    return final_res
 
 
 def main(args):
@@ -90,7 +93,7 @@ def main(args):
     clip_path = args.clip_path
     load_teacher = args.load_teacher
     model = get_model(device, load_teacher, clip_path, image_path, text_path)
-    composite_ex(model, device, root_dir)
+    return composite_ex(model, device, root_dir)
 
 
 if __name__ == '__main__':

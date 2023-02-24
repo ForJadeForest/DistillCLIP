@@ -27,6 +27,7 @@ model2company = {
 
 model_list = model2company.keys()
 
+
 def filename2id(filename):
     import re
     pattern = re.compile('COCO_val2014_0*(.*).jpg')
@@ -67,6 +68,7 @@ def cal_metric(model_name, clip_model, images_filename, device, image_features):
 
 
 def cal_coco_ex(model, device):
+    final_res = {}
     images_root_dir = Path(r'/data/pyz/data/mscoco/val2014')
     images_filename, images_features = init_image_features(model, images_root_dir, device)
 
@@ -83,25 +85,44 @@ def cal_coco_ex(model, device):
         human_metric_res_m1.append(human_metric[model2company[model_name]]['M1'])
         human_metric_res_m2.append(human_metric[model2company[model_name]]['M2'])
 
+    clip_s_res = {}
+    ref_clip_s_res = {}
+
     m1_spearmanr, m1_p_value = stats.spearmanr(clip_score_res, human_metric_res_m1)
     print(f'CLIPScore for M1 Spearmanr: {m1_spearmanr}, p-value: {m1_p_value}')
+    clip_s_res['M1 Spearman'] = round(100 * m1_spearmanr, 2)
+
     m2_spearmanr, m2_p_value = stats.spearmanr(clip_score_res, human_metric_res_m2)
     print(f'CLIPScore for M2 Spearmanr: {m2_spearmanr}, p-value: {m2_p_value}')
+    clip_s_res['M2 Spearman'] = round(100 * m2_spearmanr, 2)
 
     ref_m1_spearmanr, m1_p_value = stats.spearmanr(ref_clip_score_res, human_metric_res_m1)
     print(f'Ref CLIPScore for M1 Spearmanr: {ref_m1_spearmanr}, p-value: {m1_p_value}')
+    ref_clip_s_res['M1 Spearman'] = round(100 * ref_m1_spearmanr, 2)
+
     ref_m2_spearmanr, m2_p_value = stats.spearmanr(ref_clip_score_res, human_metric_res_m2)
     print(f'Ref CLIPScore for M2 Spearmanr: {ref_m2_spearmanr}, p-value: {m2_p_value}')
+    ref_clip_s_res['M2 Spearman'] = round(100 * ref_m2_spearmanr, 2)
 
     m1_pearsonr, m1_p_value = stats.pearsonr(clip_score_res, human_metric_res_m1)
     print(f'CLIPScore for M1 pearsonr: {m1_pearsonr}, p-value: {m1_p_value}')
+    clip_s_res['M1 Pearson'] = round(100 * m1_pearsonr, 2)
+
     m2_pearsonr, m2_p_value = stats.pearsonr(clip_score_res, human_metric_res_m2)
     print(f'CLIPScore for M2 pearsonr: {m2_pearsonr}, p-value: {m2_p_value}')
+    clip_s_res['M2 Pearson'] = round(100 * m2_pearsonr, 2)
 
     ref_m1_pearsonr, m1_p_value = stats.pearsonr(ref_clip_score_res, human_metric_res_m1)
     print(f'Ref CLIPScore for M1 pearsonr: {ref_m1_pearsonr}, p-value: {m1_p_value}')
+    ref_clip_s_res['M1 Pearson'] = round(100 * ref_m1_pearsonr, 2)
+
     ref_m2_pearsonr, m2_p_value = stats.pearsonr(ref_clip_score_res, human_metric_res_m2)
     print(f'Ref CLIPScore for M2 pearsonr: {ref_m2_pearsonr}, p-value: {m2_p_value}')
+    ref_clip_s_res['M2 Pearson'] = round(100 * ref_m2_pearsonr, 2)
+
+    final_res['CLIP-S-COCO'] = clip_s_res
+    final_res['Ref-CLIP-S-COCO'] = ref_clip_s_res
+    return final_res
 
 
 def main(args):
@@ -110,7 +131,7 @@ def main(args):
     text_path = args.text_path
     clip_path = args.clip_path
     clip_model = get_model(device, args.load_teacher, clip_path, image_path, text_path, args.fp16)
-    cal_coco_ex(clip_model, device)
+    return cal_coco_ex(clip_model, device)
 
 
 if __name__ == '__main__':

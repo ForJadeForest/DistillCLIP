@@ -31,14 +31,16 @@ def logout(acc_list, repeat_times):
         for acc in acc_list:
             res[key] += acc[key]
         res[key] /= repeat_times
+        res[key] = round(res[key] * 100, 2)
 
     print('the final result: ')
 
     for k, v in res.items():
-        print(f'the result {k} acc: {v * 100}')
+        print(f'the result {k} acc: {v}')
 
-    print(f'the mean value of the acc is {100 * sum(res.values()) / len(res.values())}')
+    print(f'the mean value of the acc is {sum(res.values()) / len(res.values())}')
     print('=' * 80)
+    return res
 
 
 def cal_clip_score(pascal_dataset, model, device):
@@ -77,10 +79,12 @@ def cal_one_model_res(clip_model, device, repeat_times=1):
         acc_list.append(acc)
         ref_acc_list.append(ref_acc)
 
+    final_res = {}
     print('The no ref acc result')
-    logout(acc_list, repeat_times)
+    final_res['Pascal-50s CLIP-S'] = logout(acc_list, repeat_times)
     print('The ref acc result')
-    logout(ref_acc_list, repeat_times)
+    final_res['Pascal-50s Ref-CLIP-S'] = logout(ref_acc_list, repeat_times)
+    return final_res
 
 
 def main(args, repeat_times):
@@ -90,7 +94,7 @@ def main(args, repeat_times):
     clip_path = args.clip_path
     load_teacher = args.load_teacher
     model = get_model(device, load_teacher, clip_path, image_path, text_path)
-    cal_one_model_res(model, device, repeat_times=repeat_times)
+    return cal_one_model_res(model, device, repeat_times=repeat_times)
 
 
 if __name__ == '__main__':

@@ -13,7 +13,8 @@ from model.component.weight_share_model import RepeatVisionTransformer, RepeatTe
 from model.utils import teacher_load
 
 Model_Type_List = ['baseline', 'smd', 'cos_diff', 'compression_text', 'teacher']
-# Model_Type_List = ['freeze_text']
+
+# Model_Type_List = ['freeze_text', 'compression_text']
 
 
 def mini_vision_encoder():
@@ -159,7 +160,7 @@ def get_args():
     parse.add_argument('--clip_path', type=str, help='The CLIP model checkpoint path',
                        default=None)
     parse.add_argument('--model_type', type=str, help='load the model type', default='smd')
-    parse.add_argument('-d', '--device', type=str, help='The device(Gpu or Cpu)', default='cuda')
+    parse.add_argument('-d', '--device', type=str, help='The device(Gpu or Cpu)', default='cuda:2')
     parse.add_argument('-p', '--fp16', action='store_true', help='Whether use the fp16', default=True)
     parse.add_argument('--load_teacher', action='store_true',
                        help='Whether use the origin clip model to do test', default=False)
@@ -186,11 +187,25 @@ def change_args(args, model_type):
 
 
 def total_ex(args_control, ex_function, *args, **kwargs):
+    model_type_res = {}
+    # 对每一实验，需要返回一个字典：key是model_type，value是一个字典（key是指标，value该指标对应的值）
+    # 但是每一个脚本可能返回多个value这样的字典，每一个实验中有小实验
+    # 也就是需要一个这样的字典：
+    # {model_type: {sub_ex_1: {metric1: value1, metric2: value2}, sub_ex_2: {{metric1: value1}}}
     for model_type in Model_Type_List:
         print('=' * 10 + f'[INFO] ==> begin Test {model_type} CLIP Model' + '=' * 10)
         args_control = change_args(args_control, model_type)
-        ex_function(args_control, *args, **kwargs)
+        res_dict = ex_function(args_control, *args, **kwargs)
         print('*==*' * 20)
+        model_type_res[model_type] = res_dict
+    ex_name_list = model_type_res[Model_Type_List[0]].keys()
+    final_res = {}
+    for ex_name in ex_name_list:
+        final_res[ex_name] = {model_type: model_type_res[model_type][ex_name] for model_type in Model_Type_List}
+    import pandas as pd
+    for ex_name in ex_name_list:
+        ex_res_df = pd.DataFrame(final_res[ex_name])
+        ex_res_df.to_csv(f'./result/{ex_name}.csv')
 
 
 def get_all_metrics(refs, cands, return_per_cap=False):
