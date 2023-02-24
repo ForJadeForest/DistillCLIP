@@ -13,7 +13,7 @@ from model.component.weight_share_model import RepeatVisionTransformer, RepeatTe
 from model.utils import teacher_load
 
 Model_Type_List = ['baseline', 'smd', 'cos_diff', 'compression_text', 'teacher']
-# Model_Type_List = ['compression_text']
+# Model_Type_List = ['freeze_text']
 
 
 def mini_vision_encoder():
@@ -105,6 +105,15 @@ def load_compression_text_clip_model(args):
     return args
 
 
+def load_freeze_text_cos_diff_clip_model(args):
+    print("[INFO] ==> Now load the freeze text cos_diff clip model!")
+    args.clip_path = '/data/share/pyz/Dis_CLIP/final/clip/freeze_text/117-val_acc0.249-loss0.05607.ckpt'
+    args.image_path = None
+    args.text_path = None
+    args.load_teacher = False
+    return args
+
+
 def load_cos_diff_clip_model(args):
     print("[INFO] ==> Now load the cos_diff clip model!")
     args.clip_path = '/data/share/pyz/Dis_CLIP/final/clip/shtc5cml/checkpoints/223-val_acc0.245-loss0.05884.ckpt'
@@ -169,6 +178,8 @@ def change_args(args, model_type):
         args = load_original_clip(args)
     elif model_type == 'compression_text':
         args = load_compression_text_clip_model(args)
+    elif model_type == 'freeze_text':
+        args = load_freeze_text_cos_diff_clip_model(args)
     else:
         raise ValueError(f'the model_type should in {Model_Type_List}, instead of {args.model_type}')
     return args
