@@ -1,3 +1,18 @@
+
+## Run
+目前支持两种方式
+1. 直接config.yaml 文件
+```shell
+python main.py fit --conf path/to/config.yaml
+```
+2. 使用写好的sh/run.py 文件
+此处详情请看`doc/pytorch_lightning_doc.md`中 run.py运行所有脚本一节
+```shell
+python sh/run.py -e Ex_name -v 0
+```
+
+
+
 ## Note
 
 目前大致的路线是借用TinyBert的训练方法，首先，阶段一：对文本 encoder 和图像 encoder 单独蒸馏。然后，阶段二：二者在进行原本对比学习任务，使用标签loss + 蒸馏loss。
