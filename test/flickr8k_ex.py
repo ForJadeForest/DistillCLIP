@@ -48,7 +48,6 @@ def compute_human_correlation(model, device, input_json, image_directory, tauvar
     # F-score
     refclipscores = 2 * per_instance_image_text * per_instance_text_text / (
             per_instance_image_text + per_instance_text_text)
-    other_metrics = get_all_metrics(refs, candidates, return_per_cap=True)
 
     print('CLIPScore Tau-{}: {:.3f}'.format(tauvariant, 100 *
                                             scipy.stats.kendalltau(per_instance_image_text, human_scores,
@@ -56,7 +55,7 @@ def compute_human_correlation(model, device, input_json, image_directory, tauvar
     print('RefCLIPScore Tau-{}: {:.3f}'.format(tauvariant, 100 *
                                                scipy.stats.kendalltau(refclipscores, human_scores, variant=tauvariant)[
                                                    0]))
-
+    other_metrics = get_all_metrics(refs, candidates, return_per_cap=True)
     for k, v in other_metrics.items():
         if k == 'bleu':
             v = v[-1]  # just do BLEU-4
