@@ -1,34 +1,26 @@
-model:
-  class_path: DistillModel
-  init_args:
-    student_encoder:
-      class_path: model.component.weight_share_model.RepeatVisionTransformer
-      init_args:
-        img_size: 224
-        patch_size: 32
-        in_chans: 3
-        out_dim: 512
-        embed_dim: 768
-        depth: 4
-        num_heads: 24
-        mlp_ratio: 4.0
-        qkv_bias: True
-        qk_scale: null
-        drop_rate: 0.
-        attn_drop_rate: 0.
-        drop_path_rate: 0.
-        hybrid_backbone: null
-        rpe_config: null
-        repeated_times: 2
-        use_transform: True
-
 trainer:
+
   logger:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
-      dir: '/data/pyz/result/dis_clip'
-      name: 'ws-24head'
+      dir: '/data/pyz/result/Dis_CLIP'
+      name: 'ws_compression256_tiny'
       project: 'CLIPDistillation'
       log_model: false
-      group: ws_image_encoder
-      tags: [ 'ws_image_encoder', 'model change' ]
+      group: ws_text_encoder
+      tags: [ 'ws_text_encoder', 'baseline' ]
+
+model:
+  student_encoder:
+    class_path: model.component.weight_share_model.RepeatTextTransformer
+    init_args:
+      depth: 2
+      repeated_times: 2
+      use_transform: True
+      compression_embedding: True
+  loss_control_para:
+    loss_name: [ 'out_l1', 'out_cos' ]
+    temperature: 1
+    loss_scale:
+      out_l1: 1
+      out_cos: 1
