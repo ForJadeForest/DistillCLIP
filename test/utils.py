@@ -12,9 +12,10 @@ from model.component.clip_model import CLIPModel
 from model.component.weight_share_model import RepeatVisionTransformer, RepeatTextTransformer
 from model.utils import teacher_load
 
-Model_Type_List = ['baseline', 'smd', 'cos_diff', 'compression_text', 'teacher']
+# Model_Type_List = ['baseline', 'smd', 'compression_freeze_text', 'cos_diff', 'compression_text', 'teacher']
+Model_Type_List = ['baseline', 'compression_freeze_text', 'freeze_text', 'compression_text', 'teacher']
 
-# Model_Type_List = ['freeze_text', 'compression_text']
+# Model_Type_List = ['compression_freeze_text', 'teacher']
 
 
 def mini_vision_encoder():
@@ -84,7 +85,12 @@ def get_model(device, load_teacher=False, clip_path=None, image_path=None, text_
         clip_model = CLIPModel(False, visual_encoder, text_encoder, only_last_rep=True)
         state_dict = torch.load(clip_path)['state_dict']
         state_dict = {k.replace('student.', ''): v for k, v in state_dict.items() if k.startswith('student')}
-        clip_model.load_state_dict(state_dict)
+        try:
+            clip_model.load_state_dict(state_dict)
+        except:
+            text_encoder = mini_compression_text_encoder()
+            clip_model = CLIPModel(False, visual_encoder, text_encoder, only_last_rep=True)
+            clip_model.load_state_dict(state_dict)
     else:
         raise ValueError(f'the clip path, image_path and text path are None!')
 
@@ -114,6 +120,14 @@ def load_freeze_text_cos_diff_clip_model(args):
     args.load_teacher = False
     return args
 
+
+def load_compression_freeze_text_cos_diff_clip_model(args):
+    print("[INFO] ==> Now load the compression freeze text cos_diff clip model!")
+    args.clip_path = '/data/share/pyz/Dis_CLIP/final/clip/compression_text/253-val_acc0.245-loss0.05582-v1.ckpt'
+    args.image_path = None
+    args.text_path = None
+    args.load_teacher = False
+    return args
 
 def load_cos_diff_clip_model(args):
     print("[INFO] ==> Now load the cos_diff clip model!")
@@ -160,9 +174,13 @@ def get_args():
     parse.add_argument('--clip_path', type=str, help='The CLIP model checkpoint path',
                        default=None)
     parse.add_argument('--model_type', type=str, help='load the model type', default='smd')
-    parse.add_argument('-d', '--device', type=str, help='The device(Gpu or Cpu)', default='cuda:2')
+    parse.add_argument('-d', '--device', type=str, help='The device(Gpu or Cpu)', default='cuda')
     parse.add_argument('-p', '--fp16', action='store_true', help='Whether use the fp16', default=True)
     parse.add_argument('--load_teacher', action='store_true',
+                       help='Whether use the origin clip model to do test', default=False)
+    parse.add_argument('--cal_other_metric', action='store_true',
+                       help='Whether use the origin clip model to do test', default=False)
+    parse.add_argument('--model_name', type=str,
                        help='Whether use the origin clip model to do test', default=False)
     args = parse.parse_args()
     return args
@@ -181,6 +199,8 @@ def change_args(args, model_type):
         args = load_compression_text_clip_model(args)
     elif model_type == 'freeze_text':
         args = load_freeze_text_cos_diff_clip_model(args)
+    elif model_type == 'compression_freeze_text':
+        args = load_compression_freeze_text_cos_diff_clip_model(args)
     else:
         raise ValueError(f'the model_type should in {Model_Type_List}, instead of {args.model_type}')
     return args
@@ -195,6 +215,7 @@ def total_ex(args_control, ex_function, *args, **kwargs):
     for model_type in Model_Type_List:
         print('=' * 10 + f'[INFO] ==> begin Test {model_type} CLIP Model' + '=' * 10)
         args_control = change_args(args_control, model_type)
+        args_control.model_name = model_type
         res_dict = ex_function(args_control, *args, **kwargs)
         print('*==*' * 20)
         model_type_res[model_type] = res_dict
@@ -205,7 +226,7 @@ def total_ex(args_control, ex_function, *args, **kwargs):
     import pandas as pd
     for ex_name in ex_name_list:
         ex_res_df = pd.DataFrame(final_res[ex_name])
-        ex_res_df.to_csv(f'./result/{ex_name}.csv')
+        ex_res_df.to_csv(f'./mean_result/{ex_name}.csv')
 
 
 def get_all_metrics(refs, cands, return_per_cap=False):
