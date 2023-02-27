@@ -4,7 +4,7 @@ import pandas as pd
 from scipy import stats
 import torch.cuda
 from utils import get_model, get_args, total_ex
-from clip_score import get_clip_score, extract_all_images, get_ref_clip_score
+from clip_score import extract_all_images, get_all_clip_score
 
 model2company = {
     'kolarmartin': 'Brno University',
@@ -61,9 +61,10 @@ def cal_metric(model_name, clip_model, images_filename, device, image_features):
 
     text = [id2text[filename2id(k)] for k in images_filename]
     ref_text = [id2ref[filename2id(k)] for k in images_filename]
+
     with torch.autocast('cuda' if 'cuda' in device else 'cpu'):
-        res = get_clip_score(clip_model, image_features, text, device)[0]
-        ref_res = get_ref_clip_score(clip_model, image_features, ref_text, text, device)[0]
+        res, _, ref_res, _ = get_all_clip_score(clip_model, image_features, ref_text, text, device)
+
     return res, ref_res
 
 
