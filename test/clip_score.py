@@ -223,6 +223,26 @@ def get_ref_clip_score(model, images, references, candidates, device, w=2.5):
     return np.mean(refclipscores), refclipscores
 
 
+def get_all_clip_score(model, images, references, candidates, device, w=2.5):
+    if isinstance(images, list):
+        # need to extract image features
+        images = extract_all_images(images, model, device)
+
+    # get image-text clipscore
+    mean_clip_score, per_instance_image_text, candidate_feats = get_clip_score(
+        model, images, candidates, device, w)
+
+    # get text-text clipscore
+    _, per_instance_text_text = get_refonlyclipscore(
+        model, references, candidate_feats, device)
+
+    # F-score
+    refclipscores = 2 * per_instance_image_text * per_instance_text_text / (
+            per_instance_image_text + per_instance_text_text)
+
+    return mean_clip_score, per_instance_image_text, np.mean(refclipscores), refclipscores
+
+
 def main():
     args = parse_args()
 
