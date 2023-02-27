@@ -10,35 +10,31 @@ import json
 import pandas as pd
 import csv
 
-def process_composite():
-    '''
+
+def process_composite(root_dir, flickr8k_dir, coco_dir, flickr30k_dir):
     # download dataset
+    # if not os.path.exists('compositeDataset'):
+    #     os.makedirs('compositeDataset')
+    #
+    # if not os.path.exists('compositeDataset'):
+    #     gdd.download_file_from_google_drive(file_id='1WNY8pV-u8xtBYBVal03qwjQs4VKurUZn',
+    #                                         dest_path='./flickr8k/Flickr8k_Dataset.zip',
+    #                                         unzip=True,
+    #                                         showsize=True)
+    # if not os.path.exists('flickr8k/Flickr8k_text.zip'):
+    #     gdd.download_file_from_google_drive(file_id='1ljB7DR-YM-q9WKnHDW5dHjauK029B2s6',
+    #                                         dest_path='./flickr8k/Flickr8k_text.zip',
+    #                                         unzip=True,
+    #                                         showsize=True)
 
-    if not os.path.exists('compositeDataset'):
-        os.makedirs('compositeDataset')
-
-    if not os.path.exists('compositeDataset'):
-        gdd.download_file_from_google_drive(file_id='1WNY8pV-u8xtBYBVal03qwjQs4VKurUZn',
-                                            dest_path='./flickr8k/Flickr8k_Dataset.zip',
-                                            unzip=True,
-                                            showsize=True)
-    if not os.path.exists('flickr8k/Flickr8k_text.zip'):
-        gdd.download_file_from_google_drive(file_id='1ljB7DR-YM-q9WKnHDW5dHjauK029B2s6',
-                                            dest_path='./flickr8k/Flickr8k_text.zip',
-                                            unzip=True,
-                                            showsize=True)
-    '''
-
-    # composite #
-    ann_list = ['8k_correctness.csv', '30k_correctness.csv',
-               'coco_correctness.csv']
+    # composite
+    ann_list = ['8k_correctness.csv', '30k_correctness.csv', 'coco_correctness.csv']
 
     # flickr8k #
     flickr8k_image2ann = collections.defaultdict(list)
     captionid2caption = {}
-
-# C:\\Users\\86189\\Desktop\\Deep learning\\metrics advancement\\clipscore-main\\flickr8k_example\\Flickr8k_text\\Flickr8k.token.txt
-    with open("/data/ll/composite/Flickr8k.token.txt") as f:
+    flickr8k_file_path = os.path.join(root_dir, 'Flickr8k.token.txt')
+    with open(flickr8k_file_path) as f:
         for line in f:
             image, ann = line.strip().split('\t')
             flickr8k_image2ann[image.split('#')[0]].append(ann)
@@ -50,20 +46,17 @@ def process_composite():
     # flickr30k #
     flickr30k_image2ann = collections.defaultdict(list)
 
-# C:\\Users\\86189\\Desktop\\Deep learning\\metrics advancement\\composite\\results_20130124.token
-    annotations = pd.read_table('/data/ll/composite/results_20130124.token', sep='\t', header=None,
-                                names=['image', 'caption'])
+    data30k_file_path = os.path.join(root_dir, 'results_20130124.token')
+    annotations = pd.read_table(data30k_file_path, sep='\t', header=None, names=['image', 'caption'])
 
     for idx, line in enumerate(annotations['image']):
         flickr30k_image2ann[line.split('#')[0]].append(annotations['caption'][idx])
     flickr30k_image2ann = {k.split('.')[0]: v for k, v in flickr30k_image2ann.items()}
     print("30k is read")
 
-
-    # coco #
     mscoco_image2ann = collections.defaultdict(list)
-# "C:\\Users\\86189\\Desktop\\Deep learning\\metrics advancement\\composite\\captions_val2014.json"
-    with open("/data/ll/composite/captions_val2014.json") as f:
+    coco_file_path = os.path.join(root_dir, 'captions_val2014.json')
+    with open(coco_file_path) as f:
         data = {}
         data.update(json.load(f))
         for line in data['annotations']:
@@ -71,14 +64,14 @@ def process_composite():
 
     mscoco_image2ann = {k.split('.')[0]: v for k, v in mscoco_image2ann.items()}
     print("coco is read")
-
-# 'C:\\Users\\86189\\Desktop\\Deep learning\\ijcai22\\DistillCLIP\\test\\composite.json'
-    with open("/data/ll/composite/composite.json", 'w') as f:
+    composite_path = os.path.join(root_dir, 'composite.json')
+    with open(composite_path, 'w') as f:
         all_index = {}
         for corpus in ann_list:
             print("now process {}".format(corpus))
             skip = 0
-            with open('/data/ll/composite/' + corpus, 'rt') as csvfile:
+            corpus_path = os.path.join(root_dir, corpus)
+            with open(corpus_path, 'rt') as csvfile:
                 all_corpus = []
                 reader = csv.reader(csvfile)
                 header = next(reader)
@@ -88,18 +81,20 @@ def process_composite():
                     if corpus[:2] == '8k':
                         all_corpus.append({
                             'image_id': real_ann[0].split("/")[-1].split(".")[0],
-                            'image_path': '/data/pyz/data/flickr8k/Flickr8k_Dataset/' + real_ann[0].split("/")[-1],   # here need to be updated in real image dataset
-                            'candidate1' : real_ann[1],
-                            'candidate2' : real_ann[2],
-                            'candidate3' : real_ann[3],
-                            'rating1' : real_ann[4],
-                            'rating2' : real_ann[5],
-                            'rating3' : real_ann[6]
+                            'image_path': os.path.join(flickr8k_dir, real_ann[0].split("/")[-1]),
+                            # here need to be updated in real image dataset
+                            'candidate1': real_ann[1],
+                            'candidate2': real_ann[2],
+                            'candidate3': real_ann[3],
+                            'rating1': real_ann[4],
+                            'rating2': real_ann[5],
+                            'rating3': real_ann[6]
                         })
                     elif corpus[:2] == 'co':
                         all_corpus.append({
                             'image_id': real_ann[0].split("/")[-1].split(".")[0],
-                            'image_path': '/data/pyz/data/mscoco/val2014/' + real_ann[0].split("/")[-1],  # here need to be updated in real image dataset
+                            'image_path': os.path.join(coco_dir, real_ann[0].split("/")[-1]),
+                            # here need to be updated in real image dataset
                             'candidate1': real_ann[1],
                             'candidate2': real_ann[2],
                             'candidate3': real_ann[3],
@@ -112,7 +107,7 @@ def process_composite():
                     else:
                         all_corpus.append({
                             'image_id': real_ann[0].split("/")[-1].split(".")[0],
-                            'image_path': '/data/ll/composite/flickr30k-images/' + real_ann[0].split("/")[-1],
+                            'image_path': os.path.join(flickr30k_dir, real_ann[0].split("/")[-1]),
                             # here need to be updated in real image dataset
                             'candidate1': real_ann[1],
                             'candidate2': real_ann[2],
@@ -184,14 +179,19 @@ def process_composite():
                          'rating': float(d['rating4'])})
 
             print('For expert, we are dumping {} judgments between {} images'.format(
-            len(all_corpus)*3,
-            len(all_index)))
+                len(all_corpus) * 3,
+                len(all_index)))
         f.write(json.dumps(all_index))
 
 
 def main():
-    if not os.path.exists('/data/ll/composite/composite_correctness.json'):
-        process_composite()
+    root_dir = '/data/ll/composite'
+    coco_dir = '/data/pyz/data/mscoco/val2014/'  # the path to val2014
+    flickr30k_dir = '/data/ll/composite/flickr30k-images/'
+    flickr8k_dir = '/data/pyz/data/flickr8k/Flickr8k_Dataset/'
+    if not os.path.exists(os.path.join(root_dir, 'composite_correctness.json')):
+        process_composite(root_dir, flickr8k_dir, coco_dir, flickr30k_dir)
+
 
 if __name__ == '__main__':
     main()
