@@ -11,7 +11,9 @@ def main(args, *inputs):
     load_teacher = args.load_teacher
     with torch.autocast('cuda' if 'cuda' in args.device else 'cpu'):
         model = get_model(device, load_teacher, clip_path, image_path, text_path, use_fp16=args.fp16)
-        cal_speed(model, inputs)
+        res = cal_speed(model, inputs)
+    metric_name = ['mean_time', 'std_time', 'mean_fps']
+    return {k: v for k, v in zip(metric_name, res)}
 
 
 if __name__ == '__main__':
