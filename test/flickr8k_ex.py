@@ -13,7 +13,7 @@ import torch
 from test.utils import get_model, get_all_metrics, total_ex, get_args
 
 
-def compute_human_correlation(model, device, input_json, image_directory, tauvariant='c'):
+def compute_human_correlation(model, device, input_json, image_directory, cal_other_metric=False, tauvariant='c'):
     final_result = {}
     data = {}
     with open(input_json) as f:
@@ -34,29 +34,20 @@ def compute_human_correlation(model, device, input_json, image_directory, tauvar
             candidates.append(' '.join(human_judgement['caption'].split()))
             human_scores.append(human_judgement['rating'])
 
-    with torch.autocast('cuda'):
-        image_feats = clip_score.extract_all_images(
-            images, model, device, batch_size=64, num_workers=8)
+    with torch.autocast('cuda' if 'cuda' in device else 'cpu'):
+        _, clip_scores, _, ref_clip_res, = clip_score.get_all_clip_score(model, images, refs, candidates, device)
 
-        # get image-text clipscore
-        _, per_instance_image_text, candidate_feats = clip_score.get_clip_score(
-            model, image_feats, candidates, device)
-
-        # get text-text clipscore
-        _, per_instance_text_text = clip_score.get_refonlyclipscore(
-            model, refs, candidate_feats, device)
-
-    # F-score
-    refclipscores = 2 * per_instance_image_text * per_instance_text_text / (
-            per_instance_image_text + per_instance_text_text)
-
-    tau = 100 * scipy.stats.kendalltau(per_instance_image_text, human_scores, variant=tauvariant)[0]
+    tau = 100 * scipy.stats.kendalltau(clip_scores, human_scores, variant=tauvariant)[0]
     final_result['clip_score_kenalltau'] = round(tau, 2)
-    tau = 100 * scipy.stats.kendalltau(refclipscores, human_scores, variant=tauvariant)[0]
+
+    tau = 100 * scipy.stats.kendalltau(ref_clip_res, human_scores, variant=tauvariant)[0]
     final_result['ref_clip_score'] = round(tau, 2)
 
     print('CLIPScore Tau-{}: {:.3f}'.format(tauvariant, final_result['clip_score_kenalltau']))
     print('RefCLIPScore Tau-{}: {:.3f}'.format(tauvariant, final_result['ref_clip_score']))
+
+    if not cal_other_metric:
+        return final_result
 
     other_metrics = get_all_metrics(refs, candidates, return_per_cap=True)
     for k, v in other_metrics.items():
@@ -72,18 +63,18 @@ def compute_human_correlation(model, device, input_json, image_directory, tauvar
     return final_result
 
 
-def flickr8k_ex(model, device, root_dir):
+def flickr8k_ex(model, device, root_dir, cal_other_metric):
     final_res = {}
 
     print('Flickr8K Expert (Tau-c)')
     flickr8k_expert_file = os.path.join(root_dir, 'flickr8k.json')
     final_res['Flickr8K-Expert'] = compute_human_correlation(model, device, flickr8k_expert_file, root_dir,
-                                                             tauvariant='c')
+                                                             cal_other_metric, tauvariant='c')
 
     print('Flickr8K CrowdFlower (Tau-b)')
     flickr8k_crowdflower_file = os.path.join(root_dir, 'crowdflower_flickr8k.json')
     final_res['Flickr8K-CF'] = compute_human_correlation(model, device, flickr8k_crowdflower_file, root_dir,
-                                                         tauvariant='b')
+                                                         cal_other_metric, tauvariant='b')
 
     return final_res
 
@@ -96,7 +87,7 @@ def main(args):
     clip_path = args.clip_path
     load_teacher = args.load_teacher
     model = get_model(device, load_teacher, clip_path, image_path, text_path)
-    return flickr8k_ex(model, device, root_dir)
+    return flickr8k_ex(model, device, root_dir, args.cal_other_metric)
 
 
 if __name__ == '__main__':
