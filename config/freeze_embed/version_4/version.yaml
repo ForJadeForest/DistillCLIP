@@ -42,7 +42,7 @@ data:
   init_args:
     num_workers: 12
     dataset: '_dataset'
-    dataset_name: 'ImageDataset'
+    dataset_name: 'CombineImageDataset'
     train_batch_size: 1600
     val_batch_size: 1250
     kwargs:

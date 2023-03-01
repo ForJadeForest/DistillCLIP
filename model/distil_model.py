@@ -20,9 +20,27 @@ from .component.weight_share_model import RepeatVisionTransformer
 class DistillModel(pl.LightningModule):
     def __init__(self, student_encoder: torch.nn.Module,
                  teacher_name: str, loss_control_para: Dict, download_root: str, freeze_embed: bool = False,
-                 teacher_need_layers: List = None, model_type: str = 'image', map_type: str = None, init_type=None,
+                 teacher_need_layers: List = None, model_type: str = 'image',
                  warm_steps=10, total_steps=200, weight_decay=1e-3, lr: float = 1e-3, norm: bool = False,
                  unfreeze_epoch=None):
+        """
+
+        :param student_encoder: Student encoder, it can be a text encoder or image encoder
+        :param teacher_name: The CLIP Teacher model name
+        :param loss_control_para: To control which loss you want to use
+        :param download_root: The download path of CLIP Teacher model file
+        :param freeze_embed: Whether to load the teacher embedding parameters and freeze them in training
+        :param teacher_need_layers: the teacher layers you want to distillate
+        :param model_type: the model_type, it should be image or text
+        :param warm_steps: The Cos_lr_scheduler warm steps. It's the number of epoch.
+        :param total_steps: The total_epoch of training
+        :param weight_decay: the weight_decay for lr
+        :param lr: the learning rate
+        :param norm: use the final output with l2 norm to calculate the loss
+        :param unfreeze_epoch: if is None, the freezed embedding will never unfreeze,
+                               else, after the unfreeze_epoch, the embedding will unfreeze.
+                               Only the freeze_embed is True will take effect
+        """
         super().__init__()
         if model_type not in ['text', 'image']:
             raise ValueError(f"the model_type should in ['text', 'image'], bug got {model_type}")

@@ -53,7 +53,7 @@ class Pascal50sDataset(Dataset):
         # pascal-50s 就是每一张图像有50个ref
         # data 192000（4000 * 48）个数据，是人工标注的ref
         # 每一行有三句话 + 一个 rate 列
-        # 其中第一句话应该是ref，第二三句是描述该图像的50ref除去这48个之后得到的也就是每48个数据B，C列的都是相同的
+        # 其中第一句话应该是ref，第二三句是描述该图像的50ref除去这48个之后得到的，也就是每48个数据B，C列的都是相同的（就是那4k个句子对）
         # 对每一个ref，测评员需要去对其进行选择B，C哪一个和A更加相似。
         # 因此对于一张image的48个标准 ref 进行投票，最终票数多的作为label（个人估计实验中就是把他作为candidate）
         data = mat["triplets"][0]
@@ -79,7 +79,7 @@ class Pascal50sDataset(Dataset):
                 print(votes)
                 exit()
             # Ties are broken randomly.
-            label = 0 if vote_a > vote_b + random() - .5 else 1
+            label = 0 if vote_a > vote_b else 1
             self.labels.append(label)
             self.references.append(refs)
 

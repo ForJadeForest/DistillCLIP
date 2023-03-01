@@ -1,25 +1,17 @@
 model:
-  loss_control_para:
-    loss_name: [ 'out_l1', 'out_cos', 'logits_mse' ]
-    loss_scale:
-      out_l1: 1
-      out_cos: 1
-      logits_mse: 30
-    temperature: 1
-    vit_kd_para:
-      student_dims: 768
-      teacher_dims: 768
-      low_layers_num: 2
-      high_layers_num: 1
-    normalize: False
+  class_path: DualDistillModel
+  init_args:
+    loss_control_para:
+      loss_name: [ 'out_l1', 'out_cos' ]
+      temperature: 2
 
 trainer:
   logger:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
-      dir: '/data/pyz/result/dis_clip'
-      name: 'ws-l1-cos-logits_mse'
+      dir: '/data/pyz/result/Dis_CLIP'
+      name: 'clip_baseline'
       project: 'CLIPDistillation'
       log_model: false
-      group: weight_share
-      tags: [ 'weight share', 'loss change' ]
+      group: clip
+      tags: [ 'weight share', 'loss change', 'CLIP model' ]

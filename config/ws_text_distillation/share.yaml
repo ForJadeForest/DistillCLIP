@@ -19,8 +19,6 @@ model:
     download_root: '/data/pyz/.cache'
     teacher_need_layers: [ 0, 1, 10, 11 ]
     model_type: 'text'
-    map_type: 'begin'
-    init_type: null
     warm_steps: 20
     total_steps: 500
     weight_decay: 1.0e-2
@@ -33,12 +31,15 @@ data:
   class_path: MainDataModule
   init_args:
     num_workers: 16
-    dataset: 'text_dataset'
-    dataset_name: 'TextDataset'
+    dataset: 'combine_text_dataset'
+    dataset_name: 'CombineTextDataset'
     train_batch_size: 1024
     val_batch_size: 1250
+    prepare_para:
+      overwrite: False
+      raw_data_dir: '/data/pyz/data'
     dataset_para:
-      data_dir: '/data/pyz/data'
+      teacher_name: 'ViT-B/32'
       cache_dir: '/data/pyz/.cache'
 
 

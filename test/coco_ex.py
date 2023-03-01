@@ -3,7 +3,7 @@ from pathlib import Path
 import pandas as pd
 from scipy import stats
 import torch.cuda
-from utils import get_model, get_args
+from utils import get_model, get_args, total_ex
 from clip_score import get_clip_score, extract_all_images, get_ref_clip_score
 
 model2company = {
@@ -26,6 +26,7 @@ model2company = {
 }
 
 model_list = model2company.keys()
+
 
 def filename2id(filename):
     import re
@@ -67,6 +68,7 @@ def cal_metric(model_name, clip_model, images_filename, device, image_features):
 
 
 def cal_coco_ex(model, device):
+    final_res = {}
     images_root_dir = Path(r'/data/pyz/data/mscoco/val2014')
     images_filename, images_features = init_image_features(model, images_root_dir, device)
 
@@ -83,41 +85,55 @@ def cal_coco_ex(model, device):
         human_metric_res_m1.append(human_metric[model2company[model_name]]['M1'])
         human_metric_res_m2.append(human_metric[model2company[model_name]]['M2'])
 
+    clip_s_res = {}
+    ref_clip_s_res = {}
+
     m1_spearmanr, m1_p_value = stats.spearmanr(clip_score_res, human_metric_res_m1)
     print(f'CLIPScore for M1 Spearmanr: {m1_spearmanr}, p-value: {m1_p_value}')
+    clip_s_res['M1 Spearman'] = round(100 * m1_spearmanr, 2)
+
     m2_spearmanr, m2_p_value = stats.spearmanr(clip_score_res, human_metric_res_m2)
     print(f'CLIPScore for M2 Spearmanr: {m2_spearmanr}, p-value: {m2_p_value}')
+    clip_s_res['M2 Spearman'] = round(100 * m2_spearmanr, 2)
 
     ref_m1_spearmanr, m1_p_value = stats.spearmanr(ref_clip_score_res, human_metric_res_m1)
     print(f'Ref CLIPScore for M1 Spearmanr: {ref_m1_spearmanr}, p-value: {m1_p_value}')
+    ref_clip_s_res['M1 Spearman'] = round(100 * ref_m1_spearmanr, 2)
+
     ref_m2_spearmanr, m2_p_value = stats.spearmanr(ref_clip_score_res, human_metric_res_m2)
     print(f'Ref CLIPScore for M2 Spearmanr: {ref_m2_spearmanr}, p-value: {m2_p_value}')
+    ref_clip_s_res['M2 Spearman'] = round(100 * ref_m2_spearmanr, 2)
 
     m1_pearsonr, m1_p_value = stats.pearsonr(clip_score_res, human_metric_res_m1)
     print(f'CLIPScore for M1 pearsonr: {m1_pearsonr}, p-value: {m1_p_value}')
+    clip_s_res['M1 Pearson'] = round(100 * m1_pearsonr, 2)
+
     m2_pearsonr, m2_p_value = stats.pearsonr(clip_score_res, human_metric_res_m2)
     print(f'CLIPScore for M2 pearsonr: {m2_pearsonr}, p-value: {m2_p_value}')
+    clip_s_res['M2 Pearson'] = round(100 * m2_pearsonr, 2)
 
     ref_m1_pearsonr, m1_p_value = stats.pearsonr(ref_clip_score_res, human_metric_res_m1)
     print(f'Ref CLIPScore for M1 pearsonr: {ref_m1_pearsonr}, p-value: {m1_p_value}')
+    ref_clip_s_res['M1 Pearson'] = round(100 * ref_m1_pearsonr, 2)
+
     ref_m2_pearsonr, m2_p_value = stats.pearsonr(ref_clip_score_res, human_metric_res_m2)
     print(f'Ref CLIPScore for M2 pearsonr: {ref_m2_pearsonr}, p-value: {m2_p_value}')
+    ref_clip_s_res['M2 Pearson'] = round(100 * ref_m2_pearsonr, 2)
+
+    final_res['CLIP-S-COCO'] = clip_s_res
+    final_res['Ref-CLIP-S-COCO'] = ref_clip_s_res
+    return final_res
 
 
-def main():
-    args = get_args()
+def main(args):
     device = args.device
-    if args.use_origin:
-        print('=' * 10 + 'begin original model coco ex!' + '=' * 10)
-        clip_model = get_model(device, use_fp16=args.fp16)
-        cal_coco_ex(clip_model, device)
-
     image_path = args.image_path
     text_path = args.text_path
-    clip_model = get_model(device, image_path, text_path, use_fp16=args.fp16)
-    print('=' * 10 + 'begin distillation model coco ex!' + '=' * 10)
-    cal_coco_ex(clip_model, device)
+    clip_path = args.clip_path
+    clip_model = get_model(device, args.load_teacher, clip_path, image_path, text_path, args.fp16)
+    return cal_coco_ex(clip_model, device)
 
 
 if __name__ == '__main__':
-    main()
+    args = get_args()
+    total_ex(args, main)

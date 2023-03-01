@@ -18,7 +18,7 @@ class TextEncoder(nn.Module):
         self.layers = transformer_layers
 
         if compression_embedding:
-            self.token_embedding = nn.ModuleList([
+            self.token_embedding = nn.Sequential(*[
                 nn.Embedding(vocab_size, embedding_compression_dim),
                 nn.Linear(embedding_compression_dim, embed_dim)])
         else:

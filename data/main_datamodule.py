@@ -6,7 +6,11 @@ from torch.utils.data import DataLoader
 
 
 class MainDataModule(pl.LightningDataModule):
-    def __init__(self, dataset_para, dataset, dataset_name,
+    def __init__(self,
+                 dataset_para,
+                 dataset,
+                 dataset_name,
+                 prepare_para=None,
                  num_workers=8,
                  train_batch_size=128,
                  val_batch_size=1250):
@@ -23,8 +27,18 @@ class MainDataModule(pl.LightningDataModule):
 
         self.train_batch_size = train_batch_size
         self.val_batch_size = val_batch_size
-        self.load_data_module()
+        self.data_module = self.load_data_module()
+
+        self.prepare_function = self.load_prepare()
+        self.prepare_function_args = prepare_para
+        if self.prepare_function_args:
+            self.prepare_function_args.update(dataset_para)
+
         self.save_hyperparameters()
+
+    def prepare_data(self) -> None:
+        if self.prepare_function:
+            self.prepare_function(self.prepare_function_args)
 
     def setup(self, stage=None):
         # Assign train/val datasets for use in dataloaders
@@ -46,6 +60,15 @@ class MainDataModule(pl.LightningDataModule):
     def test_dataloader(self):
         return DataLoader(self.testset, batch_size=self.val_batch_size, num_workers=self.num_workers, shuffle=False)
 
+    def load_prepare(self):
+        dataset_file = self.dataset
+        module = importlib.import_module(".component." + dataset_file, package=__package__)
+        if hasattr(module, 'prepare'):
+            prepare_function = getattr(module, 'prepare')
+        else:
+            prepare_function = None
+        return prepare_function
+
     def load_data_module(self):
         dataset_file = self.dataset
         name = self.dataset_name
@@ -55,11 +78,12 @@ class MainDataModule(pl.LightningDataModule):
         try:
             # importlib.import_module('.xxx_dataset')动态的导入了模块
             # getattr 是获取属性值，获取模块中 XxxDataset 这一类的属性
-            self.data_module = getattr(importlib.import_module(
+            data_module = getattr(importlib.import_module(
                 ".component." + dataset_file, package=__package__), name)
         except:
             raise ValueError(
                 f'Invalid Dataset File Name or Invalid Class Name data.{dataset_file}.{name}')
+        return data_module
 
     def instancialize(self, **other_args):
         """ Instancialize a model using the corresponding parameters
@@ -77,17 +101,3 @@ class MainDataModule(pl.LightningDataModule):
                 args1[arg] = self.dataset_para[arg]
         args1.update(other_args)
         return self.data_module(**args1)
-
-
-if __name__ == '__main__':
-    from argparse import ArgumentParser
-
-    parser = ArgumentParser()
-    parser.add_argument('--batch_size', default=256, type=int)
-    parser.add_argument('--num_workers', default=16, type=int)
-    parser.add_argument('--dataset', default='_dataset', type=str)
-    parser.add_argument('--dataset_name', default='TextDataset', type=str)
-    parser.add_argument('--data_dir', default='/data/pyz/data', type=str)
-    args = parser.parse_args()
-    data_module = DistillationDataModule(**vars(args))
-    data_module.setup()
