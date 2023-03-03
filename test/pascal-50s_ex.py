@@ -24,50 +24,53 @@ def cal_acc(score1, score2, label_list, category_list):
     return acc
 
 
-def logout(acc_list):
-    print('=' * 80)
-    res = {k: 0 for k in idx2cat.values()}
-    for key in idx2cat.values():
-        for acc in acc_list:
-            res[key] += acc[key]
-        res[key] = round(res[key] * 100, 2)
-
+def logout(res):
     print('the final result: ')
-
+    final_res = {}
     for k, v in res.items():
-        print(f'the result {k} acc: {v}')
+        final_res[k] = round(100 * v, 2)
+        print(f'the result {k} acc: {final_res[k]}')
+
     mean_score = sum(res.values()) / len(res.values())
-    res['mean'] = mean_score
+    final_res['mean'] = round(100 * mean_score, 2)
     print(f'the mean value of the acc is {mean_score}')
-    print('=' * 80)
-    return res
+    return final_res
 
 
-def cal_clip_score(model, device,
+def cal_pascal_acc(model, device,
                    image_path_list, candidate1_list, candidate2_list,
                    refs_list, label_list, category_list):
     with torch.autocast('cuda'):
-        _, score1, _, ref_score1, = get_all_clip_score(model, image_path_list, refs_list, candidate1_list, device)
-        _, score2, _, ref_score2, = get_all_clip_score(model, image_path_list, refs_list, candidate2_list, device)
-
+        ref_score_list = []
+        for i in range(5):
+            _, score1, _, ref_score1, = get_all_clip_score(model, image_path_list, refs_list[i], candidate1_list, device)
+            _, score2, _, ref_score2, = get_all_clip_score(model, image_path_list, refs_list[i], candidate2_list, device)
+            ref_score_list.append((ref_score1, ref_score2))
     acc = cal_acc(score1, score2, label_list, category_list)
-    ref_acc = cal_acc(ref_score1, ref_score2, label_list, category_list)
-    return acc, ref_acc
+
+    ref_multi_ex_res = []
+    for ref_s1, ref_s2 in ref_score_list:
+        ref_acc = cal_acc(ref_s1, ref_s2, label_list, category_list)
+        ref_multi_ex_res.append(ref_acc)
+
+    ref_acc_res = {k: 0 for k in idx2cat.values()}
+    for key in idx2cat.values():
+        for ref_acc in ref_multi_ex_res:
+            ref_acc_res[key] += ref_acc[key]
+        ref_acc_res[key] /= 5
+
+    return acc, ref_acc_res
 
 
 def cal_one_model_res(clip_model, device, *data_args):
-    acc_list = []
-    ref_acc_list = []
 
-    acc, ref_acc = cal_clip_score(clip_model, device, *data_args)
-    acc_list.append(acc)
-    ref_acc_list.append(ref_acc)
+    acc, ref_acc = cal_pascal_acc(clip_model, device, *data_args)
 
     final_res = {}
     print('The no ref acc result')
-    final_res['Pascal-50s CLIP-S'] = logout(acc_list)
+    final_res['Pascal-50s CLIP-S'] = logout(acc)
     print('The ref acc result')
-    final_res['Pascal-50s Ref-CLIP-S'] = logout(ref_acc_list)
+    final_res['Pascal-50s Ref-CLIP-S'] = logout(ref_acc)
     return final_res
 
 
@@ -89,6 +92,7 @@ if __name__ == '__main__':
     candidate1_list = []
     candidate2_list = []
     refs_list = []
+    repeat_refs_list = []
     category_list = []
     label_list = []
     for data in dataset:
@@ -96,9 +100,13 @@ if __name__ == '__main__':
         image_path_list.append(image)
         candidate1_list.append(candidate1)
         candidate2_list.append(candidate2)
-        refs_list.append(sample(refs, 5))
+        temp = []
+        for i in range(5):
+            sample_refs = sample(refs, 5)
+            temp.append(sample_refs)
+        refs_list.append(temp)
         category_list.append(category)
         label_list.append(label)
-
+    refs_list = list(zip(*refs_list))
     total_ex(args, main, image_path_list, candidate1_list, candidate2_list,
              refs_list, label_list, category_list)
