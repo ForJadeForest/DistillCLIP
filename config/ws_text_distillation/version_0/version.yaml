@@ -3,7 +3,7 @@ trainer:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
       dir: '/data/pyz/result/Dis_CLIP'
-      name: 'ws_baseline-no-smd'
+      name: 'ws_text_baseline'
       project: 'CLIPDistillation'
       log_model: false
       group: ws_text_encoder

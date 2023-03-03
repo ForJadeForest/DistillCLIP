@@ -34,8 +34,8 @@ model:
     download_root: '/data/pyz/.cache'
     teacher_need_layers: [ 0, 1, 10, 11 ]
     model_type: 'image'
-    warm_steps: 5
-    total_steps: 100
+    warm_steps: 10
+    total_steps: 200
     weight_decay: 1.0e-2
     lr: 1.0e-3
 
@@ -69,9 +69,8 @@ trainer:
   auto_select_gpus: True
   accumulate_grad_batches: 1
   accelerator: 'gpu'
-  devices: 4
   strategy: 'ddp_find_unused_parameters_false'
-  max_epochs: 100
+  max_epochs: 200
   precision: 16
   #  limit_train_batches: 1
   log_every_n_steps: 100
@@ -81,7 +80,7 @@ trainer:
   logger:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
-      save_dir: '/data/pyz/result/Dis_CLIP'
+      dir: '/data/pyz/result/Dis_CLIP'
       name: 'baseline-weight share'
       project: 'ImageDistillation'
       log_model: false

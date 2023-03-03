@@ -9,18 +9,17 @@ model:
         use_transform: True
     norm: False
     loss_control_para:
-      loss_name: [ 'out_l1', 'out_cos', 'smd' ]
+      loss_name: [ 'out_l1', 'out_cos' ]
       temperature: 1
       loss_scale:
         out_l1: 1
         out_cos: 1
-        smd: 0.02
     teacher_name: ViT-B/32
     download_root: '/data/pyz/.cache'
     teacher_need_layers: [ 0, 1, 10, 11 ]
     model_type: 'text'
-    warm_steps: 20
-    total_steps: 500
+    warm_steps: 10
+    total_steps: 200
     weight_decay: 1.0e-2
     lr: 1.0e-3
 
@@ -36,8 +35,9 @@ data:
     train_batch_size: 1024
     val_batch_size: 1250
     prepare_para:
-      overwrite: False
+      overwrite: true
       raw_data_dir: '/data/pyz/data'
+      text_use: [ 'cc' ]
     dataset_para:
       teacher_name: 'ViT-B/32'
       cache_dir: '/data/pyz/.cache'
@@ -51,9 +51,9 @@ trainer:
   accelerator: 'gpu'
 
   strategy: 'ddp_find_unused_parameters_false'
-  max_epochs: 500
+  max_epochs: 200
   precision: 16
-#    limit_train_batches: 1
+
   log_every_n_steps: 100
   enable_progress_bar: True
   check_val_every_n_epoch: 1

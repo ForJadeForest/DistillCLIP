@@ -1,28 +1,20 @@
 model:
-  loss_control_para:
-    loss_name: [ 'out_l1', 'out_cos' ]
-    loss_scale:
-      out_l1: 1
-      out_cos: 1
+  class_path: DualDistillModel
+  init_args:
+    freeze_prefix: [ 'text_encoder' ]
+    loss_control_para:
+      loss_name: [ 'out_l1', 'out_cos', 'soft_label']
+      loss_scale:
+        cos_diff: 1
 
-    temperature: 1
-    vit_kd_para:
-      student_dims: 768
-      teacher_dims: 768
-      low_layers_num: 2
-      high_layers_num: 1
-    normalize: False
-  warm_steps: 15
-  total_steps: 2000
 
 trainer:
-  max_epochs: 2000
   logger:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
-      dir: '/data/pyz/result/dis_clip'
-      name: 'ws-l1-cos-1000epoch'
+      dir: '/data/pyz/result/Dis_CLIP'
+      name: 'clip_soft_label'
       project: 'CLIPDistillation'
       log_model: false
-      group: weight_share
-      tags: [ 'weight share', 'loss change' ]
+      group: clip
+      tags: [ 'weight share', 'loss change', 'CLIP model' ]
