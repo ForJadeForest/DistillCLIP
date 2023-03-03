@@ -64,7 +64,7 @@ class ImageEncoder(nn.Module):
 
         return vit_output
 
-    def forward(self, image, control_output: ControlOutput):
+    def forward(self, image, control_output: ControlOutput=None):
         return self.encode_image(image, control_output)
 
     def init_layers_with_teacher(self, layer_map, teacher_state_dict=None, init_type=None):

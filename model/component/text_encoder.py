@@ -108,7 +108,7 @@ class TextEncoder(nn.Module):
         if self.text_projection is not None:
             nn.init.normal_(self.text_projection, std=self.transformer.width ** -0.5)
 
-    def forward(self, text, control_output: ControlOutput):
+    def forward(self, text, control_output: ControlOutput=None):
         return self.encode_text(text, control_output)
 
     def hyper_para(self):
