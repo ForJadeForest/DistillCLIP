@@ -13,9 +13,9 @@ from model.component.weight_share_model import RepeatVisionTransformer, RepeatTe
 from model.utils import teacher_load
 
 # Model_Type_List = ['baseline', 'smd', 'compression_freeze_text', 'cos_diff', 'compression_text', 'teacher']
-Model_Type_List = ['baseline', 'compression_freeze_text', 'freeze_text', 'compression_text', 'teacher']
-
-# Model_Type_List = ['compression_freeze_text', 'teacher']
+Model_Type_List = ['baseline', 'freeze_text', 'compression_text', 'compression_freeze_text', 'ce_loss_clip', 'teacher']
+# Model_Type_List = ['baseline', 'compression_text', 'teacher']
+# Model_Type_List = ['teacher']
 
 
 def mini_vision_encoder():
@@ -105,9 +105,22 @@ def get_model(device, load_teacher=False, clip_path=None, image_path=None, text_
 
 def load_compression_text_clip_model(args):
     print("[INFO] ==> Now load the compression_text clip model!")
-    args.image_path = '/data/share/pyz/Dis_CLIP/final/image/ws_no_smd/174-val_acc0.243-loss0.13381.ckpt'
-    args.text_path = '/data/share/pyz/Dis_CLIP/final/text/compression/201-val_acc0.299-loss0.04052.ckpt'
+    # args.image_path = '/data/share/pyz/Dis_CLIP/final/image/ws_no_smd/174-val_acc0.243-loss0.13381.ckpt'
+    # args.text_path = '/data/share/pyz/Dis_CLIP/final/text/compression/201-val_acc0.299-loss0.04052.ckpt'
+
+    args.image_path = '/data/share/pyz/Dis_CLIP/final/image/ws_no_smd/188-val_acc0.237-loss0.13170.ckpt'
+    args.text_path = '/data/share/pyz/Dis_CLIP/final/text/compression/135-val_acc0.299-loss0.04125.ckpt'
+
     args.clip_path = None
+    args.load_teacher = False
+    return args
+
+
+def load_ce_loss_clip_model(args):
+    print("[INFO] ==> Now load the freeze text cos_diff clip model!")
+    args.clip_path = '/data/share/pyz/Dis_CLIP/final/clip/ce_loss/checkpoints/290-val_acc0.242-loss0.28316.ckpt'
+    args.image_path = None
+    args.text_path = None
     args.load_teacher = False
     return args
 
@@ -129,9 +142,12 @@ def load_compression_freeze_text_cos_diff_clip_model(args):
     args.load_teacher = False
     return args
 
+
 def load_cos_diff_clip_model(args):
     print("[INFO] ==> Now load the cos_diff clip model!")
-    args.clip_path = '/data/share/pyz/Dis_CLIP/final/clip/shtc5cml/checkpoints/223-val_acc0.245-loss0.05884.ckpt'
+    # args.clip_path = '/data/share/pyz/Dis_CLIP/final/clip/shtc5cml/checkpoints/223-val_acc0.245-loss0.05884.ckpt'
+
+    args.clip_path = '/data/share/pyz/Dis_CLIP/final/clip/shtc5cml/checkpoints/287-val_acc0.241-loss0.05855.ckpt'
     args.image_path = None
     args.text_path = None
     args.load_teacher = False
@@ -149,8 +165,12 @@ def load_smd_clip_model(args):
 
 def load_baseline_clip_model(args):
     print("[INFO] ==> Now load the baseline clip model!")
-    args.image_path = '/data/share/pyz/Dis_CLIP/final/image/ws_no_smd/174-val_acc0.243-loss0.13381.ckpt'
-    args.text_path = '/data/share/pyz/Dis_CLIP/final/text/ws_text_no_smd/131-val_acc0.300-loss0.03917.ckpt'
+    # args.image_path = '/data/share/pyz/Dis_CLIP/final/image/ws_no_smd/174-val_acc0.243-loss0.13381.ckpt'
+    # args.text_path = '/data/share/pyz/Dis_CLIP/final/text/ws_text_no_smd/131-val_acc0.300-loss0.03917.ckpt'
+
+    args.image_path = '/data/share/pyz/Dis_CLIP/final/image/ws_no_smd/188-val_acc0.237-loss0.13170.ckpt'
+    args.text_path = '/data/share/pyz/Dis_CLIP/final/text/ws_text_no_smd/163-val_acc0.296-loss0.03877.ckpt'
+
     args.clip_path = None
     args.load_teacher = False
     return args
@@ -201,6 +221,8 @@ def change_args(args, model_type):
         args = load_freeze_text_cos_diff_clip_model(args)
     elif model_type == 'compression_freeze_text':
         args = load_compression_freeze_text_cos_diff_clip_model(args)
+    elif model_type == 'ce_loss_clip':
+        args = load_ce_loss_clip_model(args)
     else:
         raise ValueError(f'the model_type should in {Model_Type_List}, instead of {args.model_type}')
     return args
@@ -212,13 +234,14 @@ def total_ex(args_control, ex_function, *args, **kwargs):
     # 但是每一个脚本可能返回多个value这样的字典，每一个实验中有小实验
     # 也就是需要一个这样的字典：
     # {model_type: {sub_ex_1: {metric1: value1, metric2: value2}, sub_ex_2: {{metric1: value1}}}
-    for model_type in Model_Type_List:
-        print('=' * 10 + f'[INFO] ==> begin Test {model_type} CLIP Model' + '=' * 10)
-        args_control = change_args(args_control, model_type)
-        args_control.model_name = model_type
-        res_dict = ex_function(args_control, *args, **kwargs)
-        print('*==*' * 20)
-        model_type_res[model_type] = res_dict
+    with torch.no_grad():
+        for model_type in Model_Type_List:
+            print('=' * 10 + f'[INFO] ==> begin Test {model_type} CLIP Model' + '=' * 10)
+            args_control = change_args(args_control, model_type)
+            args_control.model_name = model_type
+            res_dict = ex_function(args_control, *args, **kwargs)
+            print('*==*' * 20)
+            model_type_res[model_type] = res_dict
     ex_name_list = model_type_res[Model_Type_List[0]].keys()
     final_res = {}
     for ex_name in ex_name_list:
@@ -226,7 +249,7 @@ def total_ex(args_control, ex_function, *args, **kwargs):
     import pandas as pd
     for ex_name in ex_name_list:
         ex_res_df = pd.DataFrame(final_res[ex_name])
-        ex_res_df.to_csv(f'./mean_result/{ex_name}.csv')
+        ex_res_df.to_csv(f'./result_2/{ex_name}.csv')
 
 
 def get_all_metrics(refs, cands, return_per_cap=False):
