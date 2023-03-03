@@ -43,7 +43,7 @@ def init_image_features(clip_model, images_root_dir, device):
 
 
 def cal_metric(model_name, clip_model, images_filename, device, image_features):
-    root_dir = Path('test_dataset/coco_captioning_challenge') / model_name
+    root_dir = Path('../../test_dataset/coco_captioning_challenge') / model_name
     data_path = list(root_dir.glob('captions_val2014*_results.json'))[0]
     with open(data_path, 'r') as f:
         data = json.load(f)
@@ -73,7 +73,7 @@ def cal_coco_ex(model, device):
     images_root_dir = Path(r'/data/pyz/data/mscoco/val2014')
     images_filename, images_features = init_image_features(model, images_root_dir, device)
 
-    human_metric = pd.read_csv('./test_dataset/coco_captioning_challenge/leaderboard.csv').dropna(axis=1)
+    human_metric = pd.read_csv('../../test_dataset/coco_captioning_challenge/leaderboard.csv').dropna(axis=1)
     human_metric = human_metric.set_index('Unnamed: 1').T
     clip_score_res = []
     ref_clip_score_res = []
