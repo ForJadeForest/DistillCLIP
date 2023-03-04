@@ -1,14 +1,10 @@
 import collections
 import json
-import torch
-import clip_score
 from sklearn import metrics
 
-from utils import get_model, get_args, get_all_metrics, total_ex
 
-
-# extract reference
 def preprocessCOCO():
+    # extract reference
     with open("/data/ll/composite/captions_val2014.json") as f:
         data = {}
         data.update(json.load(f))
@@ -29,7 +25,7 @@ def preprocessFOIL():
     return all_index  # {image_id: [['False',"",foil_id],['True',"",foil_id]]} foil_id == pair
 
 
-def computeAccOfFOIL(model, device, mode, cal_other_metric=False):
+def load_data(mode):
     images = []
     refs = []
     candidates = []
@@ -58,73 +54,27 @@ def computeAccOfFOIL(model, device, mode, cal_other_metric=False):
                 labels.append(1)
             images.append('/data/pyz/data/mscoco/val2014/COCO_val2014_' + str(image_id).zfill(12) + '.jpg')
             candidates.append(' '.join(caption[1].split()))
+    return images, refs, candidates, labels
 
-    with torch.autocast('cuda' if 'cuda' in device else 'cpu'):
-        _, clip_scores, _, ref_clip_res, = clip_score.get_all_clip_score(model, images, refs, candidates, device)
 
-    clip_labels = []
-    for num, clip_result in enumerate(clip_scores):
+def cal_acc(scores, labels):
+    pred_label = []
+    for num, clip_result in enumerate(scores):
         if (num % 2) == 0:
-            if clip_result >= clip_scores[num + 1]:
-                clip_labels.append(1)
+            if clip_result >= scores[num + 1]:
+                pred_label.append(1)
             else:
-                clip_labels.append(0)
-    acc = metrics.accuracy_score(labels, clip_labels)
-    print("clipscore {} accuracy is ".format(mode), acc)
-
-    refClip_labels = []
-    for num, refclip_result in enumerate(ref_clip_res):
-        if (num % 2) == 0:
-            if refclip_result >= clip_scores[num + 1]:
-                refClip_labels.append(1)
-            else:
-                refClip_labels.append(0)
-    ref_acc = metrics.accuracy_score(labels, refClip_labels)
-    print("Refclipscore accuracy is ", ref_acc)
-
-    res_dict = {
-        'CLIP-S-acc': round(100 * acc, 2),
-        'RefCLIP-S-acc': round(100 * ref_acc, 2)
-    }
-
-    if not cal_other_metric:
-        return res_dict
-
-    other_metrics = get_all_metrics(refs, candidates, return_per_cap=False)
-    for k, v in other_metrics.items():
-        if k == 'bleu':
-            v = v[-1]  # just do BLEU-4
-            k = 'bleu-4'
-        if k == 'spice':
-            v = [float(item['All']['f']) for item in v]
-        metric_labels = []
-        for num, result in enumerate(v):
-            if (num % 2) == 0:
-                if result > v[num + 1]:
-                    metric_labels.append(1)
-                else:
-                    metric_labels.append(0)
-        acc = metrics.accuracy_score(labels, metric_labels)
-        res_dict[k] = acc
-        print("{} accuracy is ".format(k), acc)
-    return res_dict
+                pred_label.append(0)
+    return metrics.accuracy_score(labels, scores)
 
 
-def main(args):
-    device = args.device
-    image_path = args.image_path
-    text_path = args.text_path
-    clip_path = args.clip_path
-    load_teacher = args.load_teacher
-    model = get_model(device, load_teacher, clip_path, image_path, text_path)
-    # 1:1 ref 0:4 ref
+def computeAccOfFOIL(model, mode):
+    images, refs, candidates, labels = load_data(mode)
+    score_dict = model(images, refs, candidates, reduction=False)
+
     res_dict = {}
-    for mode in [0, 1]:
-        res = computeAccOfFOIL(model, device, mode, args.cal_other_metric)
-        res_dict[f'FOIL_mode_{mode}'] = res
+    for score_name, score in score_dict.items():
+        acc = cal_acc(score_name, score)
+        res_dict[score_name] = round(100 * acc, 2)
+
     return res_dict
-
-
-if __name__ == '__main__':
-    args = get_args()
-    total_ex(args, main)

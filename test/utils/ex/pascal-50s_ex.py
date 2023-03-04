@@ -40,12 +40,11 @@ def logout(res):
 def cal_pascal_acc(model, device,
                    image_path_list, candidate1_list, candidate2_list,
                    refs_list, label_list, category_list):
-    with torch.autocast('cuda'):
-        ref_score_list = []
-        for i in range(5):
-            _, score1, _, ref_score1, = get_all_clip_score(model, image_path_list, refs_list[i], candidate1_list, device)
-            _, score2, _, ref_score2, = get_all_clip_score(model, image_path_list, refs_list[i], candidate2_list, device)
-            ref_score_list.append((ref_score1, ref_score2))
+    ref_score_list = []
+    for i in range(5):
+        _, score1, _, ref_score1, = model(image_path_list, refs_list[i], candidate1_list, device)
+        _, score2, _, ref_score2, = model(image_path_list, refs_list[i], candidate2_list, device)
+        ref_score_list.append((ref_score1, ref_score2))
     acc = cal_acc(score1, score2, label_list, category_list)
 
     ref_multi_ex_res = []
@@ -65,7 +64,6 @@ def cal_pascal_acc(model, device,
 def cal_one_model_res(clip_model, device, *data_args):
 
     acc, ref_acc = cal_pascal_acc(clip_model, device, *data_args)
-
     final_res = {}
     print('The no ref acc result')
     final_res['Pascal-50s CLIP-S'] = logout(acc)
