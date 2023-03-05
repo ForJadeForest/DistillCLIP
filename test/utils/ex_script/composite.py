@@ -29,8 +29,8 @@ def compute_human_correlation(input_json, model, tauvariant='c'):
     images, refs, candidates, human_scores = load_data(input_json)
 
     final_result = {}
-    score_dict = model(images, refs, candidates, reduction=False)
-    for score_name, score in score_dict:
+    score_dict = model(images, candidates, refs,  reduction=False)
+    for score_name, score in score_dict.items():
         tau = 100 * stats.kendalltau(score, human_scores, variant=tauvariant)[0]
         final_result[score_name] = round(tau, 2)
         print(f'{score_name} Tau-{tauvariant}: {final_result[score_name]}')
@@ -43,10 +43,9 @@ def composite_ex(model, root_dir):
     :param root_dir:root_dir = '/data/ll/composite'
     :return:
     """
-    final_res = {}
     composite_file = os.path.join(root_dir, 'composite.json')
     if not os.path.exists(composite_file):
         print('Please run composite_preprocess.py')
         quit()
-    final_res['Composite'] = compute_human_correlation(composite_file, model, tauvariant='c')
-    return final_res
+
+    return compute_human_correlation(composite_file, model, tauvariant='c')

@@ -42,8 +42,8 @@ def compute_human_correlation(model, input_json, image_directory, tauvariant='c'
     images, refs, candidates, human_scores = load_data(input_json, image_directory)
 
     final_result = {}
-    score_dict = model(images, refs, candidates, reduction=False)
-    for score_name, score in score_dict:
+    score_dict = model(images, candidates, refs, reduction=False)
+    for score_name, score in score_dict.items():
         tau = 100 * stats.kendalltau(score, human_scores, variant=tauvariant)[0]
         final_result[score_name] = round(tau, 2)
         print(f'{score_name} Tau-{tauvariant}: {final_result[score_name]}')
@@ -57,4 +57,4 @@ def flickr8k_expert_ex(model, root_dir):
 
 def flickr8k_cf_ex(model, root_dir):
     flickr8k_crowdflower_file = os.path.join(root_dir, 'crowdflower_flickr8k.json')
-    return compute_human_correlation(model, flickr8k_crowdflower_file, image_directory=root_dir, tauvariant='c')
+    return compute_human_correlation(model, flickr8k_crowdflower_file, image_directory=root_dir, tauvariant='b')

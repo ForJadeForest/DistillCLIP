@@ -61,20 +61,20 @@ def cal_acc(scores, labels):
     pred_label = []
     for num, clip_result in enumerate(scores):
         if (num % 2) == 0:
-            if clip_result >= scores[num + 1]:
+            if clip_result > scores[num + 1]:
                 pred_label.append(1)
             else:
                 pred_label.append(0)
-    return metrics.accuracy_score(labels, scores)
+    return metrics.accuracy_score(labels, pred_label)
 
 
-def computeAccOfFOIL(model, mode):
+def FOIL_ex(model, mode):
     images, refs, candidates, labels = load_data(mode)
-    score_dict = model(images, refs, candidates, reduction=False)
+    score_dict = model(images, candidates, refs, reduction=False)
 
     res_dict = {}
     for score_name, score in score_dict.items():
-        acc = cal_acc(score_name, score)
+        acc = cal_acc(score, labels)
         res_dict[score_name] = round(100 * acc, 2)
 
     return res_dict
