@@ -1,4 +1,6 @@
 from .base_model import BaseModel
+
+import numpy as np
 from pycocoevalcap.bleu.bleu import Bleu
 from pycocoevalcap.cider.cider import Cider
 from pycocoevalcap.meteor.meteor import Meteor
@@ -9,16 +11,21 @@ from pycocoevalcap.tokenizer.ptbtokenizer import PTBTokenizer
 
 class NGramModel(BaseModel):
     def __init__(self, model_name, use_PTB=False):
-        super(NGramModel, self).__init__(model_name)
+        super(NGramModel, self).__init__(model_name, False)
         self.scorer = name2scorer(model_name)
         self.use_PTB = use_PTB
 
     def cal_score(self, images=None, candidates=None, references=None, reduction=False):
         overall, per_cap = pycoco_eval(self.scorer, references, candidates, self.use_PTB)
+        if self.model_name.lower() == 'bleu':
+            overall = overall[-1]
+            per_cap = per_cap[-1]
+        if self.model_name.lower() == 'spice':
+            per_cap = [float(item['All']['f']) for item in per_cap]
         if reduction:
-            return {f'mean_{self.model_name}': overall}
+            return {f'mean_ref_score': overall}
 
-        return {f'{self.model_name}': per_cap}
+        return {f'ref_score': np.array(per_cap)}
 
 
 def name2scorer(model_name):
