@@ -1,10 +1,11 @@
 from pathlib import Path
-from itertools import combinations
 import torch
+from typing import List
 from model.utils import teacher_load
 from model.component.clip_model import CLIPModel
 from test.test_model.clip_model import TestCLIPModel
-from encoder_model import *
+from test.utils.load_clip_model.default_model import CLIPModelLoadConfig
+from .encoder_model import *
 
 
 def load_image_encoder(cpk_path):
@@ -68,7 +69,7 @@ def get_clip_model(device, use_fp16=True, clip_path=None, image_path=None, text_
     return clip_model
 
 
-def get_all_version_path(root_path, model_name):
+def get_all_version_path(root_path, model_name) -> List[CLIPModelLoadConfig]:
     """
     获得一个模型的所有version的路径
     :param root_path:
@@ -93,7 +94,7 @@ def get_all_version_path(root_path, model_name):
             'clip_path': root_path / 'clip' / 'l_clip'
         },
         'CE-CLIP': {
-            'clip_path': root_path / 'clip' / 'c_clipe'
+            'clip_path': root_path / 'clip' / 'ce_clip'
         }
     }
     model_path = model_name_path_map[model_name]
@@ -103,20 +104,36 @@ def get_all_version_path(root_path, model_name):
         all_version = []
         for i in image_all_version:
             for t in text_all_version:
-                all_version.append((i, t))
+                all_version.append(CLIPModelLoadConfig(
+                    image_path=i, text_path=t
+                ))
         return all_version
 
     else:
         all_version = list(model_path['clip_path'].glob('*val_acc*'))
+        all_version = [CLIPModelLoadConfig(clip_path=p) for p in all_version]
         return all_version
 
 
-def load_version(version_path, model_name, device, use_fp16):
-    if len(version_path) == 1:
-        clip_model = get_clip_model(device, clip_path=version_path, use_fp16=use_fp16)
+def load_version(model_config: CLIPModelLoadConfig, model_name, device, use_fp16=True):
+    """
+    给定一个model config加载模型
+    :param model_config:
+    :param model_name:
+    :param device:
+    :param use_fp16:
+    :return:
+    """
+
+    if model_config.load_teacher:
+        clip_model = get_clip_model(device, use_fp16, load_teacher=True)
+        return TestCLIPModel(model_name, clip_model, device)
+    if model_config.clip_path is not None:
+        clip_model = get_clip_model(device, clip_path=model_config.clip_path, use_fp16=use_fp16)
         return TestCLIPModel(model_name, clip_model, device)
     else:
-        clip_model = get_clip_model(device, use_fp16, image_path=version_path[0], text_path=version_path[1])
+        clip_model = get_clip_model(device, use_fp16,
+                                    image_path=model_config.image_path,
+                                    text_path=model_config.text_path)
         return TestCLIPModel(model_name, clip_model, device)
-
 
