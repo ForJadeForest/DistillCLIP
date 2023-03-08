@@ -133,7 +133,7 @@ class LossCalculator(nn.Module):
                 assert self.temperature
                 logits_kl_loss = \
                     0.5 * (loss(stu_out.i2t_logits, tea_out.i2t_logits)
-                           + loss(stu_out.t2i_logits, tea_out.t2i_logits)) * self.temperature ** 2
+                           + loss(stu_out.t2i_logits, tea_out.t2i_logits))
                 cal_res[loss_name] = logits_kl_loss
             elif loss_name == 'logits_mse':
                 cal_res[loss_name] = \
@@ -142,7 +142,7 @@ class LossCalculator(nn.Module):
                 cal_res[loss_name] = loss(stu_out.visual_output.last_layer_output,
                                           stu_out.text_output.last_layer_output)
             elif loss_name == 'cos_diff':
-                cal_res[loss_name] = 0.5 * (loss(stu_out.i2t_logits, tea_out.i2t_logits) \
+                cal_res[loss_name] = 0.5 * (loss(stu_out.i2t_logits, tea_out.i2t_logits)
                                             + loss(stu_out.t2i_logits, tea_out.t2i_logits))
 
         loss = 0.5 * (image_loss + text_loss)

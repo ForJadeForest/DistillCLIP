@@ -18,6 +18,7 @@ def prepare(prepare_args):
     raw_data_dir = Path(prepare_args['raw_data_dir'])
     teacher_name = prepare_args['teacher_name']
     overwrite = prepare_args['overwrite']
+    text_use = prepare_args['text_use']
 
     train_cache_path = cache_dir / f'text-cache-train-{teacher_name.replace("/", "-")}.pth'
     val_cache_path = cache_dir / f'text-cache-val-{teacher_name.replace("/", "-")}.pth'
@@ -26,14 +27,16 @@ def prepare(prepare_args):
         raw_text = []
         coco2017_file = raw_data_dir / 'mscoco' / 'annotations' / 'captions_train2017.json'
         cc_file = raw_data_dir / 'cc' / 'train_cc3m.tsv'
-        logging.info(f'read coco2017 text data: {str(coco2017_file)}')
-        with cc_file.open('r', encoding='utf8') as f:
-            for content in f.readlines():
-                raw_text.append(content.split('\t')[0])
-        with coco2017_file.open('r', encoding='utf8') as f:
-            res = json.load(f)
-            for annotation in res['annotations']:
-                raw_text.append(annotation['caption'])
+        if 'cc' in text_use:
+            logging.info(f'read coco2017 text data: {str(coco2017_file)}')
+            with cc_file.open('r', encoding='utf8') as f:
+                for content in f.readlines():
+                    raw_text.append(content.split('\t')[0])
+        if 'coco' in text_use:
+            with coco2017_file.open('r', encoding='utf8') as f:
+                res = json.load(f)
+                for annotation in res['annotations']:
+                    raw_text.append(annotation['caption'])
 
         logging.info('All data: {} Begin tokenizing...'.format(len(raw_text)))
         tokenize_text = []
