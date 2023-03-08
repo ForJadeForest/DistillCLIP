@@ -6,8 +6,8 @@ from test.run_all_model import postprocess
 from test.utils.load_clip_model.get_model import get_all_version_path
 
 
-model_name_list = ['WP&Single', 'WP&SR', 'WP+MD&Single', 'L-CLIP', 'CE-CLIP', 'CE-L-CLIP']
-model_name_list = ['CE-CLIP']
+model_name_list = ['WP&Single', 'WP&SR', 'WP+MD&Single', 'L-CLIP']
+
 root_path = '/data/share/pyz/Dis_CLIP/final'
 total_res = {}
 with torch.autocast('cuda'):

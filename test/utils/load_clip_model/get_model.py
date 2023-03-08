@@ -92,12 +92,6 @@ def get_all_version_path(root_path, model_name) -> Dict[str, CLIPModelLoadConfig
         },
         'L-CLIP': {
             'clip_path': root_path / 'clip' / 'l_clip'
-        },
-        'CE-CLIP': {
-            'clip_path': root_path / 'clip' / 'ce_clip'
-        },
-        'CE-L-CLIP': {
-            'clip_path': root_path / 'clip' / 'ce_l_clip'
         }
     }
     model_path = model_name_path_map[model_name]
