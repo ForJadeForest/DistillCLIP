@@ -4,12 +4,28 @@ This repo is for L-CLIPScore: a lightweight Embedding-based Captioning Metric fo
 
 
 ## Data
-1. We use the mscoco2017 and imagenet1M to train our image encoder in the first stage. You should use a script to move the data in the same folder.
+1. We use the mscoco2017 and imagenet1M to train our image encoder in the first stage. 
+   - You should use a script to move the data in the same folder.
 
 2. We use the Conceptual Caption and mscoco2017 captions as the text data. 
 
 3. We use the mscoco2017 for the L-CLIP model to learn the multimodal information.
 
+If you want to run all model: you should have these data:
+```yaml
+data:
+  mscoco:
+    annotations
+    val2017
+  cc:
+    train_cc3m.tsv
+  # the folder contain imagenet1M and mscoco2017 train dataset.
+  combine_data:
+    000.png
+    001.png
+    ...
+
+```
 
 ## Run
 ### For reproduction
