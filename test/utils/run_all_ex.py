@@ -65,9 +65,9 @@ if __name__ == '__main__':
     from test.utils.load_clip_model.default_model import CLIPModelLoadConfig
     from test.test_model.n_gram_model import NGramModel
     model_config = CLIPModelLoadConfig(
-        clip_path='/data/share/pyz/Dis_CLIP/final/clip/l_clip/192-val_acc0.246-loss0.05608.ckpt'
+        clip_path='/home/pyz32/code/Dis_CLIP/CLIPDistillation/34i883eb/checkpoints/last-v1.ckpt'
     )
     model = load_version(model_config, 'L-CLIP', device='cuda:3', use_fp16=True)
-    model = NGramModel('bleu')
+    # model = NGramModel('bleu')
     res = run_all_ex(model)
     print(res)

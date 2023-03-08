@@ -1,6 +1,6 @@
 from pathlib import Path
 import torch
-from typing import List
+from typing import Dict
 from model.utils import teacher_load
 from model.component.clip_model import CLIPModel
 from test.test_model.clip_model import TestCLIPModel
@@ -69,7 +69,7 @@ def get_clip_model(device, use_fp16=True, clip_path=None, image_path=None, text_
     return clip_model
 
 
-def get_all_version_path(root_path, model_name) -> List[CLIPModelLoadConfig]:
+def get_all_version_path(root_path, model_name) -> Dict[str, CLIPModelLoadConfig]:
     """
     获得一个模型的所有version的路径
     :param root_path:
@@ -95,23 +95,27 @@ def get_all_version_path(root_path, model_name) -> List[CLIPModelLoadConfig]:
         },
         'CE-CLIP': {
             'clip_path': root_path / 'clip' / 'ce_clip'
+        },
+        'CE-L-CLIP': {
+            'clip_path': root_path / 'clip' / 'ce_l_clip'
         }
     }
     model_path = model_name_path_map[model_name]
     if 'clip_path' not in model_path:
         image_all_version = list(model_path['image_path'].glob('*val_acc*'))
         text_all_version = list(model_path['text_path'].glob('*val_acc*'))
-        all_version = []
+        all_version = {}
         for i in image_all_version:
             for t in text_all_version:
-                all_version.append(CLIPModelLoadConfig(
-                    image_path=i, text_path=t
-                ))
+                all_version[model_name + str(i) + str(t)] = CLIPModelLoadConfig(
+                    image_path=str(i), text_path=str(t)
+                )
         return all_version
 
     else:
         all_version = list(model_path['clip_path'].glob('*val_acc*'))
-        all_version = [CLIPModelLoadConfig(clip_path=p) for p in all_version]
+        all_version = {str(p): CLIPModelLoadConfig(clip_path=p) for p in all_version}
+
         return all_version
 
 

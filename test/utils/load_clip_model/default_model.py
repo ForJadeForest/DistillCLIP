@@ -23,7 +23,7 @@ def load_ce_loss_clip_model():
     return CLIPModelLoadConfig(
         image_path=None,
         text_path=None,
-        clip_path='/data/share/pyz/Dis_CLIP/final/clip/ce_clip/checkpoints/290-val_acc0.242-loss0.28316.ckpt',
+        clip_path='/data/share/pyz/Dis_CLIP/final/clip/ce_clip/290-val_acc0.242-loss0.28316.ckpt',
         load_teacher=False
     )
 
@@ -69,6 +69,11 @@ def load_original_clip():
         load_teacher=True
     )
 
+def load_ce_l_clip():
+    return CLIPModelLoadConfig(
+        clip_path='/data/share/pyz/Dis_CLIP/final/clip/ce_l_clip/295-val_acc0.248-loss0.21531.ckpt'
+    )
+
 
 model_name_map = {
     'WP+MD&Single': load_md_single_clip_model(),
@@ -78,4 +83,5 @@ model_name_map = {
     'L-CLIP': load_l_clip_model(),
     'WP&SR': load_sr_clip_model(),
     'CE-CLIP': load_ce_loss_clip_model(),
+    'CE-L-CLIP': load_ce_l_clip()
 }
