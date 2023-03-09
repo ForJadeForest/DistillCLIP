@@ -10,6 +10,9 @@ from .component.utils import IMAGE_MEAN, IMAGE_STD
 
 
 class TextImageDataModule(pl.LightningDataModule):
+    """
+    The datModule for webdataset format
+    """
     def __init__(self, image_path, batch_size=64, workers=4):
         super(TextImageDataModule, self).__init__()
         self.batch_size = batch_size

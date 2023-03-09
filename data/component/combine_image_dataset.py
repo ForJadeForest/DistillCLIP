@@ -16,8 +16,12 @@ logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
 
 def prepare(prepare_args):
     """
-    用来下载数据，或者生成缓存数据
-    :param prepare_args:
+    Generation the cache data
+    :param prepare_args: a Dict.
+        Need contain raw_data_dir: the mscoco2017 folder path
+                     cache_dir: the cache dir
+                     teacher_name: the teacher name of clip model
+                     overwrite: whether to overwrite the cache file
     :return:
     """
     raw_data_dir = Path(prepare_args['raw_data_dir'])
@@ -52,10 +56,18 @@ def prepare(prepare_args):
 
 
 class CombineImageDataset(Dataset):
-    def __init__(self, combine_dataset_path, train=True, image_use=None, cache_dir='cache', teacher_name='ViT-B/32'):
+    def __init__(self, combine_dataset_path, train=True, image_use=None, cache_dir='./.cache', teacher_name='ViT-B/32'):
+        """
+        Combine Image Dataset: contain mscoco2017, imagenet1M
+        :param combine_dataset_path: the combine image folder path
+        :param train:
+        :param image_use: a list, what data should you use.
+        :param cache_dir: the cache file dir
+        :param teacher_name: The teacher name of CLIP
+        """
         super(CombineImageDataset, self).__init__()
         if image_use is None:
-            image_use = ['coco', 'data_256', 'imagenet']
+            image_use = ['coco', 'imagenet']
 
         for i in image_use:
             assert i in IMAGE_DATASET_NAME, f'the {i} dataset name is not exists in {IMAGE_DATASET_NAME}'

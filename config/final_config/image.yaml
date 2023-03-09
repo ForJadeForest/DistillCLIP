@@ -26,7 +26,7 @@ model:
       loss_name: [ 'out_l1', 'out_cos' ]
     freeze_embed: True
     teacher_name: ViT-B/32
-    download_root: '/data/pyz/.cache'
+    download_root: './.cache'
     teacher_need_layers: [ 0, 1, 10, 11 ]
     model_type: 'image'
     warm_steps: 10
@@ -50,7 +50,7 @@ data:
       raw_data_dir: '/path/to/data'
     dataset_para:
       cache_dir: './.cache'
-      combine_dataset_path: 'path/to/combine_data'
+      combine_dataset_path: '/The/path/to/combine_data'
       image_use: [ 'coco', 'imagenet' ]
       teacher_name: 'ViT-B/32'
 

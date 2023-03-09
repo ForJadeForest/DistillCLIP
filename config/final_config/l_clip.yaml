@@ -22,7 +22,7 @@ model:
         repeated_times: 2
         use_transform: True
     load_path:
-      image: 'The/path/to/your/image_model.ckpt'
+      image: '/The/path/to/your/image_model.ckpt'
       text: 'The/path/to/your/text_model.ckpt'
 
 
@@ -32,7 +32,7 @@ model:
         cos_diff: 0.1
 
 
-    download_root: '/data/pyz/.cache'
+    download_root: './.cache'
     warm_steps: 15
     total_steps: 300
     weight_decay: 1.0e-3
@@ -44,8 +44,8 @@ data:
     dataset: 'ms_coco'
     dataset_name: 'COCODataset'
     dataset_para:
-      root_path: '/home/pyz32/data_tmp/mscoco'
-      annotation_path: '/home/pyz32/data_tmp/mscoco/annotations'
+      root_path: '/The/path/to/mscoco'
+      annotation_path: '/The/path/to/mscoco/annotations'
     train_batch_size: 512
     val_batch_size: 1250
     num_workers: 12
