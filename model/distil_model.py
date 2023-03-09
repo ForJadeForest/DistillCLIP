@@ -11,7 +11,6 @@ from torch import optim, nn
 from torchmetrics.functional import accuracy
 
 from ._loss import LossCalculator
-from ._metrics import cal_speed, cal_flop
 from .utils import teacher_load
 from .component.image_encoder import ImageEncoder
 from .component.weight_share_model import RepeatVisionTransformer
@@ -19,8 +18,8 @@ from .component.weight_share_model import RepeatVisionTransformer
 
 class DistillModel(pl.LightningModule):
     def __init__(self, student_encoder: torch.nn.Module,
-                 teacher_name: str, loss_control_para: Dict, download_root: str, freeze_embed: bool = False,
-                 teacher_need_layers: List = None, model_type: str = 'image',
+                 loss_control_para: Dict, download_root: str, teacher_name: str = 'ViT-B/32',
+                 freeze_embed: bool = False, teacher_need_layers: List = None, model_type: str = 'image',
                  warm_steps=10, total_steps=200, weight_decay=1e-3, lr: float = 1e-3, norm: bool = False,
                  unfreeze_epoch=None):
         """
@@ -67,12 +66,6 @@ class DistillModel(pl.LightningModule):
 
     def on_train_start(self):
         self.logger_begin()
-        # if self.hparams.model_type == 'image':
-        #     dummy_input = torch.rand(size=(1, 3, 224, 224), device=self.device)
-        # else:
-        #     dummy_input = torch.rand(size=(1, 77), device=self.device)
-        # self.speed_test(self.student, dummy_input, prefix='stu_')
-        # self.speed_test(self.teacher, dummy_input, prefix='tea_')
 
     @rank_zero_only
     def logger_begin(self):
@@ -84,19 +77,6 @@ class DistillModel(pl.LightningModule):
             wandb.define_metric(name='val_stu_acc/stu_acc_top50', summary='max')
         elif isinstance(self.logger, TensorBoardLogger):
             self.logger.log_hyperparams(self.hparams, {"hp/stu_acc_top1": 0, "hp/stu_acc_top10": 0})
-
-    def speed_test(self, model, dummy_input, prefix):
-        with torch.no_grad():
-            flops, param = cal_flop(model, dummy_input)
-            mean_syn, std_syn, mean_fps = cal_speed(model, dummy_input)
-        metric_dict = {
-            f'{prefix}_flops': flops,
-            f'{prefix}_param': param,
-            f'{prefix}_mean_times': mean_syn,
-            f'{prefix}_std_times': std_syn,
-            f'{prefix}_mean_fps': mean_fps
-        }
-        self.log_dict(metric_dict, sync_dist=True)
 
     def forward(self, inputs):
 

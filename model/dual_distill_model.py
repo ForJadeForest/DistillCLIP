@@ -4,6 +4,7 @@ import pytorch_lightning as pl
 import torch
 import transformers
 import wandb
+
 from matplotlib import pyplot as plt
 from pytorch_lightning.loggers import WandbLogger, TensorBoardLogger
 from pytorch_lightning.utilities import rank_zero_only
@@ -11,7 +12,6 @@ from torch import optim, nn
 from torchmetrics.functional import accuracy
 
 from ._loss import LossCalculator
-from ._metrics import cal_flop, cal_speed
 from .utils import teacher_load
 from .component.clip_model import CLIPModel
 from .component.image_encoder import ImageEncoder
@@ -44,6 +44,26 @@ class DualDistillModel(pl.LightningModule):
                  download_root: str, norm=False, teacher_name: str = 'ViT-B/32', freeze_embed: bool = False,
                  unfreeze_epoch: int = None, load_path: Dict = None, teacher_need_layers: List = None,
                  freeze_prefix: List = None):
+        """
+
+        :param image_student: Student image encoder
+        :param text_student: Student Text encoder
+        :param loss_control_para: To control which loss you want to use
+        :param warm_steps: The Cos_lr_scheduler warm steps. It's the number of epoch.
+        :param total_steps: The total_epoch of training
+        :param weight_decay: the weight_decay for lr
+        :param lr: the learning rate
+        :param download_root: The download path of CLIP Teacher model file
+        :param norm: use the final output with l2 norm to calculate the loss
+        :param teacher_name: The CLIP Teacher model name
+        :param freeze_embed:  Whether to load the teacher embedding parameters and freeze them in training
+        :param unfreeze_epoch: if is None, the freezed embedding will never unfreeze,
+                               else, after the unfreeze_epoch, the embedding will unfreeze.
+                               Only the freeze_embed is True will take effect
+        :param load_path: the path for image encoder and text encoder checkpoint
+        :param teacher_need_layers: the teacher layers you want to distillate
+        :param freeze_prefix: A list, if the weight name startswith the elements in the list, it's weight will be freeze
+        """
         super().__init__()
         self.save_hyperparameters(ignore=['image_student', 'text_student'])
 
@@ -68,10 +88,6 @@ class DualDistillModel(pl.LightningModule):
 
     def on_train_start(self):
         self.logger_begin()
-        # dummy_input = (torch.randint(high=49407, size=(1, 77), device=self.device),
-        #                torch.rand(size=(1, 3, 224, 224), device=self.device))
-        # self.speed_test(self.student, dummy_input, prefix='stu')
-        # self.speed_test(self.teacher, dummy_input, prefix='tea')
 
     @rank_zero_only
     def logger_begin(self):
@@ -86,19 +102,6 @@ class DualDistillModel(pl.LightningModule):
 
         elif isinstance(self.logger, TensorBoardLogger):
             self.logger.log_hyperparams(self.hparams, {"hp/stu_acc_top1": 0, "hp/stu_acc_top10": 0})
-
-    def speed_test(self, model, dummy_input, prefix):
-        with torch.no_grad():
-            flops, param = cal_flop(model, dummy_input)
-            mean_syn, std_syn, mean_fps = cal_speed(model, dummy_input)
-        metric_dict = {
-            f'{prefix}_flops': flops,
-            f'{prefix}_param': param,
-            f'{prefix}_mean_times': mean_syn,
-            f'{prefix}_std_times': std_syn,
-            f'{prefix}_mean_fps': mean_fps
-        }
-        self.log_dict(metric_dict, sync_dist=True)
 
     def forward(self, inputs) -> Tuple[CLIPOutput, CLIPOutput]:
         image, text = inputs
@@ -120,14 +123,6 @@ class DualDistillModel(pl.LightningModule):
 
         loss, cal_res = self.loss_control(student_outs, teacher_outs, 'all')
         self.log_info('train_loss', loss, cal_res, batch_size=len(inputs))
-
-        # stu_logits, _ = norm_and_logits(student_outs.visual_output.last_representation,
-        #                                 student_outs.text_output.last_representation)
-        # tea_logits, _ = norm_and_logits(teacher_outs.visual_output.last_representation,
-        #                                 teacher_outs.text_output.last_representation)
-        # self.log_acc(stu_logits, section='train_acc', prefix='stu')
-        # self.log_acc(tea_logits, section='train_acc', prefix='tea')
-        # self.log_diag_score(stu_logits, section='train_diag_score', prefix='stu')
 
         return loss
 

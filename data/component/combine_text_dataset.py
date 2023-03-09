@@ -13,6 +13,16 @@ logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
 
 
 def prepare(prepare_args):
+    """
+    generate the cache file for text encoder
+    :param prepare_args: a Dict.
+        Need contain raw_data_dir: the mscoco2017 folder path
+                     cache_dir: the cache dir
+                     teacher_name: the teacher name of clip model
+                     overwrite: whether to overwrite the cache file
+                     text_use: the text data you want to use
+    :return:
+    """
     from clip import tokenize
     cache_dir = Path(prepare_args['cache_dir'])
     raw_data_dir = Path(prepare_args['raw_data_dir'])
@@ -23,7 +33,7 @@ def prepare(prepare_args):
     train_cache_path = cache_dir / f'text-cache-train-{teacher_name.replace("/", "-")}.pth'
     val_cache_path = cache_dir / f'text-cache-val-{teacher_name.replace("/", "-")}.pth'
     if overwrite or not train_cache_path.exists():
-        logging.info('重写/不存在 Train data 缓存文件，开始处理文件')
+        logging.info('overwrite/no exist the Train data cache file, begin process...')
         raw_text = []
         coco2017_file = raw_data_dir / 'mscoco' / 'annotations' / 'captions_train2017.json'
         cc_file = raw_data_dir / 'cc' / 'train_cc3m.tsv'
@@ -47,7 +57,7 @@ def prepare(prepare_args):
         torch.save(tokenize_text, train_cache_path)
 
     if overwrite or not val_cache_path.exists():
-        logging.info('重写/不存在 Val data 缓存文件，开始处理文件')
+        logging.info('overwrite/no exist the Val data cache file, begin process...')
         val_image_file_list_path = raw_data_dir / 'mscoco' / 'val2017'
         path_list = []
         tokenized_sentence = []
@@ -70,11 +80,17 @@ def prepare(prepare_args):
                 path_list.append(val_image_file_list_path / file_name)
         image_rep = encode_images(path_list, teacher_name)
         torch.save([captions, tokenized_sentence, path_list, image_rep], val_cache_path)
-    logging.info('Cache生成完成')
+    logging.info('Cache generation done!')
 
 
 class CombineTextDataset(Dataset):
-    def __init__(self, cache_dir='cache', train=True, teacher_name='ViT-B/32'):
+    def __init__(self, cache_dir='./.cache', train=True, teacher_name='ViT-B/32'):
+        """
+
+        :param cache_dir: the cache file dir
+        :param train:
+        :param teacher_name: The teacher name of CLIP
+        """
         super(CombineTextDataset, self).__init__()
         self.cache_dir = Path(cache_dir)
         if not self.cache_dir.exists():
@@ -84,7 +100,7 @@ class CombineTextDataset(Dataset):
 
         cache_path = self.cache_dir / f'text-cache-train-{self.teacher_name.replace("/", "-")}.pth' \
             if self.train else self.cache_dir / f'text-cache-val-{self.teacher_name.replace("/", "-")}.pth'
-        logging.info('加载缓存文件')
+        logging.info('load the cache')
         if self.train:
             self.tokenize_text = torch.load(cache_path)
         else:
@@ -92,7 +108,7 @@ class CombineTextDataset(Dataset):
             self.img_std = IMAGE_STD
             self.sentences, self.captions, self.path_list, self.image_rep = torch.load(cache_path)
             self.image_rep = self.image_rep.squeeze(dim=1)
-        logging.info('加载完成！')
+        logging.info('load the cache done！')
 
     def __len__(self):
         if self.train:
