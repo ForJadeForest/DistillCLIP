@@ -72,12 +72,7 @@ class MainDataModule(pl.LightningDataModule):
     def load_data_module(self):
         dataset_file = self.dataset
         name = self.dataset_name
-        # Change the `snake_case.py` file name to `CamelCase` class name.
-        # Please always name your model file name as `snake_case.py` and
-        # class name corresponding `CamelCase`.
         try:
-            # importlib.import_module('.xxx_dataset')动态的导入了模块
-            # getattr 是获取属性值，获取模块中 XxxDataset 这一类的属性
             data_module = getattr(importlib.import_module(
                 ".component." + dataset_file, package=__package__), name)
         except:
@@ -90,13 +85,13 @@ class MainDataModule(pl.LightningDataModule):
             from self.hparams dictionary. You can also input any args
             to overwrite the corresponding value in self.dataset_para.
         """
-        # 获取self.data_module (self.dataset对应的类) 的__init__函数的参数
+        # get self.data_module (the self.dataset class) __init__ function parameters
         class_args = inspect.signature(self.data_module.__init__).parameters
 
         inkeys = self.dataset_para.keys()
         args1 = {}
         for arg in class_args:
-            # 如果需要的参数在kwargs的key中，则赋值
+            # if the args in inkeys
             if arg in inkeys:
                 args1[arg] = self.dataset_para[arg]
         args1.update(other_args)

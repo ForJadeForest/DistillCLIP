@@ -33,7 +33,6 @@ class COCODataset(datasets.CocoCaptions):
         super(COCODataset, self).__init__(root, annotation_file, self.trans)
 
     def __getitem__(self, item):
-        # TODO: can make use the other captions for one image
         image, caption = super(COCODataset, self).__getitem__(item)
         image, caption = image, self.tokenizer(caption[0], truncate=False)[0]
         if self.need_type == 'all' or not self.train:
