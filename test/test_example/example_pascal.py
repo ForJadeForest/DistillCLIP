@@ -114,7 +114,7 @@ def standardization(data):
 res = []
 for i, (cider, h_r) in enumerate(zip(cider_pred['ref_score'], label_list)):
     if cider != h_r and clip_pred['score'][i] == h_r and clip_pred['ref_score'][i] == h_r and idx2cat[
-        category_list[i]] == 'MM':
+        category_list[i]] == 'HC':
         res.append(i)
         print(
             f'cider pred: {cider}, clip pred: {clip_pred["score"][i]}, ref clip pred: {clip_pred["ref_score"][i]}, true label: {h_r}')

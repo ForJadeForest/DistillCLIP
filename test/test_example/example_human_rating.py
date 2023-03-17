@@ -75,58 +75,96 @@ def standardization(data):
     return (data - mu) / sigma
 
 
-clip_score = standardization(clip_res['score'])
-ref_clip_score = standardization(clip_res['ref_score'])
-cider_score = standardization(cider_score['ref_score'])
-human_scores = standardization(human_scores)
+# clip_score = standardization(clip_res['score'])
+# ref_clip_score = standardization(clip_res['ref_score'])
+# cider_score = standardization(cider_score['ref_score'])
+# human_scores = standardization(human_scores)
+
+clip_score = clip_res['score']
+ref_clip_score = clip_res['ref_score']
+cider_score = cider_score['ref_score']
+human_scores = human_scores
+
+
+def get_ranks(list1, list2, list3):
+    """
+    获取三个列表中每个元素在其所在列表中的排名
+    """
+    # 获取元素和索引
+    enum1 = list(enumerate(list1))
+    enum2 = list(enumerate(list2))
+    enum3 = list(enumerate(list3))
+
+    # 按元素值排序
+    sorted1 = sorted(enum1, key=lambda x: x[1])
+    sorted2 = sorted(enum2, key=lambda x: x[1])
+    sorted3 = sorted(enum3, key=lambda x: x[1])
+
+    # 获取排名
+    ranks1 = [x[0] for x in sorted1]
+    ranks2 = [x[0] for x in sorted2]
+    ranks3 = [x[0] for x in sorted3]
+
+    return ranks1, ranks2, ranks3
+
 
 # 1. cider 高，但是human rating 低
 # 比如 human 0.2 clip 0.3 cider 0.7
 # cider - human_rating > margin
 # print clip score
-margin = 4
+margin = 0.3
+cider_rank, clip_rank, human_rank = get_ranks(cider_score, clip_score, human_scores)
 res = []
 for i, (cider, h_r) in enumerate(zip(cider_score, human_scores)):
-    if cider - h_r > margin and h_r < 1:
+
+    if cider_rank[i] > human_rank[i] * 1.4 and abs(human_rank[i] - clip_rank[i]) < 20 and \
+            abs(cider_rank[i] - human_rank[i]) > abs(clip_rank[i] - human_rank[i]):
         res.append(i)
-        print(cider, h_r, clip_score[i], ref_clip_score[i])
+        print(f'cider rank: {cider_rank[i]}\n '
+              f'clip rank: {clip_rank[i]}\n'
+              f'human_rating rank : {human_rank[i]}\n'
+              f'total_num: {len(cider_rank)}\n')
+        print(f'cider score: {cider}\n'
+              f'human_rating: {h_r}\n'
+              f'clip_score: {clip_score[i]}\n'
+              f'ref_clip_score: {ref_clip_score[i]}\n')
         print(images[i])
-        print(candidates[i])
-        print(refs[i])
+        print(f'candidates: {candidates[i]}')
+        print(f'refs: {refs[i]}')
         print('=' * 20)
 
 # 2. cider 低，但是human rating 高
 
-margin = 3
-res = []
-for i, (cider, h_r) in enumerate(zip(cider_score, human_scores)):
-    if h_r - cider > margin and clip_score[i] > 2:
-        res.append(i)
-        print(cider, h_r, clip_score[i], ref_clip_score[i])
-        print(images[i])
-        print(candidates[i])
-        print(refs[i])
-        print('=' * 20)
-
-
-import matplotlib
-matplotlib.use('TkAgg')
-
-from matplotlib import pyplot as plt
-import seaborn as sns
-
-# f, ax1 = plt.subplots(1, 1, figsize=(8, 6))
-# c1, c2, c3 = sns.color_palette('Set1', 3)
-
-sns.kdeplot(clip_score, fill=True,  label='clip')
-sns.kdeplot(cider_score, fill=True,  label='cider')
-sns.kdeplot(human_scores, fill=True,  label='human rating')
-import pickle
-with open('data.pkl', 'w')as f:
-    pickle.dump({
-        'clip_score':  clip_score,
-        'cider_score': cider_score,
-        'human_rating': human_scores
-    }, f)
-plt.legend()
-plt.show()
+# margin = 3
+# res = []
+# for i, (cider, h_r) in enumerate(zip(cider_score, human_scores)):
+#     if h_r - cider > margin and clip_score[i] > 2:
+#         res.append(i)
+#         print(cider, h_r, clip_score[i], ref_clip_score[i])
+#         print(images[i])
+#         print(candidates[i])
+#         print(refs[i])
+#         print('=' * 20)
+#
+#
+# import matplotlib
+# matplotlib.use('TkAgg')
+#
+# from matplotlib import pyplot as plt
+# import seaborn as sns
+#
+# # f, ax1 = plt.subplots(1, 1, figsize=(8, 6))
+# # c1, c2, c3 = sns.color_palette('Set1', 3)
+#
+# sns.kdeplot(clip_score, fill=True,  label='clip')
+# sns.kdeplot(cider_score, fill=True,  label='cider')
+# sns.kdeplot(human_scores, fill=True,  label='human rating')
+# import pickle
+# with open('data.pkl', 'w')as f:
+#     pickle.dump({
+#         'clip_score':  clip_score,
+#         'cider_score': cider_score,
+#         'human_rating': human_scores
+#     }, f)
+# plt.legend()
+# plt.show()

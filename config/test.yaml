@@ -1,5 +1,5 @@
 model:
-  class_path: GradNormDistillModel
+  class_path: DistillModel
   init_args:
     student_encoder:
       class_path: model.component.weight_share_model.RepeatVisionTransformer
@@ -13,87 +13,68 @@ model:
         num_heads: 12
         mlp_ratio: 4.0
         qkv_bias: True
-        qk_scale: null
-        drop_rate: 0.
-        attn_drop_rate: 0.
-        drop_path_rate: 0.
-        hybrid_backbone: null
-        rpe_config: null
         repeated_times: 2
         use_transform: True
+    freeze_embed: False
     norm: False
     loss_control_para:
-      #LOSSNAME = ['out_l1', 'out_ce', 'out_kl', 'out_cos', 'embedding_mse', 'attention_score_mse',
-      #            'attention_probs_mse', 'hidden_rep_mse', 'attention_probs_kl', 'last_value_map_kl',
-      #            'vit_kd',
-      #            'hard_label', 'soft_label', 'fine_grain', 'logits_mse']
       loss_name: [ 'out_l1', 'out_cos' ]
-      temperature: 1
-    freeze_embed: true
     teacher_name: ViT-B/32
     download_root: '/data/pyz/.cache'
     teacher_need_layers: [ 0, 1, 10, 11 ]
-    model_type: 'image'
-    map_type: 'begin'
-    init_type: null
     warm_steps: 15
-    total_steps: 300
+    total_steps: 500
     weight_decay: 1.0e-2
-    lr: 5.0e-4
-
-
-
+    lr: 5.0e-3
 
 data:
   class_path: MainDataModule
   init_args:
-    num_workers: 8
-    dataset: 'image_dataset'
-    dataset_name: 'CombineImageDataset'
+    init_dataset_args:
+      imagenet:
+        is_train: True
+        dataset_file: imagenet
+        dataset_name: ImageNetDataset
+        dataset_args:
+          data_path: '/data/share/pyz/data/imagenet1k'
+      mscoco:
+        is_train: True
+        dataset_file: ms_coco
+        dataset_name: COCODataset
+        dataset_args:
+          need_type: 'image'
+          root_path: '/data/pyz/data/mscoco/train2017'
+          annotation_path: '/data/pyz/data/mscoco/annotations'
+      mscoco_val:
+        is_train: False
+        dataset_file: ms_coco
+        dataset_name: COCODataset
+        dataset_args:
+          need_type: 'all'
+          root_path: '/data/pyz/data/mscoco/train2017'
+          annotation_path: '/data/pyz/data/mscoco/annotations'
+
     train_batch_size: 1024
     val_batch_size: 1250
-    dataset_para:
-      data_dir: '/home/pyz/data_tmp'
-      cache_dir: '/data/pyz/.cache'
-      train_image_dir: '/home/pyz/data_tmp/combine_dataset/'
-      image_use: [ 'coco', 'imagenet' ]
-      overwrite: False
-
-
-
+    num_workers: 16
 
 
 trainer:
   num_sanity_val_steps: 0
-  auto_select_gpus: True
+  strategy: 'ddp_find_unused_parameters_false'
+  default_root_dir: '/data/pyz/result/dis_clip'
   accumulate_grad_batches: 1
   accelerator: 'gpu'
-  devices: [ 4 ]
-  #  strategy: 'ddp_find_unused_parameters_false'
-  max_epochs: 300
-  #  limit_train_batches: 1
-  log_every_n_steps: 100
+  #  gradient_clip_val: 10
+  max_epochs: 500
+  log_every_n_steps: 30
   enable_progress_bar: True
   check_val_every_n_epoch: 1
-  precision: 32
-  logger:
-    class_path: pytorch_lightning.loggers.wandb.WandbLogger
-    init_args:
-      save_dir: '/data/pyz/result/Dis_CLIP'
-      name: 'baseline-weight share'
-      project: 'ImageDistillation'
-      log_model: false
-      group: weight_share
-      # the covered tags should be same length with the tags in share.yaml
-  #      tags: ['baseline', 'weight share']
-  #      mode: 'online'
+  precision: 16
+
 
   callbacks:
     - class_path: LearningRateMonitor
-    - class_path: EarlyStopping
-      init_args:
-        monitor: 'val_loss/loss'
-        patience: 15
 
     - class_path: ModelSummary
       init_args:
