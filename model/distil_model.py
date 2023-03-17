@@ -23,7 +23,6 @@ class DistillModel(pl.LightningModule):
                  warm_steps=10, total_steps=200, weight_decay=1e-3, lr: float = 1e-3, norm: bool = False,
                  unfreeze_epoch=None):
         """
-
         :param student_encoder: Student encoder, it can be a text encoder or image encoder
         :param teacher_name: The CLIP Teacher model name
         :param loss_control_para: To control which loss you want to use
@@ -63,6 +62,8 @@ class DistillModel(pl.LightningModule):
 
         # define metric
         self.k_list = [i for i in [1, 3, 5, 10, 20, 50]]
+
+        self.validation_step_outputs = []
 
     def on_train_start(self):
         self.logger_begin()
@@ -119,20 +120,17 @@ class DistillModel(pl.LightningModule):
         self.log_acc(tea_logits, section='val_step', prefix='tea')
         self.log_diag_score(stu_logits, section='val_step', prefix='stu')
 
-        return {
+        self.validation_step_outputs.append({
             'student': self.all_gather(student_outs.last_representation),
             'teacher': self.all_gather(teacher_outs.last_representation),
             'contrary_rep': self.all_gather(contrary_rep)
-        }
+        })
 
-    def validation_step_end(self, step_out):
-        return step_out
-
-    def validation_epoch_end(self, outputs) -> None:
+    def on_validation_epoch_end(self) -> None:
         stu_outs = []
         tea_outs = []
         contrary_reps = []
-        for batch in outputs:
+        for batch in self.validation_step_outputs:
             student_out, teacher_out, contrary_rep = batch['student'], batch['teacher'], batch['contrary_rep']
             embedding = student_out.shape[-1]
             stu_outs.append(student_out.reshape(-1, embedding))
@@ -149,7 +147,8 @@ class DistillModel(pl.LightningModule):
         if self.current_epoch == 0:
             self.log_diag_score(tea_logits, section='val_tea_score', prefix='tea')
             self.log_acc(tea_logits, section='val_tea_acc', prefix='tea')
-        return
+        # free memory
+        self.validation_step_outputs.clear()
 
     def log_info(self, section, loss, cal_res, batch_size):
 

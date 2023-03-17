@@ -86,6 +86,7 @@ class DualDistillModel(pl.LightningModule):
         # define acc top k
         self.k_list = [i for i in [1, 3, 5, 10, 20, 50]]
 
+        self.validation_step_outputs = []
     def on_train_start(self):
         self.logger_begin()
 
@@ -139,24 +140,21 @@ class DualDistillModel(pl.LightningModule):
         self.log_acc(tea_logits, section='val_step', prefix='tea')
         self.log_diag_score(stu_logits, section='val_step', prefix='stu')
 
-        return {
+        self.validation_step_outputs.append({
             'stu_image_outs': self.all_gather(student_outs.visual_output.last_representation),
             'stu_text_outs': self.all_gather(student_outs.text_output.last_representation),
             'tea_image_outs': self.all_gather(teacher_outs.visual_output.last_representation),
             'tea_text_outs': self.all_gather(teacher_outs.text_output.last_representation),
-        }
+        })
 
-    def validation_step_end(self, step_out):
-        return step_out
-
-    def validation_epoch_end(self, outputs):
+    def on_validation_epoch_end(self):
         # [gpu_num, batch, batch]
         stu_image_outs = []
         stu_text_outs = []
         tea_image_outs = []
         tea_text_outs = []
 
-        for batch in outputs:
+        for batch in self.validation_step_outputs:
             stu_image_out, stu_text_out = batch['stu_image_outs'], batch['stu_text_outs']
             tea_image_out, tea_text_out = batch['tea_image_outs'], batch['tea_text_outs']
             embedding = stu_image_out.shape[-1]
@@ -183,8 +181,8 @@ class DualDistillModel(pl.LightningModule):
         if self.current_epoch == 0:
             self.log_diag_score(tea_logits, section='val_tea_score', prefix='tea')
             self.log_acc(tea_logits, section='val_tea_acc', prefix='tea')
+        self.validation_step_outputs.clear()
 
-        return
 
     def log_info(self, section, loss, cal_res, batch_size):
         self.log(f"{section}/loss", loss, batch_size=batch_size, sync_dist=True)
