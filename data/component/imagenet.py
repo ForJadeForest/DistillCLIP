@@ -8,7 +8,7 @@ from .utils import IMAGE_MEAN, IMAGE_STD
 
 
 class ImageNetDataset(ImageDataset):
-    def __init__(self, data_path, train=True, need_label=False):
+    def __init__(self, data_path, train=True, need_label=False, use_transform=True):
         self.img_mean, self.img_std = IMAGE_MEAN, IMAGE_STD
         self.need_label = need_label
         self.trans = transforms.Compose([
@@ -23,6 +23,8 @@ class ImageNetDataset(ImageDataset):
             transforms.ToTensor(),
             transforms.Normalize(self.img_mean, self.img_std)
         ])
+        if not use_transform:
+            self.trans = None
         if train:
             data_path = os.path.join(data_path, 'train')
             super(ImageNetDataset, self).__init__(data_path, ParserImageInTar(data_path), transform=self.trans)
