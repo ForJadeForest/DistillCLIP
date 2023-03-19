@@ -28,7 +28,7 @@ model:
     lr: 5.0e-3
 
 data:
-  class_path: MainDataModule
+  class_path: MultiDataloaderMainDataModule
   init_args:
     init_dataset_args:
       imagenet:

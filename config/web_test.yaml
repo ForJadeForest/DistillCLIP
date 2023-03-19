@@ -1,65 +1,71 @@
 model:
-  class_path: DistillModel
+  class_path: DualDistillModel
   init_args:
-    student_encoder:
-      class_path: model.component.resnet_encoder.ModifiedResNet
+    image_student:
+      class_path: model.component.weight_share_model.RepeatVisionTransformer
       init_args:
-        layers: [ 1, 2, 5, 1 ]
-        output_dim: 512
-        heads: 8
-
-    norm: False
+        img_size: 224
+        patch_size: 32
+        in_chans: 3
+        out_dim: 512
+        embed_dim: 768
+        depth: 4
+        num_heads: 24
+        mlp_ratio: 4.0
+        qkv_bias: True
+        repeated_times: 2
+        use_transform: True
+    text_student:
+      class_path: model.component.weight_share_model.RepeatTextTransformer
+      init_args:
+        depth: 4
+        repeated_times: 2
+        use_transform: True
     loss_control_para:
-      loss_name: [ 'out_l1', 'out_cos' ]
-    teacher_name: RN101
+      loss_name: [ 'out_l1', 'out_cos', 'cos_diff' ]
+      loss_scale:
+        cos_diff: 0.1
+      temperature: 2
+
+
     download_root: '/data/pyz/.cache'
+
     warm_steps: 15
-    total_steps: 500
-    weight_decay: 1.0e-2
+    total_steps: 1000
+    weight_decay: 1.0e-3
     lr: 1.0e-3
 
+
 data:
-  class_path: MainDataModule
+  class_path: TextImageDataModule
   init_args:
-    num_workers: 16
-    dataset: 'combine_image_dataset'
-    dataset_name: 'CombineImageDataset'
-    train_batch_size: 256
-    val_batch_size: 1250
-    dataset_para:
-      data_dir: '/home/pyz32/data_tmp'
-      cache_dir: '/data/pyz/data/cache'
-      train_image_dir: '/home/pyz32/data_tmp/combine_dataset/'
-      image_use: [ 'coco' ]
-      overwrite: True
-      teacher_name: RN101
+    image_path: '/data/pyz/data/cc/train_cc3m'
+    batch_size: 512
+    num_workers: 8
 
 
 trainer:
   num_sanity_val_steps: 0
-  auto_select_gpus: True
-  strategy: 'ddp_find_unused_parameters_false'
+  #  strategy: 'ddp_find_unused_parameters_false'
   default_root_dir: '/data/pyz/result/dis_clip'
   accumulate_grad_batches: 1
-  gradient_clip_val: 10
   accelerator: 'gpu'
-  max_epochs: 500
+  #  gradient_clip_val: 10
+  max_epochs: 1000
   log_every_n_steps: 30
   enable_progress_bar: True
   check_val_every_n_epoch: 1
   precision: 16
+
   logger:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
       dir: '/data/pyz/result/Dis_CLIP'
-      name: 'resnet-baseline'
+      name: 'cc3m'
       project: 'CLIPDistillation'
       log_model: false
-      group: resnet
-
-      tags: [ 'baseline', 'resnet' ]
-
-
+      group: clip
+      tags: [ 'weight share', 'loss change', 'CLIP model' ]
   callbacks:
     - class_path: LearningRateMonitor
 
