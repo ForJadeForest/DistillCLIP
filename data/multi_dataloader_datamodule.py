@@ -33,7 +33,7 @@ init_dataset:{
 """
 
 
-class MainDataModule(pl.LightningDataModule):
+class MultiDataloaderMainDataModule(pl.LightningDataModule):
     def __init__(self,
                  init_dataset_args,
                  num_workers=8,
