@@ -66,11 +66,8 @@ class CombineImageDataset(Dataset):
         :param teacher_name: The teacher name of CLIP
         """
         super(CombineImageDataset, self).__init__()
-        if image_use is None:
-            image_use = ['coco', 'imagenet']
 
-        for i in image_use:
-            assert i in IMAGE_DATASET_NAME, f'the {i} dataset name is not exists in {IMAGE_DATASET_NAME}'
+
         self.train = train
         self.img_mean = IMAGE_MEAN
         self.img_std = IMAGE_STD
@@ -89,8 +86,13 @@ class CombineImageDataset(Dataset):
                     res = res or x.startswith(prefix)
                 return res
 
-            self.path_list = [path for path in self.train_image_file_path.iterdir() if filter_dataset(path.name)]
-
+            if image_use is None:
+                self.path_list = list(self.train_image_file_path.iterdir())
+            else:
+                for i in image_use:
+                    assert i in IMAGE_DATASET_NAME, f'the {i} dataset name is not exists in {IMAGE_DATASET_NAME}'
+                self.path_list = filter(filter_dataset, self.train_image_file_path.iterdir())
+            # self.path_list = [path for path in self.train_image_file_path.iterdir() if filter_dataset(path.name)]
     def __len__(self):
         return len(self.path_list)
 
@@ -99,7 +101,9 @@ class CombineImageDataset(Dataset):
         img = Image.open(path).convert('RGB')
 
         trans = transforms.Compose([
-            RandAugment(num_ops=4),
+            transforms.Resize(224),
+            transforms.CenterCrop(224),
+            RandAugment(num_ops=2),
             transforms.ToTensor(),
             transforms.Normalize(self.img_mean, self.img_std),
         ]) if self.train else transforms.Compose([

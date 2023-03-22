@@ -1,7 +1,5 @@
 import pytorch_lightning as pl
-from pytorch_lightning.utilities import CombinedLoader
 from torch.utils.data import DataLoader
-
 from data.utils import load_prepare, load_data_module, instancialize, SequentialLoader
 
 """
@@ -104,6 +102,7 @@ class MultiDataloaderMainDataModule(pl.LightningDataModule):
         return SequentialLoader(*dataloader_dict.values())
 
     def val_dataloader(self):
+        from pytorch_lightning.utilities import CombinedLoader
         dataloader_dict = {}
         for n, dataset in self.val_dataset_dict.items():
             dataloader_dict[n] = DataLoader(dataset,
