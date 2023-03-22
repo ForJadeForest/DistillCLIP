@@ -21,5 +21,5 @@ class MyLightningCLI(LightningCLI):
         }
 
 
-cli = MyLightningCLI(seed_everything_default=2022,
+cli = MyLightningCLI(seed_everything_default=2022, save_config_callback=None,
                      trainer_defaults={'devices': find_usable_cuda_devices(4)})
