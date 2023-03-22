@@ -91,15 +91,15 @@ class DistillModel(pl.LightningModule):
 
     def on_train_epoch_start(self) -> None:
         if self.hparams.unfreeze_epoch:
-            if self.current_epoch >= self.unfreeze_epoch:
+            if self.current_epoch >= self.hparams.unfreeze_epoch:
                 self.unfreeze_embed()
-                self.hparams.unfreeze_epoch = False
+                self.hparams.unfreeze_epoch = None
 
     def training_step(self, inputs, batch_idx):
         self.teacher.eval()
         student_outs, teacher_outs = self.forward(inputs)
         loss, cal_res = self.loss_control(student_outs, teacher_outs, self.hparams.model_type)
-        self.log_info('train_loss', loss, cal_res, batch_size=len(inputs))
+        self.log_info('train_loss', loss.item(), cal_res, batch_size=len(inputs))
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -154,10 +154,10 @@ class DistillModel(pl.LightningModule):
 
         self.log("{}/loss".format(section), loss, batch_size=batch_size, sync_dist=True)
         for loss_name, loss_res in cal_res.items():
-            self.log("{}/{}".format(section, loss_name), loss_res, batch_size=batch_size, sync_dist=True)
+            self.log("{}/{}".format(section, loss_name), loss_res.item(), batch_size=batch_size, sync_dist=True)
 
     def configure_optimizers(self):
-        opt_para = filter(lambda p: p.requires_grad, self.parameters())
+        opt_para = filter(lambda p: p.requires_grad, self.student.parameters())
         optimizer = optim.AdamW(opt_para, lr=self.hparams.lr, weight_decay=self.hparams.weight_decay)
         # optimizer = optim.SGD(self.parameters(), lr=self.hparams.lr, weight_decay=self.hparams.weight_decay)
         scheduler = transformers.get_cosine_schedule_with_warmup(

@@ -113,10 +113,10 @@ class DualDistillModel(pl.LightningModule):
         return student_outs, teacher_outs
 
     def on_train_epoch_start(self) -> None:
-        if self.unfreeze_epoch:
-            if self.current_epoch >= self.unfreeze_epoch:
+        if self.hparams.unfreeze_epoch:
+            if self.current_epoch >= self.hparams.unfreeze_epoch:
                 self.unfreeze_embed()
-                self.unfreeze_epoch = False
+                self.hparams.unfreeze_epoch = None
 
     def training_step(self, inputs, batch_idx):
         self.teacher.eval()
@@ -190,7 +190,7 @@ class DualDistillModel(pl.LightningModule):
             self.log(f"{section}/{loss_name}", loss_res, batch_size=batch_size, sync_dist=True)
 
     def configure_optimizers(self):
-        opt_para = filter(lambda p: p.requires_grad, self.parameters())
+        opt_para = filter(lambda p: p.requires_grad, self.student.parameters())
         optimizer = optim.AdamW(opt_para, lr=self.hparams.lr, weight_decay=self.hparams.weight_decay)
         scheduler = transformers.get_cosine_schedule_with_warmup(
             optimizer,
