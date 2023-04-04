@@ -1,6 +1,8 @@
 import torch
 from PIL import Image
 from tqdm import tqdm
+from torchvision import transforms
+from .rand_augment import RandAugment
 
 IMAGE_DATASET_NAME = ['coco', 'data_256', 'imagenet']
 IMAGE_PREFIX = {
@@ -38,3 +40,18 @@ def encode_texts(caption_list, teacher_name: str):
             image_features = model.encode_text(caption).float().to('cpu')
             text_encode.append(image_features)
     return torch.cat(text_encode, dim=0)
+
+
+def make_transformers(is_train):
+    return transforms.Compose([
+        transforms.Resize(224),
+        transforms.CenterCrop(224),
+        RandAugment(num_ops=4),
+        transforms.ToTensor(),
+        transforms.Normalize(IMAGE_MEAN, IMAGE_STD),
+    ]) if is_train else transforms.Compose([
+        transforms.Resize(224),
+        transforms.CenterCrop(224),
+        transforms.ToTensor(),
+        transforms.Normalize(IMAGE_MEAN, IMAGE_STD),
+    ])

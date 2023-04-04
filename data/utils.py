@@ -50,3 +50,12 @@ class SequentialLoader:
     def __iter__(self):
         for dataloader in self.dataloaders:
             yield from dataloader
+
+def get_dataloader_function(dataset_file, function_name):
+    try:
+        func = getattr(importlib.import_module(
+            ".component." + dataset_file, package=__package__), function_name)
+    except:
+        raise ValueError(
+            f'Invalid Dataset File Name or Invalid Class Name data.{dataset_file}.{name}')
+    return func
