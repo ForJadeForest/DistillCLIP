@@ -179,3 +179,14 @@ def teacher_load(teacher_name: str, download_root, model_type, need_layers=None,
         teacher_model = CLIPModel(False, image_encoder, text_encoder, only_last_rep)
 
         return teacher_model
+
+
+def load_multi_teacher(teacher_load_args_list):
+    from model.component.multimodal.base_multimodal_model import MultiModalBaseModel
+    from torch import nn
+    model_dict = nn.ModuleDict()
+    for args, in zip(teacher_load_args_list):
+        model = MultiModalBaseModel(**args)
+        model_dict[args['name']] = model
+
+    return model_dict

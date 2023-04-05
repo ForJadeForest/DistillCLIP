@@ -32,11 +32,17 @@ model:
 
 
 data:
-  class_path: TextImageDataModule
+  class_path: MainDataModule
   init_args:
-    image_path: '/data/pyz/data/cc/train_cc3m'
-    batch_size: 768
+    train_batch_size: 768
+    val_batch_size: 768
     num_workers: 16
+    dataset: ms_coco
+    dataset_name: COCODataset
+    dataset_para:
+      root_path: '/home/pyz32/data_tmp/mscoco'
+      annotation_path: '/home/pyz32/data_tmp/mscoco/annotations'
+
 
 
 trainer:

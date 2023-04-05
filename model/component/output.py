@@ -69,5 +69,11 @@ class CLIPOutput:
 
 
 @dataclass
+class MultiModalOutput:
+    visual_output: VisionTransformerOutput = None
+    text_output: TextTransformerOutput = None
+
+
+@dataclass
 class ResnetOutput:
     last_representation: torch.Tensor = None
