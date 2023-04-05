@@ -211,7 +211,6 @@ def get_cc3m_dataset(cc3m_shards, batch_size, num_workers,
     from torch import distributed as dist
 
     world_size = dist.get_world_size()
-    assert world_size == 4
     image_processor = make_transformers(True)
     text_processor = tokenize
     input_shards = cc3m_shards
@@ -256,6 +255,7 @@ def get_cc3m_dataset(cc3m_shards, batch_size, num_workers,
     num_samples = num_batches * global_batch_size
     # each worker is iterating over this
     dataset = dataset.with_epoch(num_worker_batches)
+    dataset = dataset.with_length(num_batches)
 
     dataloader = wds.WebLoader(
         dataset,

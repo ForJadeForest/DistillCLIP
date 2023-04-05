@@ -87,6 +87,7 @@ class DualDistillModel(pl.LightningModule):
         self.k_list = [i for i in [1, 3, 5, 10, 20, 50]]
 
         self.validation_step_outputs = []
+
     def on_train_start(self):
         self.logger_begin()
 
@@ -182,7 +183,6 @@ class DualDistillModel(pl.LightningModule):
             self.log_diag_score(tea_logits, section='val_tea_score', prefix='tea')
             self.log_acc(tea_logits, section='val_tea_acc', prefix='tea')
         self.validation_step_outputs.clear()
-
 
     def log_info(self, section, loss, cal_res, batch_size):
         self.log(f"{section}/loss", loss, batch_size=batch_size, sync_dist=True)
