@@ -9,7 +9,7 @@ Image.MAX_IMAGE_PIXELS = None
 
 class IterableDataModule(pl.LightningDataModule):
     """
-    The datModule for webdataset format
+    The dataModule for webdataset format
     """
 
     def __init__(self, dataset_para, dataset_file, function_name,
