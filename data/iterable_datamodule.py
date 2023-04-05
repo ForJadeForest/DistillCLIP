@@ -2,6 +2,9 @@ import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 
 from data.utils import get_dataloader_function, instancialize, load_data_module, load_prepare
+from PIL import Image
+
+Image.MAX_IMAGE_PIXELS = None
 
 
 class IterableDataModule(pl.LightningDataModule):
