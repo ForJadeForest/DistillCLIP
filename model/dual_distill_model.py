@@ -1,22 +1,19 @@
+import copy
 from typing import *
 
-import pytorch_lightning as pl
 import torch
 import transformers
 import wandb
-
 from matplotlib import pyplot as plt
+from pytorch_lightning import LightningModule
 from pytorch_lightning.loggers import WandbLogger, TensorBoardLogger
 from pytorch_lightning.utilities import rank_zero_only
 from torch import optim, nn
 from torchmetrics.functional import accuracy
 
 from ._loss import LossCalculator
+from .component import CLIPModel, ImageEncoder, CLIPOutput, RepeatVisionTransformer, BascValMetric
 from .utils import teacher_load
-from .component.clip_model import CLIPModel
-from .component.image_encoder import ImageEncoder
-from .component.output import CLIPOutput
-from .component.weight_share_model import RepeatVisionTransformer
 
 
 def load_weight(image_student, text_student, load_path):
@@ -38,9 +35,10 @@ def load_weight(image_student, text_student, load_path):
     return image_student, text_student
 
 
-class DualDistillModel(pl.LightningModule):
+class DualDistillModel(LightningModule):
     def __init__(self, image_student: nn.Module, text_student: nn.Module,
                  loss_control_para: Dict, warm_steps, total_steps, weight_decay, lr: float,
+                 validation_method: Dict[str, BascValMetric],
                  download_root: str, norm=False, teacher_name: str = 'ViT-B/32', freeze_embed: bool = False,
                  unfreeze_epoch: int = None, load_path: Dict = None, teacher_need_layers: List = None,
                  freeze_prefix: List = None):
@@ -86,7 +84,23 @@ class DualDistillModel(pl.LightningModule):
         # define acc top k
         self.k_list = [i for i in [1, 3, 5, 10, 20, 50]]
 
-        self.validation_step_outputs = []
+        val_method_name = validation_method.keys()
+        self.val_method_map = {
+            i: method for i, method in enumerate(val_method_name)
+        }
+        self.stu_val_method_metric = copy.deepcopy(validation_method)
+        self.tea_val_method_metric = copy.deepcopy(validation_method)
+        for k, v in self.stu_val_method_metric.items():
+            v.set_model_name('student')
+        for k, v in self.tea_val_method_metric.items():
+            v.set_model_name('teacher')
+
+        self.stu_val_method_metric = {
+            i: v for i, (k, v) in enumerate(self.stu_val_method_metric.items())
+        }
+        self.tea_val_method_metric = {
+            i: v for i, (k, v) in enumerate(self.tea_val_method_metric.items())
+        }
 
     def on_train_start(self):
         self.logger_begin()
@@ -128,61 +142,37 @@ class DualDistillModel(pl.LightningModule):
 
         return loss
 
-    def validation_step(self, batch, batch_idx):
-        student_outs, teacher_outs = self.forward(batch)
-        loss, cal_res = self.loss_control(student_outs, teacher_outs, 'all')
-        stu_logits, _ = norm_and_logits(student_outs.visual_output.last_representation,
-                                        student_outs.text_output.last_representation)
-        tea_logits, _ = norm_and_logits(teacher_outs.visual_output.last_representation,
-                                        teacher_outs.text_output.last_representation)
+    def log_data(self, data_info):
+        self.log(f'{data_info["section"]}/{data_info["prefix"]}', data_info['value'], sync_dist=True,
+                 add_dataloader_idx=False)
 
-        self.log_info('val_loss', loss, cal_res, batch_size=len(batch))
-        self.log_acc(stu_logits, section='val_step', prefix='stu')
-        self.log_acc(tea_logits, section='val_step', prefix='tea')
-        self.log_diag_score(stu_logits, section='val_step', prefix='stu')
+    def validation_step(self, batch, batch_idx, dataloader_idx):
+        method = self.stu_val_method_metric[dataloader_idx]
+        step_res = method.validation_step(batch, self.student)
+        for k, data_info in step_res.items():
+            self.log_data(data_info)
 
-        self.validation_step_outputs.append({
-            'stu_image_outs': self.all_gather(student_outs.visual_output.last_representation),
-            'stu_text_outs': self.all_gather(student_outs.text_output.last_representation),
-            'tea_image_outs': self.all_gather(teacher_outs.visual_output.last_representation),
-            'tea_text_outs': self.all_gather(teacher_outs.text_output.last_representation),
-        })
+        if self.current_epoch == 0:
+            method = self.tea_val_method_metric[dataloader_idx]
+            step_res = method.validation_step(batch, self.teacher)
+            for k, data_info in step_res.items():
+                self.log_data(data_info)
 
     def on_validation_epoch_end(self):
         # [gpu_num, batch, batch]
-        stu_image_outs = []
-        stu_text_outs = []
-        tea_image_outs = []
-        tea_text_outs = []
-
-        for batch in self.validation_step_outputs:
-            stu_image_out, stu_text_out = batch['stu_image_outs'], batch['stu_text_outs']
-            tea_image_out, tea_text_out = batch['tea_image_outs'], batch['tea_text_outs']
-            embedding = stu_image_out.shape[-1]
-            stu_image_outs.append(stu_image_out.reshape(-1, embedding))
-            stu_text_outs.append(stu_text_out.reshape(-1, embedding))
-            tea_image_outs.append(tea_image_out.reshape(-1, embedding))
-            tea_text_outs.append(tea_text_out.reshape(-1, embedding))
-
-        stu_image_outs = torch.cat(stu_image_outs, dim=0).float()
-        stu_text_outs = torch.cat(stu_text_outs, dim=0).float()
-        tea_image_outs = torch.cat(tea_image_outs, dim=0).float()
-        tea_text_outs = torch.cat(tea_text_outs, dim=0).float()
-        stu_logits, _ = norm_and_logits(stu_image_outs, stu_text_outs)
-        tea_logits, _ = norm_and_logits(tea_image_outs, tea_text_outs)
-
-        stu_image_tea_text_logits, _ = norm_and_logits(stu_image_outs, tea_text_outs)
-        stu_text_tea_image_logits, _ = norm_and_logits(tea_image_outs, stu_text_outs)
-
-        self.log_acc(stu_logits, section='val_stu_acc', prefix='stu')
-        self.log_acc(stu_image_tea_text_logits, section='val_stu_image_tea_text', prefix='stu_image_tea_text')
-        self.log_acc(stu_text_tea_image_logits, section='val_stu_text_tea_image', prefix='stu_text_tea_image')
-        self.log_diag_score(stu_logits, section='val_stu_score', prefix='stu')
-
+        for method_name, method in self.stu_val_method_metric.items():
+            end_res = method.validation_end()
+            print(end_res)
+            for k, data_info in end_res.items():
+                self.log_data(data_info)
+            self.stu_val_method_metric[method_name].reset()
         if self.current_epoch == 0:
-            self.log_diag_score(tea_logits, section='val_tea_score', prefix='tea')
-            self.log_acc(tea_logits, section='val_tea_acc', prefix='tea')
-        self.validation_step_outputs.clear()
+            for method_name, method in self.tea_val_method_metric.items():
+                end_res = method.validation_end()
+                print(end_res)
+                for k, data_info in end_res.items():
+                    self.log_data(data_info)
+                self.tea_val_method_metric[method_name].reset()
 
     def log_info(self, section, loss, cal_res, batch_size):
         self.log(f"{section}/loss", loss, batch_size=batch_size, sync_dist=True)
