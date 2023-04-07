@@ -4,12 +4,11 @@ from typing import *
 import torch
 import transformers
 import wandb
-from matplotlib import pyplot as plt
+
 from pytorch_lightning import LightningModule
-from pytorch_lightning.loggers import WandbLogger, TensorBoardLogger
+from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.utilities import rank_zero_only
 from torch import optim, nn
-from torchmetrics.functional import accuracy
 
 from ._loss import LossCalculator
 from .component import CLIPModel, ImageEncoder, CLIPOutput, RepeatVisionTransformer, BascValMetric
@@ -110,14 +109,15 @@ class DualDistillModel(LightningModule):
         if isinstance(self.logger, WandbLogger):
             self.logger.log_hyperparams({'student_para': self.student.hyper_para()})
             self.logger.experiment.log_code()
-            wandb.define_metric(name='val_stu_acc/stu_acc_top1', summary='max')
-            wandb.define_metric(name='val_stu_acc/stu_acc_top10', summary='max')
-            wandb.define_metric(name='val_stu_acc/stu_acc_top50', summary='max')
-            wandb.define_metric(name='val_stu_image_tea_text/stu_image_tea_text', summary='max')
-            wandb.define_metric(name='val_stu_text_tea_image/stu_text_tea_image', summary='max')
+            wandb.define_metric(name='val/student-i2t-acc_top-1', summary='max')
+            wandb.define_metric(name='val/student-i2t-acc_top-10', summary='max')
+            wandb.define_metric(name='val/student-i2t-acc_top-50', summary='max')
+            wandb.define_metric(name='val/student-t2i-acc_top-1', summary='max')
+            wandb.define_metric(name='val/student-t2i-acc_top-10', summary='max')
+            wandb.define_metric(name='val/student-t2i-acc_top-50', summary='max')
 
-        elif isinstance(self.logger, TensorBoardLogger):
-            self.logger.log_hyperparams(self.hparams, {"hp/stu_acc_top1": 0, "hp/stu_acc_top10": 0})
+            wandb.define_metric(name='val/student-clip_score-human_rating-tau_c', summary='max')
+            wandb.define_metric(name='val/student-ref_clip_score-human_rating-tau_c', summary='max')
 
     def forward(self, inputs) -> Tuple[CLIPOutput, CLIPOutput]:
         image, text = inputs
@@ -162,14 +162,13 @@ class DualDistillModel(LightningModule):
         # [gpu_num, batch, batch]
         for method_name, method in self.stu_val_method_metric.items():
             end_res = method.validation_end()
-            print(end_res)
             for k, data_info in end_res.items():
                 self.log_data(data_info)
             self.stu_val_method_metric[method_name].reset()
+
         if self.current_epoch == 0:
             for method_name, method in self.tea_val_method_metric.items():
                 end_res = method.validation_end()
-                print(end_res)
                 for k, data_info in end_res.items():
                     self.log_data(data_info)
                 self.tea_val_method_metric[method_name].reset()
@@ -188,28 +187,6 @@ class DualDistillModel(LightningModule):
             num_training_steps=self.hparams.total_steps
         )
         return [optimizer], [scheduler]
-
-    def log_diag_score(self, logits, section, prefix):
-        softmax_logits = nn.functional.softmax(logits, dim=1)
-        softmax_mean_score = torch.diagonal(softmax_logits).mean()
-        mean_score = torch.diagonal(logits).mean()
-
-        self.log(f'{section}/{prefix}_softmax_mean_score', softmax_mean_score, batch_size=logits.shape[0],
-                 sync_dist=True)
-        self.log(f'{section}/{prefix}_mean_score', mean_score, batch_size=logits.shape[0], sync_dist=True)
-
-    def log_heatmap(self, logits, section, prefix):
-        softmax_logits = nn.functional.softmax(logits, dim=1)
-        self.logger.log_image(key=f"{section}_{prefix}_logits",
-                              images=[plt.imshow(logits.detach().cpu()),
-                                      plt.imshow(softmax_logits.detach().cpu())],
-                              caption=[f"{section}_{prefix}_map", f"{section}_{prefix}_softmax_map"])
-
-    def log_acc(self, logits, section, prefix):
-        label = torch.arange(logits.shape[0], device=self.device)
-        for k in self.k_list:
-            acc = accuracy(logits, label, top_k=k, task='multiclass', num_classes=logits.shape[0])
-            self.log(f'{section}/{prefix}_acc_top{k}', acc, batch_size=logits.shape[0], sync_dist=True)
 
     def unfreeze_embed(self):
         for n, p in self.student.named_parameters():
@@ -254,13 +231,6 @@ class DualDistillModel(LightningModule):
             for n, p in self.student.named_parameters():
                 if n in student_keys:
                     p.requires_grad = False
-
-
-def norm_and_logits(img_encode, text_encode):
-    img_encode = img_encode / img_encode.norm(dim=1, keepdim=True)
-    text_encode = text_encode / text_encode.norm(dim=1, keepdim=True)
-    logits = img_encode @ text_encode.t()
-    return logits, logits.T
 
 
 def norm_last_representation(stu_outs, tea_outs):
