@@ -1,9 +1,8 @@
 import torch
-from torch.distributed.nn import all_gather
-from torchmetrics.functional import accuracy
-from test.clip_score import get_all_clip_score
-from .base_val_method import BascValMetric
 from scipy import stats
+from torch.distributed.nn import all_gather
+
+from .base_val_method import BascValMetric
 
 
 class Flickr8kHumanRating(BascValMetric):
@@ -23,7 +22,7 @@ class Flickr8kHumanRating(BascValMetric):
         refs_features = refs_features / refs_features.norm(dim=1, keepdim=True)
 
         clip_score = 2.5 * torch.clip(torch.sum(images_features * candidates_features, dim=1), 0, None)
-        print(clip_score.shape)
+
         ref_candidate_score = torch.empty_like(clip_score, device=clip_score.device)
         for i, candidates_feature in enumerate(candidates_features):
             ref_feature = refs_features[i * 5: (i + 1) * 5, :]

@@ -1,6 +1,7 @@
 import torch
 from torch.distributed.nn import all_gather
 from torchmetrics.functional import accuracy
+
 from .base_val_method import BascValMetric
 
 
@@ -67,6 +68,8 @@ class MscocoValAccuracy(BascValMetric):
         label = torch.arange(logits.shape[0], device=logits.device)
         acc_res = {}
         for k in self.k_list:
+            if k >= logits.shape[0]:
+                continue
             acc = accuracy(logits, label, top_k=k, task='multiclass', num_classes=logits.shape[0])
             acc_res[f"top-{k}"] = acc
         return acc_res

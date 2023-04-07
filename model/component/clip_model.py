@@ -1,4 +1,5 @@
 from typing import Optional
+
 from torch import nn
 
 from .output import ControlOutput, CLIPOutput

@@ -7,11 +7,7 @@ Code for CLIPScore (https://arxiv.org/abs/2104.08718)
   year={2021}
 }
 '''
-import argparse
 import collections
-import json
-import os
-import pathlib
 import warnings
 
 import clip
@@ -21,10 +17,8 @@ import torch
 import tqdm
 from PIL import Image
 from packaging import version
-from sklearn.preprocessing import normalize
 from torch.utils.data import DataLoader, Dataset
 from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize
-
 
 
 class CLIPCapDataset(Dataset):
