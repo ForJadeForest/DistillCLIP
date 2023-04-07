@@ -12,6 +12,7 @@ import os
 # os.environ['JSONARGPARSE_DEBUG'] = 'true'
 # os.environ['TORCH_DISTRIBUTED_DEBUG'] = 'INFO'
 
+device_num = int(os.getenv('DEVICE_NUM', 4))
 
 class MyLightningCLI(LightningCLI):
     @staticmethod
@@ -36,4 +37,4 @@ class IterableDatasetProgressBar(TQDMProgressBar):
 
 
 cli = MyLightningCLI(seed_everything_default=2022, save_config_callback=None,
-                     trainer_defaults={'devices': find_usable_cuda_devices(2)})
+                     trainer_defaults={'devices': find_usable_cuda_devices(device_num)})
