@@ -46,7 +46,7 @@ class MscocoValAccuracy(BascValMetric):
 
         i2t_logits, t2i_logits = norm_and_logits(image_outs, text_outs)
         self.record(logits=i2t_logits, name='i2t', stage='val', recorder=self.res_end_dict)
-        self.record(logits=i2t_logits, name='t2i', stage='val', recorder=self.res_end_dict)
+        self.record(logits=t2i_logits, name='t2i', stage='val', recorder=self.res_end_dict)
         return self.res_end_dict
 
     def reset(self):
