@@ -1,5 +1,5 @@
 model:
-  class_path: DualDistillModel
+  class_path: MultiTeacherDistillModule
   init_args:
     image_student:
       class_path: model.component.weight_share_model.RepeatVisionTransformer
@@ -21,16 +21,25 @@ model:
         depth: 4
         repeated_times: 2
         use_transform: True
-    load_path:
-      image: '/data/share/pyz/Dis_CLIP/final/image/wp_single/174-val_acc0.243-loss0.13381.ckpt'
-      text: '/data/share/pyz/Dis_CLIP/final/text/wp_single/131-val_acc0.300-loss0.03917.ckpt'
+    teacher_load_args_list:
+      blip:
+        name: 'blip_feature_extractor'
+        model_type: 'base'
+        is_eval: True
+      clip:
+        name: 'clip'
+        model_type: 'ViT-B-32'
+        is_eval: True
+
+#    load_path:
+#      image: '/data/share/pyz/Dis_CLIP/final/image/wp_single/174-val_acc0.243-loss0.13381.ckpt'
+#      text: '/data/share/pyz/Dis_CLIP/final/text/wp_single/131-val_acc0.300-loss0.03917.ckpt'
 
 
     loss_control_para:
-      loss_name: [ 'out_l1', 'out_cos', 'cos_diff' ]
+      loss_name: [ 'hard_label', 'soft_label' ]
+      temperature: 0.05
 
-
-    download_root: '/data/pyz/.cache'
     warm_steps: 15
     total_steps: 300
     weight_decay: 1.0e-3
@@ -42,17 +51,18 @@ model:
         class_path: Flickr8kHumanRating
 
 data:
-  class_path: MultiDataloaderMainDataModule
+  class_path: IterableDataModule
   init_args:
-    init_dataset_args:
-      mscoco:
-        is_train: True
-        dataset_file: ms_coco
-        dataset_name: COCODataset
-        dataset_args:
-          need_type: 'all'
-          root_path: '/home/pyz32/data_tmp/mscoco/'
-          annotation_path: '/home/pyz32/data_tmp/mscoco/annotations'
+    dataset_para:
+      num_workers: 16
+      cc3m_shards: /data/pyz/data/cc/train_cc3m/{00000..00331}.tar
+      need_text_processor: False
+      batch_size: 512
+
+    dataset_file: cc3m_train_dataset
+    function_name: get_cc3m_dataset
+
+    val_dataset_init_args:
       mscoco_val:
         is_train: False
         dataset_file: ms_coco
@@ -61,6 +71,7 @@ data:
           need_type: 'all'
           root_path: '/home/pyz32/data_tmp/mscoco/'
           annotation_path: '/home/pyz32/data_tmp/mscoco/annotations'
+          need_text_processor: False
       flickr8k_val:
         is_train: False
         dataset_file: flickr8k_dataset
@@ -68,17 +79,17 @@ data:
         dataset_args:
           image_directory: '/data/pyz/data/flickr8k'
           input_json_path: '/data/pyz/data/flickr8k/flickr8k.json'
-
-    train_batch_size: 512
+          need_text_processor: False
     val_batch_size: 1250
-    num_workers: 16
+    val_num_workers: 16
 
 
 
 trainer:
   num_sanity_val_steps: 0
   strategy: 'ddp'
-  default_root_dir: '/data/pyz/result/Dis_CLIP'
+  limit_train_batches: 3
+  default_root_dir: '/data/pyz/result/MultiTeacher'
   accumulate_grad_batches: 1
   accelerator: 'gpu'
   max_epochs: 300
@@ -89,9 +100,9 @@ trainer:
   logger:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
-      save_dir: '/data/pyz/result/Dis_CLIP'
-      name: 'SR-Loss'
-      project: 'L-CLIP'
+      save_dir: '/data/pyz/result/MultiTeacher'
+      name: 'Test'
+      project: 'MultiTeacher'
       log_model: false
       group: clip
       tags: [ 'weight share', 'loss change', 'CLIP model' ]
@@ -134,3 +145,6 @@ trainer:
         save_top_k: 2
         mode: 'max'
         auto_insert_metric_name: false
+    - class_path: IterableDatasetProgressBar
+      init_args:
+        total_length: 2848
