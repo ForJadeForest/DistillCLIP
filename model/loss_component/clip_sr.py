@@ -8,9 +8,9 @@ def get_neg_element(x):
     return x.flatten()[:-1].view(n - 1, n + 1)[:, 1:].flatten()
 
 
-class CLIPCosDiff(nn.Module):
+class CLIPSR(nn.Module):
     def __init__(self):
-        super(CLIPCosDiff, self).__init__()
+        super(CLIPSR, self).__init__()
         self.relu = nn.ReLU()
 
     def forward(self, stu_logits, tea_logits):

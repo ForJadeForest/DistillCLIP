@@ -27,9 +27,9 @@ model:
 
 
     loss_control_para:
-      loss_name: [ 'out_l1', 'out_cos', 'cos_diff' ]
+      loss_name: [ 'out_l1', 'out_cos', 'SR' ]
       loss_scale:
-        cos_diff: 0.1
+        SR: 0.1
       temperature: 2
 
 

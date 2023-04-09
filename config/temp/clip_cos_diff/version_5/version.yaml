@@ -5,7 +5,7 @@ model:
     loss_control_para:
       loss_name: [ 'out_l1', 'out_cos', 'soft_label']
       loss_scale:
-        cos_diff: 1
+        SR: 1
 
 
 trainer:

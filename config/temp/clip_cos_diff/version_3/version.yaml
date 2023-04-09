@@ -3,9 +3,9 @@ model:
   init_args:
     freeze_prefix: [ 'text_encoder' ]
     loss_control_para:
-      loss_name: [ 'out_l1', 'out_cos', 'cos_diff' ]
+      loss_name: [ 'out_l1', 'out_cos', 'SR' ]
       loss_scale:
-        cos_diff: 1
+        SR: 1
     load_path:
       image: '/data/share/pyz/Dis_CLIP/final/image/ws_no_smd/174-val_acc0.243-loss0.13381.ckpt'
       text: '/data/share/pyz/Dis_CLIP/final/text/compression/201-val_acc0.299-loss0.04052.ckpt'

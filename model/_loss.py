@@ -11,7 +11,7 @@ LOSSNAME = ['out_l1', 'out_ce', 'out_kl', 'out_cos', 'embedding_mse', 'attention
             'vit_kd', 'smd'
                       'hard_label', 'soft_label', 'fine_grain', 'logits_mse']
 
-IMAGE_TEXT_LOSS = ['hard_label', 'soft_label', 'logits_mse', 'fine_grain', 'cos_diff']
+IMAGE_TEXT_LOSS = ['hard_label', 'soft_label', 'logits_mse', 'fine_grain', 'SR']
 
 
 class LossCalculator(nn.Module):
@@ -90,8 +90,8 @@ class LossCalculator(nn.Module):
                 loss_function = FineGrainLoss()
             elif n == 'smd':
                 loss_function = SMD(self.smd_tau)
-            elif n == 'cos_diff':
-                loss_function = CLIPCosDiff()
+            elif n == 'SR':
+                loss_function = CLIPSR()
             else:
                 raise ValueError("Invalid Loss Type!")
             losses[n] = loss_function
@@ -141,7 +141,7 @@ class LossCalculator(nn.Module):
             elif loss_name == 'fine_grain':
                 cal_res[loss_name] = loss(stu_out.visual_output.last_layer_output,
                                           stu_out.text_output.last_layer_output)
-            elif loss_name == 'cos_diff':
+            elif loss_name == 'SR':
                 cal_res[loss_name] = 0.5 * (loss(stu_out.i2t_logits, tea_out.i2t_logits)
                                             + loss(stu_out.t2i_logits, tea_out.t2i_logits))
 

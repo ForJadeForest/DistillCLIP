@@ -38,7 +38,7 @@ model:
 
     loss_control_para:
       loss_name: [ 'hard_label', 'soft_label' ]
-      temperature: 0.05
+      temperature: 0.1
 
     warm_steps: 15
     total_steps: 300
@@ -54,7 +54,7 @@ data:
   class_path: IterableDataModule
   init_args:
     dataset_para:
-      num_workers: 16
+      num_workers: 0
       cc3m_shards: /data/pyz/data/cc/train_cc3m/{00000..00331}.tar
       need_text_processor: False
       batch_size: 512
@@ -81,7 +81,7 @@ data:
           input_json_path: '/data/pyz/data/flickr8k/flickr8k.json'
           need_text_processor: False
     val_batch_size: 1250
-    val_num_workers: 16
+    val_num_workers: 0
 
 
 

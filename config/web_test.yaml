@@ -22,7 +22,7 @@ model:
         repeated_times: 2
         use_transform: True
     loss_control_para:
-      loss_name: [ 'out_l1', 'out_cos', 'cos_diff' ]
+      loss_name: [ 'out_l1', 'out_cos', 'SR' ]
       temperature: 2
     download_root: '/data/pyz/.cache'
     warm_steps: 15
