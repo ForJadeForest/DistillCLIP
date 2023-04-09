@@ -58,4 +58,4 @@ class IterableDataModule(pl.LightningDataModule):
                                             num_workers=self.val_num_workers,
                                             shuffle=False,
                                             pin_memory=True)
-        return CombinedLoader(iterables=dataloader_dict, mode='max_size')
+        return CombinedLoader(iterables=dataloader_dict, mode='sequential')
