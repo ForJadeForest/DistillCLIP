@@ -70,8 +70,10 @@ class CLIPOutput:
 
 @dataclass
 class MultiModalOutput:
-    visual_output: VisionTransformerOutput = None
-    text_output: TextTransformerOutput = None
+    visual_output: torch.Tensor = None
+    text_output: torch.Tensor = None
+    i2t_logits: torch.Tensor = None
+    t2i_logits: torch.Tensor = None
 
 
 @dataclass
