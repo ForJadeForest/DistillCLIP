@@ -181,12 +181,11 @@ def teacher_load(teacher_name: str, download_root, model_type, need_layers=None,
         return teacher_model
 
 
-def load_multi_teacher(teacher_load_args_list):
+def load_multi_teacher(device, teacher_load_args_list):
     from model.component.multimodal.base_multimodal_model import MultiModalBaseModel
     from torch import nn
     model_dict = nn.ModuleDict()
-    for args, in zip(teacher_load_args_list):
-        model = MultiModalBaseModel(**args)
-        model_dict[args['name']] = model
-
+    for k, args in teacher_load_args_list.items():
+        model = MultiModalBaseModel(device, **args)
+        model_dict[k] = model
     return model_dict
