@@ -122,11 +122,12 @@ class MultiTeacherDistillModule(pl.LightningModule):
     def forward(self, inputs) -> Tuple[CLIPOutput, Dict[str, MultiModalOutput]]:
         image, text = inputs
         student_outs: CLIPOutput = self.student(text, image, self.need_return_para)
+
         teacher_outs = {}
         for teacher in self.teacher_dict:
             teacher_outs[teacher] = self.teacher_dict[teacher](text, image)
 
-        return  student_outs, teacher_outs
+        return student_outs, teacher_outs
 
     def on_train_epoch_start(self) -> None:
         if self.hparams.unfreeze_epoch:
@@ -138,10 +139,42 @@ class MultiTeacherDistillModule(pl.LightningModule):
         self.log(f'{data_info["section"]}/{data_info["prefix"]}', data_info['value'], sync_dist=True,
                  add_dataloader_idx=False)
 
+    def update_logits_in_dist(self, student_outs, teacher_outs):
+        text_gather_output = self.all_gather(student_outs.text_output.last_representation, sync_grads=True)
+        visual_gather_output = self.all_gather(student_outs.visual_output.last_representation, sync_grads=True)
+        text_gather_output = text_gather_output.reshape(-1, text_gather_output.shape[-1])
+        visual_gather_output = visual_gather_output.reshape(-1, visual_gather_output.shape[-1])
+
+        student_outs.text_output.last_representation = text_gather_output
+        student_outs.visual_output.last_representation = visual_gather_output
+
+        student_outs.i2t_logits = visual_gather_output @ text_gather_output.t()
+        student_outs.t2i_logits = student_outs.i2t_logits.t()
+
+        for teacher in self.teacher_dict:
+            text_gather_output = self.all_gather(teacher_outs[teacher].text_output.last_representation,
+                                                 sync_grads=True)
+            visual_gather_output = self.all_gather(teacher_outs[teacher].visual_output.last_representation,
+                                                   sync_grads=True)
+            text_gather_output = text_gather_output.reshape(-1, text_gather_output.shape[-1])
+            visual_gather_output = visual_gather_output.reshape(-1, visual_gather_output.shape[-1])
+
+            teacher_outs[teacher].text_output.last_representation = text_gather_output
+            teacher_outs[teacher].visual_output.last_representation = visual_gather_output
+
+            i2t_logits = text_gather_output @ visual_gather_output.t()
+            t2i_logits = i2t_logits.t()
+
+            teacher_outs[teacher].i2t_logits = i2t_logits
+            teacher_outs[teacher].t2i_logits = t2i_logits
+
+        return student_outs, teacher_outs
+
     def training_step(self, inputs, batch_idx):
         self.teacher_dict.eval()
         student_outs, teacher_outs = self.forward(inputs)
-
+        if dist.is_initialized():
+            student_outs, teacher_outs = self.update_logits_in_dist(student_outs, teacher_outs)
         loss = 0.
         for teacher_name in teacher_outs:
             single_teacher_loss, cal_res = self.loss_control(student_outs, teacher_outs[teacher_name], 'all')
@@ -200,28 +233,6 @@ class MultiTeacherDistillModule(pl.LightningModule):
         )
         return [optimizer], [scheduler]
 
-    def log_diag_score(self, logits, section, prefix):
-        softmax_logits = nn.functional.softmax(logits, dim=1)
-        softmax_mean_score = torch.diagonal(softmax_logits).mean()
-        mean_score = torch.diagonal(logits).mean()
-
-        self.log(f'{section}/{prefix}_softmax_mean_score', softmax_mean_score, batch_size=logits.shape[0],
-                 sync_dist=True)
-        self.log(f'{section}/{prefix}_mean_score', mean_score, batch_size=logits.shape[0], sync_dist=True)
-
-    def log_heatmap(self, logits, section, prefix):
-        softmax_logits = nn.functional.softmax(logits, dim=1)
-        self.logger.log_image(key=f"{section}_{prefix}_logits",
-                              images=[plt.imshow(logits.detach().cpu()),
-                                      plt.imshow(softmax_logits.detach().cpu())],
-                              caption=[f"{section}_{prefix}_map", f"{section}_{prefix}_softmax_map"])
-
-    def log_acc(self, logits, section, prefix):
-        label = torch.arange(logits.shape[0], device=self.device)
-        for k in self.k_list:
-            acc = accuracy(logits, label, top_k=k, task='multiclass', num_classes=logits.shape[0])
-            self.log(f'{section}/{prefix}_acc_top{k}', acc, batch_size=logits.shape[0], sync_dist=True)
-
     def unfreeze_embed(self):
         for n, p in self.student.named_parameters():
             p.requires_grad = True
@@ -265,19 +276,3 @@ class MultiTeacherDistillModule(pl.LightningModule):
             for n, p in self.student.named_parameters():
                 if n in student_keys:
                     p.requires_grad = False
-
-
-def norm_and_logits(img_encode, text_encode):
-    img_encode = img_encode / img_encode.norm(dim=1, keepdim=True)
-    text_encode = text_encode / text_encode.norm(dim=1, keepdim=True)
-    logits = img_encode @ text_encode.t()
-    return logits, logits.T
-
-
-def norm_last_representation(stu_outs, tea_outs):
-    stu_outs.visual_output.last_representation /= stu_outs.visual_output.last_representation.norm(dim=-1, keepdim=True)
-    stu_outs.text_output.last_representation /= stu_outs.text_output.last_representation.norm(dim=-1, keepdim=True)
-    tea_outs.visual_output.last_representation /= tea_outs.visual_output.last_representation.norm(dim=-1, keepdim=True)
-    tea_outs.text_output.last_representation /= tea_outs.text_output.last_representation.norm(dim=-1, keepdim=True)
-
-    return stu_outs, tea_outs
