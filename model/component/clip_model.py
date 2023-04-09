@@ -25,6 +25,9 @@ class CLIPModel(nn.Module):
     def encode_text(self, text, control_output: ControlOutput = None):
         if control_output is None:
             control_output = ControlOutput()
+        if isinstance(text, list):
+            from clip import tokenize
+            text = tokenize(text, truncate=True).to(next(self.image_encoder.parameters()).device)
         if self.only_last_rep:
             return self.text_encoder(text, control_output).last_representation
         return self.text_encoder(text, control_output)
@@ -32,6 +35,7 @@ class CLIPModel(nn.Module):
     def forward(self, text, image, control_output: Optional[ControlOutput] = None):
         if control_output is None:
             control_output = ControlOutput()
+
         image_output = self.encode_image(image, control_output)
         text_output = self.encode_text(text, control_output)
         if not self.only_last_rep:
