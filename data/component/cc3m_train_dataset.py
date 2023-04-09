@@ -36,7 +36,6 @@ class SharedEpoch:
         return self.shared_epoch.value
 
 
-
 def get_dataset_size(shards):
     shards_list = list(braceexpand.braceexpand(shards))
     shards_list = shards
@@ -205,7 +204,7 @@ class ResampledShards2(IterableDataset):
 
 
 def get_cc3m_dataset(cc3m_shards, batch_size, num_workers,
-                     cc3m_dataset_length=2905954, epoch=0, floor=False):
+                     cc3m_dataset_length=2905954, epoch=0, floor=False, need_text_processor=True):
     from .utils import make_transformers
     from clip import tokenize
     from torch import distributed as dist
@@ -239,10 +238,22 @@ def get_cc3m_dataset(cc3m_shards, batch_size, num_workers,
         [
             wds.decode("pil"),
             wds.to_tuple("jpg", "txt", handler=log_and_continue),
-            wds.map(lambda x: (image_processor(x[0]), text_processor(x[1], truncate=True).squeeze())),
-            wds.batched(batch_size, partial=False),
         ]
     )
+    if need_text_processor:
+        pipeline.extend(
+            [
+                wds.map(lambda x: (image_processor(x[0]), text_processor(x[1], truncate=True).squeeze())),
+                wds.batched(batch_size, partial=False),
+            ]
+        )
+    else:
+        pipeline.extend(
+            [
+                wds.map(lambda x: (image_processor(x[0]), x[1])),
+                wds.batched(batch_size, partial=False),
+            ]
+        )
 
     dataset = wds.DataPipeline(*pipeline)
     # roll over and repeat a few samples to get same number of full batches on each node
