@@ -14,7 +14,13 @@ class Flickr8kHumanRating(BascValMetric):
         candidates_features = model.encode_text(candidates).last_representation
         images_features = model.encode_image(images).last_representation
         # candidates: batch, ref_num,
-        references = references.reshape(-1, references.shape[-1])
+        if isinstance(references, list):
+            temp_refs = []
+            for i in zip(*references):
+                temp_refs.extend(i)
+            references = temp_refs
+        else:
+            references = references.reshape(-1, references.shape[-1])
         refs_features = model.encode_text(references).last_representation
 
         candidates_features = candidates_features / candidates_features.norm(dim=1, keepdim=True)
