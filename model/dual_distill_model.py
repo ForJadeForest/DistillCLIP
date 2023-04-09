@@ -166,12 +166,14 @@ class DualDistillModel(LightningModule):
                 self.log_data(data_info)
             self.stu_val_method_metric[method_name].reset()
 
-        if self.current_epoch == 0:
-            for method_name, method in self.tea_val_method_metric.items():
-                end_res = method.validation_end()
-                for k, data_info in end_res.items():
-                    self.log_data(data_info)
-                self.tea_val_method_metric[method_name].reset()
+        if self.current_epoch != 0:
+            return
+
+        for method_name, method in self.tea_val_method_metric.items():
+            end_res = method.validation_end()
+            for k, data_info in end_res.items():
+                self.log_data(data_info)
+            self.tea_val_method_metric[method_name].reset()
 
     def log_info(self, section, loss, cal_res, batch_size):
         self.log(f"{section}/loss", loss, batch_size=batch_size, sync_dist=True)
