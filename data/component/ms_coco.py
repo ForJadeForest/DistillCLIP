@@ -6,12 +6,13 @@ from data.component.utils import IMAGE_MEAN, IMAGE_STD
 
 
 class COCODataset(datasets.CocoCaptions):
-    def __init__(self, root_path, annotation_path, need_type='all', train=True):
+    def __init__(self, root_path, annotation_path, need_type='all', need_text_processor=True,train=True):
         from clip import tokenize
         self.need_type = need_type
         self.train = train
         self.tokenizer = tokenize
         self.img_mean, self.img_std = IMAGE_MEAN, IMAGE_STD
+        self.need_text_processor = need_text_processor
         self.trans = transforms.Compose([
             transforms.Resize(224),
             transforms.CenterCrop(224),
@@ -34,7 +35,10 @@ class COCODataset(datasets.CocoCaptions):
 
     def __getitem__(self, item):
         image, caption = super(COCODataset, self).__getitem__(item)
-        image, caption = image, self.tokenizer(caption[0], truncate=False)[0]
+        if self.need_text_processor:
+            caption = self.tokenizer(caption[0], truncate=False)[0]
+        else:
+            caption = caption[0]
         if self.need_type == 'all' or not self.train:
             return image, caption
         elif self.need_type == 'image':

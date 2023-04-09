@@ -6,7 +6,8 @@ from PIL import Image
 
 
 class Flickr8kDataset(Dataset):
-    def __init__(self, input_json_path, image_directory, prefix='A photo depicts', train=False):
+    def __init__(self, input_json_path, image_directory, prefix='A photo depicts', need_text_processor=True,
+                 train=False):
         assert not train, f"the Flickr8k only use to validation! please set is_train as False"
         images, refs, candidates, human_scores = load_data(input_json_path, image_directory)
         self.images = images
@@ -16,6 +17,7 @@ class Flickr8kDataset(Dataset):
         self.prefix = prefix
         if self.prefix[-1] != ' ':
             self.prefix += ' '
+        self.need_text_processor = need_text_processor
         self.image_processor = Compose([
             Resize(224, interpolation=Image.BICUBIC),
             CenterCrop(224),
@@ -29,8 +31,13 @@ class Flickr8kDataset(Dataset):
 
     def __getitem__(self, item):
         ref = self.refs[item]
-        ref = tokenize([self.prefix + r for r in ref], truncate=True)
-        candidate = tokenize(self.prefix + self.candidates[item], truncate=True).squeeze()
+        if self.need_text_processor:
+            ref = tokenize([self.prefix + r for r in ref], truncate=True)
+            candidate = tokenize(self.prefix + self.candidates[item], truncate=True).squeeze()
+        else:
+            ref = [self.prefix + r for r in ref]
+            candidate = self.prefix + self.candidates[item]
+
         image = self.image_processor(Image.open(self.images[item]))
 
         return image, ref, candidate, self.human_scores[item]
@@ -38,9 +45,11 @@ class Flickr8kDataset(Dataset):
 
 if __name__ == '__main__':
     import os
+
     flickr8k_expert_file = os.path.join('/data/pyz/data/flickr8k', 'flickr8k.json')
     data = Flickr8kDataset(flickr8k_expert_file, '/data/pyz/data/flickr8k')
     from torch.utils.data import DataLoader
+
     dataloader = DataLoader(data, batch_size=108, num_workers=12)
     for i in dataloader:
         pass
