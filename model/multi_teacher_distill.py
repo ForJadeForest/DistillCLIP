@@ -1,16 +1,17 @@
 import copy
 from typing import *
 
+import numpy as np
 import pytorch_lightning as pl
 import torch
 import transformers
 import wandb
-from matplotlib import pyplot as plt
+import torch.distributed as dist
+
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.utilities import rank_zero_only
 from torch import optim, nn
-from torchmetrics.functional import accuracy
-import torch.distributed as dist
+
 from ._loss import LossCalculator
 from .component import CLIPModel, ImageEncoder, CLIPOutput, MultiModalOutput, RepeatVisionTransformer, BascValMetric
 from .utils import load_multi_teacher
@@ -100,6 +101,7 @@ class MultiTeacherDistillModule(pl.LightningModule):
             }
         for k, v in self.stu_val_method_metric.items():
             v.set_model_name('student')
+        self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
 
     def on_train_start(self):
         self.logger_begin()
@@ -148,7 +150,7 @@ class MultiTeacherDistillModule(pl.LightningModule):
         student_outs.text_output.last_representation = text_gather_output
         student_outs.visual_output.last_representation = visual_gather_output
 
-        student_outs.i2t_logits = visual_gather_output @ text_gather_output.t()
+        student_outs.i2t_logits = self.logit_scale.exp() * visual_gather_output @ text_gather_output.t()
         student_outs.t2i_logits = student_outs.i2t_logits.t()
 
         for teacher in self.teacher_dict:
@@ -162,7 +164,7 @@ class MultiTeacherDistillModule(pl.LightningModule):
             teacher_outs[teacher].text_output.last_representation = text_gather_output
             teacher_outs[teacher].visual_output.last_representation = visual_gather_output
 
-            i2t_logits = text_gather_output @ visual_gather_output.t()
+            i2t_logits = self.logit_scale.detach().exp() * text_gather_output @ visual_gather_output.t()
             t2i_logits = i2t_logits.t()
 
             teacher_outs[teacher].i2t_logits = i2t_logits
@@ -170,9 +172,19 @@ class MultiTeacherDistillModule(pl.LightningModule):
 
         return student_outs, teacher_outs
 
+    def update_logit_scale(self, student_outs, teacher_outs):
+        student_outs.i2t_logits *= self.logit_scale.exp()
+        teacher_outs.i2t_logits *= self.logit_scale.exp()
+
+        student_outs.t2i_logits *= self.logit_scale.exp()
+        teacher_outs.t2i_logits *= self.logit_scale.exp()
+        return student_outs, teacher_outs
+
     def training_step(self, inputs, batch_idx):
         self.teacher_dict.eval()
         student_outs, teacher_outs = self.forward(inputs)
+        student_outs, teacher_outs = self.update_logit_scale(student_outs, teacher_outs)
+
         if dist.is_initialized():
             student_outs, teacher_outs = self.update_logits_in_dist(student_outs, teacher_outs)
         loss = 0.
