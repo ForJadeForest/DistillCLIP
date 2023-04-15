@@ -4,6 +4,7 @@ class BascValMetric:
         self.res_step_dict = {}
         self.res_end_dict = {}
         self.validation_step_outputs = []
+        self.model_step_output = []
 
     def set_model_name(self, new_name):
         self.model_name = new_name
