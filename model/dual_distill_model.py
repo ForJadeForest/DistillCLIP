@@ -42,7 +42,6 @@ class DualDistillModel(LightningModule):
                  unfreeze_epoch: int = None, load_path: Dict = None, teacher_need_layers: List = None,
                  freeze_prefix: List = None):
         """
-
         :param image_student: Student image encoder
         :param text_student: Student Text encoder
         :param loss_control_para: To control which loss you want to use
@@ -135,10 +134,11 @@ class DualDistillModel(LightningModule):
 
     def training_step(self, inputs, batch_idx):
         self.teacher.eval()
+        # TODO: Gather Tensor with multi gpus
         student_outs, teacher_outs = self.forward(inputs)
 
         loss, cal_res = self.loss_control(student_outs, teacher_outs, 'all')
-        self.log_info('train_loss', loss, cal_res, batch_size=len(inputs))
+        self.log_info('train_loss', loss, cal_res, batch_size=len(inputs[0]))
 
         return loss
 
@@ -151,15 +151,22 @@ class DualDistillModel(LightningModule):
         step_res = method.validation_step(batch, self.student)
         for k, data_info in step_res.items():
             self.log_data(data_info)
+        student_outs = self.stu_val_method_metric[dataloader_idx].model_step_output
 
-        if self.current_epoch == 0:
-            method = self.tea_val_method_metric[dataloader_idx]
-            step_res = method.validation_step(batch, self.teacher)
-            for k, data_info in step_res.items():
-                self.log_data(data_info)
+        method = self.tea_val_method_metric[dataloader_idx]
+        step_res = method.validation_step(batch, self.teacher)
+        teacher_outs = self.tea_val_method_metric[dataloader_idx].model_step_output
+        loss, cal_res = self.loss_control(student_outs, teacher_outs, 'all')
+
+        self.log_info('val_loss', loss, cal_res, batch_size=len(batch[0]))
+
+        if self.current_epoch != 0:
+            return
+
+        for k, data_info in step_res.items():
+            self.log_data(data_info)
 
     def on_validation_epoch_end(self):
-        # [gpu_num, batch, batch]
         for method_name, method in self.stu_val_method_metric.items():
             end_res = method.validation_end()
             for k, data_info in end_res.items():
