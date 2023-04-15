@@ -2,7 +2,7 @@ from torch import nn
 from model.component.output import MultiModalOutput
 from model.component.output import TextTransformerOutput, VisionTransformerOutput
 from lavis.models import load_model
-from lavis import BlipFeatureExtractor, CLIP
+from torch.nn.functional import normalize
 
 class MultiModalBaseModel(nn.Module):
     def __init__(self, device, **kwargs):
@@ -15,6 +15,7 @@ class MultiModalBaseModel(nn.Module):
             image_feature = self.model.extract_features(samples, mode='image').image_embeds_proj[:, 0, :]
         except:
             image_feature = self.model.extract_features(samples)
+        image_feature = normalize(image_feature, dim=-1)
         return VisionTransformerOutput(last_representation=image_feature)
 
     def encode_text(self, text):
@@ -23,6 +24,7 @@ class MultiModalBaseModel(nn.Module):
             text_feature = self.model.extract_features(samples, mode='text').text_embeds_proj[:, 0, :]
         except:
             text_feature = self.model.extract_features(samples)
+        text_feature = normalize(text_feature, dim=-1)
         return TextTransformerOutput(last_representation=text_feature)
 
     def forward(self, text, image):
