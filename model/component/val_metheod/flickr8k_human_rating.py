@@ -76,4 +76,5 @@ class Flickr8kHumanRating(BascValMetric):
     def reset(self):
         self.res_end_dict.clear()
         self.res_step_dict.clear()
+        self.model_step_output.clear()
         self.validation_step_outputs.clear()
