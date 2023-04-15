@@ -22,7 +22,7 @@ class MscocoValAccuracy(BascValMetric):
         outs = model(text, image)
         i2t_logits, t2i_logits = norm_and_logits(outs.visual_output.last_representation,
                                                  outs.text_output.last_representation)
-
+        self.model_step_output = outs
         self.record(logits=i2t_logits, name='i2t', stage='val_step', recorder=self.res_step_dict)
         self.record(logits=i2t_logits, name='t2i', stage='val_step', recorder=self.res_step_dict)
         self.validation_step_outputs.append({
