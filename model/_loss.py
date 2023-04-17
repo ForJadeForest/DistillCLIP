@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict, List, Union
+from typing import Dict, List, Union, Optional
 
 import torch
 from torch import nn
@@ -15,8 +15,8 @@ IMAGE_TEXT_LOSS = ['hard_label', 'soft_label', 'logits_mse', 'fine_grain', 'SR']
 
 
 class LossCalculator(nn.Module):
-    def __init__(self, loss_name: List, loss_scale: dict = None,
-                 temperature=None, percent=None, smd_tau: float = 0.04, vit_kd_para: Dict = None):
+    def __init__(self, loss_name: List, loss_scale: dict = None, loss_init_args: Optional[Dict] = None,
+                 percent=None):
         super().__init__()
         self.loss_name = loss_name
         self.loss_scale = {}
@@ -41,14 +41,16 @@ class LossCalculator(nn.Module):
                 self.percent[n] = default_value
         assert abs(sum(self.percent.values()) - 1) <= 1e-5
 
-        self.temperature = temperature
-        if vit_kd_para is not None:
-            if 'low_layers_num' not in vit_kd_para:
-                vit_kd_para['low_layers_num'] = 2
-            if 'high_layers_num' not in vit_kd_para:
-                vit_kd_para['high_layers_num'] = 1
-        self.vit_kd_para = vit_kd_para
-        self.smd_tau = smd_tau
+        if loss_init_args is None:
+            self.loss_init_args = {}
+        else:
+            self.loss_init_args = loss_init_args
+        if 'vit_kd' in self.loss_init_args:
+            if 'low_layers_num' not in self.loss_init_args['vit_kd']:
+                self.loss_init_args['vit_kd']['low_layers_num'] = 2
+            if 'high_layers_num' not in self.loss_init_args['vit_kd']:
+                self.loss_init_args['vit_kd']['high_layers_num'] = 1
+
         self.loss = self._init_loss()
 
         print(self.percent)
@@ -58,14 +60,24 @@ class LossCalculator(nn.Module):
         losses = nn.ModuleDict()
 
         for n in self.loss_name:
+            init_args = self.loss_init_args.get(n)
             if n == 'out_l1':
-                loss_function = OutL1Loss()
+                if init_args:
+                    loss_function = OutL1Loss(**init_args)
+                else:
+                    loss_function = OutL1Loss()
             elif n == 'out_ce':
                 loss_function = OutCELoss()
             elif n == 'out_kl':
-                loss_function = OutKLLoss(self.temperature)
+                if init_args:
+                    loss_function = OutKLLoss(**init_args)
+                else:
+                    loss_function = OutKLLoss()
             elif n == 'out_cos':
-                loss_function = OutCosLoss()
+                if init_args:
+                    loss_function = OutCosLoss(**init_args)
+                else:
+                    loss_function = OutCosLoss()
             elif n == 'embedding_mse':
                 loss_function = EmbedMSELoss()
             elif n == 'attention_score_mse':
@@ -81,15 +93,21 @@ class LossCalculator(nn.Module):
             elif n == 'hard_label':
                 loss_function = HardLabel()
             elif n == 'soft_label':
-                loss_function = SoftLabel(self.temperature)
+                if init_args:
+                    loss_function = SoftLabel(**init_args)
+                else:
+                    loss_function = SoftLabel()
             elif n == 'vit_kd':
-                loss_function = ViTKDLoss(**self.vit_kd_para)
+                loss_function = ViTKDLoss(**init_args)
             elif n == 'logits_mse':
                 loss_function = LogitsMSE()
             elif n == 'fine_grain':
                 loss_function = FineGrainLoss()
             elif n == 'smd':
-                loss_function = SMD(self.smd_tau)
+                if init_args:
+                    loss_function = SMD(**init_args)
+                else:
+                    loss_function = SMD()
             elif n == 'SR':
                 loss_function = CLIPSR()
             else:
@@ -130,7 +148,6 @@ class LossCalculator(nn.Module):
             if loss_name == 'hard_label':
                 cal_res[loss_name] = 0.5 * (loss(stu_out.i2t_logits) + loss(stu_out.t2i_logits))
             elif loss_name == 'soft_label':
-                assert self.temperature
                 logits_kl_loss = \
                     0.5 * (loss(stu_out.i2t_logits, tea_out.i2t_logits)
                            + loss(stu_out.t2i_logits, tea_out.t2i_logits))
@@ -163,7 +180,6 @@ class LossCalculator(nn.Module):
             elif loss_name == 'out_ce':
                 cal_res[loss_name] = loss(stu_out.last_representation, tea_out.last_representation)
             elif loss_name == 'out_kl':
-                assert self.temperature, 'You should give the temperature for the kl loss'
                 cal_res[loss_name] = loss(stu_out.last_representation, tea_out.last_representation)
             elif loss_name == 'embedding_mse':
                 cal_res[loss_name] = loss(stu_out.embedding, tea_out.embedding)
@@ -232,24 +248,3 @@ class TotalLoss:
     fine_grain = nn.CrossEntropyLoss(reduction='mean')
     soft_label = nn.KLDivLoss(reduction='sum')
     logits_mse = nn.MSELoss()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
