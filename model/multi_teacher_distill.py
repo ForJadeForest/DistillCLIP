@@ -39,7 +39,7 @@ def load_weight(image_student, text_student, load_path):
 class MultiTeacherDistillModule(pl.LightningModule):
     def __init__(self, image_student: nn.Module, text_student: nn.Module, teacher_load_args_list: Dict[str, Dict],
                  loss_control_para: Dict, warm_steps, total_steps, weight_decay, lr: float,
-                 validation_method: Dict[str, BascValMetric],
+                 validation_method: Dict[str, BascValMetric], teacher_logits_scale=None,
                  norm=False, freeze_embed: bool = False,
                  unfreeze_epoch: int = None, load_path: Dict = None, freeze_prefix: List = None):
         """
@@ -75,11 +75,13 @@ class MultiTeacherDistillModule(pl.LightningModule):
         for p in self.teacher_dict.parameters():
             p.requires_grad = False
 
-        assert 'hard_label' in loss_control_para['loss_name'] or 'soft_label' in loss_control_para[
-            'loss_name'], f"Now multi teacher distillation only support hard_label and soft_label loss"
+        self.teacher_loss_dict = {}
+        self.need_return_para = {}
+        for t_n in loss_control_para:
+            self.teacher_loss_dict[t_n] = LossCalculator(**loss_control_para[t_n])
+            # TODO
+            self.need_return_para = self.teacher_loss_dict[t_n].get_control_output()
 
-        self.loss_control = LossCalculator(**loss_control_para)
-        self.need_return_para = self.loss_control.get_control_output()
         if freeze_embed:
             self.freeze_image_embedding()
         self.unfreeze_epoch = unfreeze_epoch
@@ -99,9 +101,13 @@ class MultiTeacherDistillModule(pl.LightningModule):
             self.multi_tea_val_method_metric[teacher_name] = {
                 i: v for i, (k, v) in enumerate(self.multi_tea_val_method_metric[teacher_name].items())
             }
+
         for k, v in self.stu_val_method_metric.items():
             v.set_model_name('student')
-        self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
+        self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07), requires_grad=True)
+        self.teacher_logits_scale = None
+        if teacher_logits_scale:
+            self.teacher_logits_scale = teacher_logits_scale
 
     def on_train_start(self):
         self.logger_begin()
@@ -164,7 +170,10 @@ class MultiTeacherDistillModule(pl.LightningModule):
             teacher_outs[teacher].text_output.last_representation = text_gather_output
             teacher_outs[teacher].visual_output.last_representation = visual_gather_output
 
-            i2t_logits = self.logit_scale.detach().exp() * text_gather_output @ visual_gather_output.t()
+            scale = self.logit_scale.detach().exp()
+            if self.teacher_logits_scale:
+                scale = self.teacher_logits_scale
+            i2t_logits = scale * text_gather_output @ visual_gather_output.t()
             t2i_logits = i2t_logits.t()
 
             teacher_outs[teacher].i2t_logits = i2t_logits
@@ -174,10 +183,15 @@ class MultiTeacherDistillModule(pl.LightningModule):
 
     def update_logit_scale(self, student_outs, teacher_outs):
         student_outs.i2t_logits *= self.logit_scale.exp()
-        teacher_outs.i2t_logits *= self.logit_scale.exp()
-
         student_outs.t2i_logits *= self.logit_scale.exp()
-        teacher_outs.t2i_logits *= self.logit_scale.exp()
+
+        for teacher in self.teacher_dict:
+            scale = self.logit_scale.detach().exp()
+            if self.teacher_logits_scale:
+                scale = self.teacher_logits_scale
+            teacher_outs[teacher].i2t_logits *= scale
+            teacher_outs[teacher].t2i_logits *= scale
+
         return student_outs, teacher_outs
 
     def training_step(self, inputs, batch_idx):
@@ -189,12 +203,15 @@ class MultiTeacherDistillModule(pl.LightningModule):
             student_outs, teacher_outs = self.update_logits_in_dist(student_outs, teacher_outs)
         loss = 0.
         for teacher_name in teacher_outs:
-            single_teacher_loss, cal_res = self.loss_control(student_outs, teacher_outs[teacher_name], 'all')
+            single_teacher_loss, cal_res = self.teacher_loss_dict[teacher_name](student_outs, teacher_outs[teacher_name], 'all')
             self.log_info(f'train_{teacher_name}_loss', single_teacher_loss, cal_res, batch_size=len(inputs))
             loss += single_teacher_loss
 
         loss /= len(teacher_outs)
         self.log('train_loss', loss, batch_size=len(inputs), sync_dist=True)
+        self.log('logit_scale', self.logit_scale, batch_size=len(inputs), sync_dist=True)
+        self.log('logit_scale_exp', self.logit_scale.exp(), batch_size=len(inputs), sync_dist=True)
+        self.log('logit_scale_reciprocal', 1 / self.logit_scale.exp(), batch_size=len(inputs), sync_dist=True)
         return loss
 
     def validation_step(self, batch, batch_idx, dataloader_idx):
@@ -236,14 +253,18 @@ class MultiTeacherDistillModule(pl.LightningModule):
             self.log(f"{section}/{loss_name}", loss_res, batch_size=batch_size, sync_dist=True)
 
     def configure_optimizers(self):
-        opt_para = filter(lambda p: p.requires_grad, self.student.parameters())
+        opt_para = filter(lambda p: p.requires_grad, self.parameters())
         optimizer = optim.AdamW(opt_para, lr=self.hparams.lr, weight_decay=self.hparams.weight_decay)
         scheduler = transformers.get_cosine_schedule_with_warmup(
             optimizer,
             num_warmup_steps=self.hparams.warm_steps,
             num_training_steps=self.hparams.total_steps
         )
-        return [optimizer], [scheduler]
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {"scheduler": scheduler, "interval": "step"},
+        }
+        # return [optimizer], [scheduler]
 
     def unfreeze_embed(self):
         for n, p in self.student.named_parameters():
