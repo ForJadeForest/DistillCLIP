@@ -3,7 +3,7 @@ from torch.nn import functional as f
 
 
 class OutKLLoss(nn.Module):
-    def __init__(self, t):
+    def __init__(self, t=2):
         super().__init__()
         self.loss = nn.KLDivLoss(reduction='sum')
 

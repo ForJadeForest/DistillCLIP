@@ -3,7 +3,7 @@ from torch.nn import functional as f
 
 
 class SoftLabel(nn.Module):
-    def __init__(self, temperature):
+    def __init__(self, temperature=2):
         super(SoftLabel, self).__init__()
         self.loss = nn.KLDivLoss(reduction='batchmean')
         self.temperature = temperature
