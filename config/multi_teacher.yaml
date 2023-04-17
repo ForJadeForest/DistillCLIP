@@ -37,15 +37,28 @@ model:
 
 
     loss_control_para:
-      loss_name: [ 'hard_label', 'soft_label' ]
-      loss_scale:
-        hard_label: 0.1
-      temperature: 4
+      clip:
+        loss_name: [ 'hard_label', 'soft_label' ]
+        loss_scale:
+          hard_label: 0.1
+          soft_label: 0.1
+        loss_init_args:
+          soft_label:
+            temperature: 4
+      blip:
+        loss_name: [ 'hard_label', 'soft_label' ]
+        loss_scale:
+          hard_label: 0.1
+          soft_label: 0.1
+        loss_init_args:
+          soft_label:
+            temperature: 4
 
-    warm_steps: 5
-    total_steps: 100
+    warm_steps: 3000
+    total_steps: 142400
     weight_decay: 1.0e-3
-    lr: 5.0e-5
+    lr: 1e-4
+
     validation_method:
       mscoco_val:
         class_path: MscocoValAccuracy
@@ -83,7 +96,7 @@ data:
           input_json_path: '/data/pyz/data/flickr8k/flickr8k.json'
           need_text_processor: False
     val_batch_size: 500
-    val_num_workers: 2
+    val_num_workers: 4
 
 
 
@@ -110,6 +123,8 @@ trainer:
 
   callbacks:
     - class_path: LearningRateMonitor
+      init_args:
+        logging_interval: step
     - class_path: ModelSummary
       init_args:
         max_depth: 2
@@ -147,4 +162,4 @@ trainer:
         auto_insert_metric_name: false
     - class_path: IterableDatasetProgressBar
       init_args:
-        total_length: 2848
+        total_length: 1424

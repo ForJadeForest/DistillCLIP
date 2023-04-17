@@ -8,11 +8,11 @@ from pytorch_lightning.cli import LightningCLI
 from pytorch_lightning.accelerators import find_usable_cuda_devices
 import os
 
-
 # os.environ['JSONARGPARSE_DEBUG'] = 'true'
 # os.environ['TORCH_DISTRIBUTED_DEBUG'] = 'INFO'
 
 device_num = int(os.getenv('DEVICE_NUM', 4))
+
 
 class MyLightningCLI(LightningCLI):
     @staticmethod
@@ -21,7 +21,7 @@ class MyLightningCLI(LightningCLI):
             return optimizer
         return {
             "optimizer": optimizer,
-            "lr_scheduler": {"scheduler": lr_scheduler, "interval": "epoch"},
+            "lr_scheduler": {"scheduler": lr_scheduler, "interval": "step"},
         }
 
 
