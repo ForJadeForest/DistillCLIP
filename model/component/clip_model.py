@@ -7,13 +7,14 @@ from .output import ControlOutput, CLIPOutput
 
 class CLIPModel(nn.Module):
     def __init__(self, is_student: bool, image_encoder: nn.Module, text_encoder: nn.Module,
-                 norm=False, only_last_rep=False):
+                 norm=False, only_last_rep=False, only_rep=False):
         super().__init__()
         self.image_encoder = image_encoder
         self.text_encoder = text_encoder
         self.is_student = is_student
         self.norm = norm
         self.only_last_rep = only_last_rep
+        self.only_rep = only_rep
 
     def encode_image(self, image, control_output: ControlOutput = None):
         if control_output is None:
@@ -42,6 +43,10 @@ class CLIPModel(nn.Module):
             image_feature = image_output.last_representation / image_output.last_representation.norm(dim=1,
                                                                                                      keepdim=True)
             text_feature = text_output.last_representation / text_output.last_representation.norm(dim=1, keepdim=True)
+            if self.only_rep:
+                return CLIPOutput(visual_output=image_output,
+                                  text_output=text_output)
+
             logits = image_feature @ text_feature.t()
             return CLIPOutput(visual_output=image_output,
                               text_output=text_output,
