@@ -37,22 +37,28 @@ model:
 
 
     loss_control_para:
-      clip:
-        loss_name: [ 'hard_label', 'soft_label' ]
-        loss_scale:
-          hard_label: 0.1
-          soft_label: 0.1
-        loss_init_args:
-          soft_label:
-            temperature: 4
-      blip:
-        loss_name: [ 'hard_label', 'soft_label' ]
-        loss_scale:
-          hard_label: 0.1
-          soft_label: 0.1
-        loss_init_args:
-          soft_label:
-            temperature: 4
+      loss_calculator_args:
+        clip:
+          loss_name: [ 'hard_label', 'soft_label' ]
+          loss_scale:
+            soft_label: 0.1
+            hard_label: 0.01
+          loss_init_args:
+            soft_label:
+              temperature: 4
+        blip:
+          loss_name: [ 'hard_label', 'soft_label' ]
+          loss_scale:
+            soft_label: 0.1
+            hard_label: 0.01
+          loss_init_args:
+#            out_l1:
+#              dim_map: [512, 256]
+#            out_cos:
+#              dim_map: [512, 256]
+            soft_label:
+              temperature: 4
+      weight_method: "mean"
 
     warm_steps: 3000
     total_steps: 142400
@@ -72,7 +78,7 @@ data:
       num_workers: 6
       cc3m_shards: /data/pyz/data/cc/train_cc3m/{00000..00331}.tar
       need_text_processor: False
-      batch_size: 480
+      batch_size: 450
 
     dataset_file: cc3m_train_dataset
     function_name: get_cc3m_dataset
@@ -102,6 +108,7 @@ data:
 
 trainer:
   num_sanity_val_steps: 0
+#  detect_anomaly: True
   strategy: 'ddp'
   default_root_dir: '/data/pyz/result/MultiTeacher'
   accumulate_grad_batches: 1
@@ -110,6 +117,7 @@ trainer:
   log_every_n_steps: 15
   enable_progress_bar: True
   check_val_every_n_epoch: 1
+#  precision: bf16
   precision: 16
   logger:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
@@ -130,32 +138,32 @@ trainer:
         max_depth: 2
     - class_path: ModelCheckpoint
       init_args:
-        filename: 'max-CLIPScore{epoch}-CLIPScore{val/student-clip_score-human_rating-tau_c:.3f}-loss{val/student-ref_clip_score-human_rating-tau_c:.3f}-i2t_acc{val/student-i2t-acc_top-1:.3f}-t2i_acc{val/student-t2i-acc_top-1:.3f}'
-        monitor: 'val/student-clip_score-human_rating-tau_c'
+        filename: 'max-CLIPScore{epoch}-CLIPScore{val-student/clip_score-human_rating-tau_c:.3f}-loss{val-student/ref_clip_score-human_rating-tau_c:.3f}-i2t_acc{val-student/i2t-acc_top-1:.3f}-t2i_acc{val-student/t2i-acc_top-1:.3f}'
+        monitor: 'val-student/clip_score-human_rating-tau_c'
         save_last: True
         save_top_k: 2
         mode: 'max'
         auto_insert_metric_name: false
     - class_path: ModelCheckpoint
       init_args:
-        filename: 'max-RefCLIPScore-{epoch}-CLIPScore{val/student-clip_score-human_rating-tau_c:.3f}-RefCLIPScore{val/student-ref_clip_score-human_rating-tau_c:.3f}-i2t_acc{val/student-i2t-acc_top-1:.3f}-t2i_acc{val/student-t2i-acc_top-1:.3f}'
-        monitor: 'val/student-ref_clip_score-human_rating-tau_c'
+        filename: 'max-RefCLIPScore-{epoch}-CLIPScore{val-student/clip_score-human_rating-tau_c:.3f}-RefCLIPScore{val-student/ref_clip_score-human_rating-tau_c:.3f}-i2t_acc{val-student/i2t-acc_top-1:.3f}-t2i_acc{val-student/t2i-acc_top-1:.3f}'
+        monitor: 'val-student/ref_clip_score-human_rating-tau_c'
         save_last: True
         save_top_k: 2
         mode: 'max'
         auto_insert_metric_name: false
     - class_path: ModelCheckpoint
       init_args:
-        filename: 'max-i2t_acc-{epoch}-CLIPScore{val/student-clip_score-human_rating-tau_c:.3f}-RefCLIPScore{val/student-ref_clip_score-human_rating-tau_c:.3f}-i2t_acc{val/student-i2t-acc_top-1:.3f}-t2i_acc{val/student-t2i-acc_top-1:.3f}'
-        monitor: 'val/student-i2t-acc_top-1'
+        filename: 'max-i2t_acc-{epoch}-CLIPScore{val-student/clip_score-human_rating-tau_c:.3f}-RefCLIPScore{val-student/ref_clip_score-human_rating-tau_c:.3f}-i2t_acc{val-student/i2t-acc_top-1:.3f}-t2i_acc{val-student/t2i-acc_top-1:.3f}'
+        monitor: 'val-student/i2t-acc_top-1'
         save_last: True
         save_top_k: 2
         mode: 'max'
         auto_insert_metric_name: false
     - class_path: ModelCheckpoint
       init_args:
-        filename: 'max-t2i_acc-{epoch}-CLIPScore{val/student-clip_score-human_rating-tau_c:.3f}-RefCLIPScore{val/student-ref_clip_score-human_rating-tau_c:.3f}-i2t_acc{val/student-i2t-acc_top-1:.3f}-t2i_acc{val/student-t2i-acc_top-1:.3f}'
-        monitor: 'val/student-t2i-acc_top-1'
+        filename: 'max-t2i_acc-{epoch}-CLIPScore{val-student/clip_score-human_rating-tau_c:.3f}-RefCLIPScore{val-student/ref_clip_score-human_rating-tau_c:.3f}-i2t_acc{val-student/i2t-acc_top-1:.3f}-t2i_acc{val-student/t2i-acc_top-1:.3f}'
+        monitor: 'val-student/t2i-acc_top-1'
         save_last: True
         save_top_k: 2
         mode: 'max'
