@@ -2,7 +2,7 @@ from torch import nn
 from typing import  Optional, List
 
 class OutL1Loss(nn.Module):
-    def __init__(self, dim_map: Optional[List]):
+    def __init__(self, dim_map: Optional[List] = None):
         super().__init__()
         self.loss = nn.L1Loss()
         self.aline_linear = None
