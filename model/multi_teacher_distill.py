@@ -12,7 +12,7 @@ from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.utilities import rank_zero_only
 from torch import optim, nn
 
-from ._loss import LossCalculator
+from ._loss import MultiTeacherLossCalculator
 from .component import CLIPModel, ImageEncoder, CLIPOutput, MultiModalOutput, RepeatVisionTransformer, BascValMetric
 from .utils import load_multi_teacher
 
@@ -68,7 +68,7 @@ class MultiTeacherDistillModule(pl.LightningModule):
         # define model
         if load_path:
             image_student, text_student = load_weight(image_student, text_student, load_path)
-        self.student = CLIPModel(True, image_student, text_student, norm)
+        self.student = CLIPModel(True, image_student, text_student, norm, only_rep=True)
 
         self.teacher_dict = load_multi_teacher(self.device, teacher_load_args_list)
         self.teacher_name_list = self.teacher_dict.keys()
@@ -77,10 +77,8 @@ class MultiTeacherDistillModule(pl.LightningModule):
 
         self.teacher_loss_dict = {}
         self.need_return_para = {}
-        for t_n in loss_control_para:
-            self.teacher_loss_dict[t_n] = LossCalculator(**loss_control_para[t_n])
-            # TODO
-            self.need_return_para = self.teacher_loss_dict[t_n].get_control_output()
+        self.loss_calculator = MultiTeacherLossCalculator(**loss_control_para)
+        self.need_return_para = self.loss_calculator.get_control_output()
 
         if freeze_embed:
             self.freeze_image_embedding()
@@ -147,67 +145,43 @@ class MultiTeacherDistillModule(pl.LightningModule):
         self.log(f'{data_info["section"]}/{data_info["prefix"]}', data_info['value'], sync_dist=True,
                  add_dataloader_idx=False)
 
-    def update_logits_in_dist(self, student_outs, teacher_outs):
-        text_gather_output = self.all_gather(student_outs.text_output.last_representation, sync_grads=True)
-        visual_gather_output = self.all_gather(student_outs.visual_output.last_representation, sync_grads=True)
+
+    def gather_feature_in_dist(self, clip_out: CLIPOutput, sync_grads):
+        text_gather_output = self.all_gather(clip_out.text_output.last_representation, sync_grads=sync_grads)
+        visual_gather_output = self.all_gather(clip_out.visual_output.last_representation, sync_grads=sync_grads)
         text_gather_output = text_gather_output.reshape(-1, text_gather_output.shape[-1])
         visual_gather_output = visual_gather_output.reshape(-1, visual_gather_output.shape[-1])
+        clip_out.text_output.last_representation = text_gather_output
+        clip_out.visual_output.last_representation = visual_gather_output
+        return clip_out
 
-        student_outs.text_output.last_representation = text_gather_output
-        student_outs.visual_output.last_representation = visual_gather_output
+    def post_process_feature(self, student_outs, teacher_outs):
+        if dist.is_initialized():
+            student_outs = self.gather_feature_in_dist(student_outs, True)
+            for teacher in self.teacher_dict:
+                teacher_outs[teacher] = self.gather_feature_in_dist(teacher_outs[teacher], False)
 
-        student_outs.i2t_logits = self.logit_scale.exp() * visual_gather_output @ text_gather_output.t()
+        student_outs.i2t_logits = self.logit_scale * student_outs.visual_output.last_representation @ \
+                                  student_outs.text_output.last_representation.t()
         student_outs.t2i_logits = student_outs.i2t_logits.t()
-
-        for teacher in self.teacher_dict:
-            text_gather_output = self.all_gather(teacher_outs[teacher].text_output.last_representation,
-                                                 sync_grads=True)
-            visual_gather_output = self.all_gather(teacher_outs[teacher].visual_output.last_representation,
-                                                   sync_grads=True)
-            text_gather_output = text_gather_output.reshape(-1, text_gather_output.shape[-1])
-            visual_gather_output = visual_gather_output.reshape(-1, visual_gather_output.shape[-1])
-
-            teacher_outs[teacher].text_output.last_representation = text_gather_output
-            teacher_outs[teacher].visual_output.last_representation = visual_gather_output
-
-            scale = self.logit_scale.detach().exp()
-            if self.teacher_logits_scale:
-                scale = self.teacher_logits_scale
-            i2t_logits = scale * text_gather_output @ visual_gather_output.t()
-            t2i_logits = i2t_logits.t()
-
-            teacher_outs[teacher].i2t_logits = i2t_logits
-            teacher_outs[teacher].t2i_logits = t2i_logits
-
-        return student_outs, teacher_outs
-
-    def update_logit_scale(self, student_outs, teacher_outs):
-        student_outs.i2t_logits *= self.logit_scale.exp()
-        student_outs.t2i_logits *= self.logit_scale.exp()
-
         for teacher in self.teacher_dict:
             scale = self.logit_scale.detach().exp()
             if self.teacher_logits_scale:
                 scale = self.teacher_logits_scale
-            teacher_outs[teacher].i2t_logits *= scale
-            teacher_outs[teacher].t2i_logits *= scale
-
-        return student_outs, teacher_outs
+            teacher_outs[teacher].i2t_logits = scale * teacher_outs[teacher].visual_output.last_representation @ \
+                                               teacher_outs[teacher].text_output.last_representation.t()
+            teacher_outs[teacher].t2i_logits = teacher_outs[teacher].i2t_logits.t()
+        # return student_outs, teacher_outs
 
     def training_step(self, inputs, batch_idx):
         self.teacher_dict.eval()
         student_outs, teacher_outs = self.forward(inputs)
-        student_outs, teacher_outs = self.update_logit_scale(student_outs, teacher_outs)
+        self.post_process_feature(student_outs, teacher_outs)
 
-        if dist.is_initialized():
-            student_outs, teacher_outs = self.update_logits_in_dist(student_outs, teacher_outs)
-        loss = 0.
-        for teacher_name in teacher_outs:
-            single_teacher_loss, cal_res = self.teacher_loss_dict[teacher_name](student_outs, teacher_outs[teacher_name], 'all')
-            self.log_info(f'train_{teacher_name}_loss', single_teacher_loss, cal_res, batch_size=len(inputs))
-            loss += single_teacher_loss
+        loss, teacher_loss, teacher_res = self.loss_calculator(student_outs, teacher_outs)
+        for t_n in teacher_loss:
+            self.log_info(f'train_{t_n}_loss', teacher_loss[t_n], teacher_res[t_n], batch_size=len(inputs))
 
-        loss /= len(teacher_outs)
         self.log('train_loss', loss, batch_size=len(inputs), sync_dist=True)
         self.log('logit_scale', self.logit_scale, batch_size=len(inputs), sync_dist=True)
         self.log('logit_scale_exp', self.logit_scale.exp(), batch_size=len(inputs), sync_dist=True)
@@ -246,6 +220,7 @@ class MultiTeacherDistillModule(pl.LightningModule):
                 for k, data_info in end_res.items():
                     self.log_data(data_info)
                 self.multi_tea_val_method_metric[teacher_name][method_name].reset()
+        del self.multi_tea_val_method_metric
 
     def log_info(self, section, loss, cal_res, batch_size):
         self.log(f"{section}/", loss, batch_size=batch_size, sync_dist=True)

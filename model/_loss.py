@@ -232,6 +232,56 @@ class LossCalculator(nn.Module):
         self.loss_scale = new_scale
 
 
+class MultiTeacherLossCalculator(nn.Module):
+    """
+    对每个teacher单独一个LossCalculator计算方法
+    同时每个teacher的权重在这里面设置
+    """
+
+    def __init__(self, weight_method, loss_calculator_args):
+        super().__init__()
+        self.multi_loss_calculator = nn.ModuleDict()
+        for t_n, args in loss_calculator_args.items():
+            self.multi_loss_calculator[t_n] = LossCalculator(**args)
+        self.teacher_name_list = list(loss_calculator_args.keys())
+        self.weight_method = weight_method
+
+    def forward(self, stu_out, tea_outs):
+        total_loss = {}
+        total_res = {}
+        for t_n in self.teacher_name_list:
+            tea_out = tea_outs[t_n]
+            single_tea_loss, single_res = self.multi_loss_calculator[t_n](stu_out, tea_out, 'all')
+            total_loss[t_n] = single_tea_loss
+            total_res[t_n] = single_res
+
+        loss = 0.
+        if self.weight_method == 'sum':
+            loss = sum(total_loss.values())
+        elif self.weight_method == 'mean':
+            loss = sum(total_loss.values()) / len(total_res)
+        elif self.weight_method == 'ce_weight':
+            weights = {}
+            for t_n in self.teacher_name_list:
+                assert 'hard_label' in total_res[t_n], f"if use ce_weight reduce method should use hard_label loss!"
+                weights[t_n] = 1 / (1 + total_res[t_n]['hard_label'])
+            for t_n in total_loss:
+                loss += total_loss[t_n] * weights[t_n]
+        else:
+            raise ValueError(f"the weight_method value should be in ['sum', 'mean', 'ce_weight']")
+        return loss, total_loss, total_res
+
+    def get_control_output(self):
+        output_control = ControlOutput()
+        attr_name_list = ['need_emb', 'need_attn_score', 'need_value_map', 'need_attn_prob', 'need_rep']
+        for t_n in self.teacher_name_list:
+            single_control = self.multi_loss_calculator[t_n].get_control_output()
+            for attr in attr_name_list:
+                v = getattr(single_control, attr)
+                if v:
+                    setattr(output_control, attr, v)
+        return output_control
+
 @dataclass
 class TotalLoss:
     out_l1 = nn.L1Loss()
