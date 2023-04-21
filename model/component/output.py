@@ -20,8 +20,8 @@ class VisionTransformerOutput:
     attention_scores: List[torch.Tensor] = None
     attention_probs: List[torch.Tensor] = None
     representations: List[torch.Tensor] = None
-    value_map: torch.Tensor = None,
-    embedding: torch.Tensor = None,
+    value_map: torch.Tensor = None
+    embedding: torch.Tensor = None
 
 
 @dataclass
@@ -31,8 +31,8 @@ class TextTransformerOutput:
     attention_scores: List[torch.Tensor] = None
     attention_probs: List[torch.Tensor] = None
     representations: List[torch.Tensor] = None
-    value_map: torch.Tensor = None,
-    embedding: torch.Tensor = None,
+    value_map: torch.Tensor = None
+    embedding: torch.Tensor = None
 
 
 @dataclass
