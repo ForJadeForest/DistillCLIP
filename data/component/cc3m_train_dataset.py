@@ -209,7 +209,10 @@ def get_cc3m_dataset(cc3m_shards, batch_size, num_workers,
     from clip import tokenize
     from torch import distributed as dist
 
-    world_size = dist.get_world_size()
+    if dist.is_initialized():
+        world_size = dist.get_world_size()
+    else:
+        world_size = 1
     image_processor = make_transformers(True)
     text_processor = tokenize
     input_shards = cc3m_shards
