@@ -59,8 +59,8 @@ class MscocoValAccuracy(BascValMetric):
 
         for k, v in acc.items():
             recorder[f"{self.model_name}-{name}-acc {k}"] = {
-                'section': f'{stage}',
-                'prefix': f'{self.model_name}-{name}-acc_{k}',
+                'section': f'{stage}-{self.model_name}',
+                'prefix': f'{name}-acc_{k}',
                 'value': v
             }
 

@@ -61,14 +61,14 @@ class Flickr8kHumanRating(BascValMetric):
         tau = 100 * stats.kendalltau(clip_scores, human_ratings, variant='c')[0]
 
         self.res_end_dict[f"{self.model_name}-clip_score-human-rating"] = {
-            'section': f'val',
-            'prefix': f'{self.model_name}-clip_score-human_rating-tau_c',
+            'section': f'val-{self.model_name}',
+            'prefix': f'clip_score-human_rating-tau_c',
             'value': tau
         }
         tau = 100 * stats.kendalltau(ref_clip_scores, human_ratings, variant='c')[0]
         self.res_end_dict[f"{self.model_name}-ref_clip_score-human-rating"] = {
-            'section': f'val',
-            'prefix': f'{self.model_name}-ref_clip_score-human_rating-tau_c',
+            'section': f'val-{self.model_name}',
+            'prefix': f'ref_clip_score-human_rating-tau_c',
             'value': tau
         }
         return self.res_end_dict
