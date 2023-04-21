@@ -13,17 +13,7 @@ import os
 
 device_num = int(os.getenv('DEVICE_NUM', 4))
 
-
-class MyLightningCLI(LightningCLI):
-    @staticmethod
-    def configure_optimizers(lightning_module, optimizer, lr_scheduler=None):
-        if lr_scheduler is None:
-            return optimizer
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": {"scheduler": lr_scheduler, "interval": "step"},
-        }
-
+torch.set_float32_matmul_precision('high')
 
 class IterableDatasetProgressBar(TQDMProgressBar):
     def __init__(self, total_length: int, *args, **kwargs):
@@ -36,5 +26,5 @@ class IterableDatasetProgressBar(TQDMProgressBar):
         return bar
 
 
-cli = MyLightningCLI(seed_everything_default=2022, save_config_callback=None,
-                     trainer_defaults={'devices': find_usable_cuda_devices(device_num)})
+cli = LightningCLI(seed_everything_default=2022, save_config_callback=None,
+                   trainer_defaults={'devices': find_usable_cuda_devices(2)})
