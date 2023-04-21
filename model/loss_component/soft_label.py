@@ -5,12 +5,9 @@ from torch.nn import functional as f
 class SoftLabel(nn.Module):
     def __init__(self, temperature=2):
         super(SoftLabel, self).__init__()
-        self.loss = nn.KLDivLoss(reduction='batchmean')
         self.temperature = temperature
 
     def forward(self, stu_logits, tea_logits):
-        logits_kl_loss = self.loss(
-            f.log_softmax(stu_logits / self.temperature, dim=1),
-            f.softmax(tea_logits / self.temperature, dim=1)
-        ) * self.temperature ** 2
-        return logits_kl_loss
+        def dist_loss(teacher_logits, student_logits):
+            return -(teacher_logits.softmax(dim=1) * student_logits.log_softmax(dim=1)).sum(dim=1).mean(dim=0)
+        return dist_loss(tea_logits / self.temperature, stu_logits / self.temperature) * self.temperature ** 2
