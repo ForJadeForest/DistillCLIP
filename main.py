@@ -27,4 +27,4 @@ class IterableDatasetProgressBar(TQDMProgressBar):
 
 
 cli = LightningCLI(seed_everything_default=2022, save_config_callback=None,
-                   trainer_defaults={'devices': find_usable_cuda_devices(2)})
+                   trainer_defaults={'devices': find_usable_cuda_devices(device_num)})
