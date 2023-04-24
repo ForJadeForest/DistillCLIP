@@ -153,8 +153,7 @@ class LossCalculator(nn.Module):
                            + loss(stu_out.t2i_logits, tea_out.t2i_logits))
                 cal_res[loss_name] = logits_kl_loss
             elif loss_name == 'logits_mse':
-                cal_res[loss_name] = \
-                    0.5 * (loss(stu_out.i2t_logits, tea_out.i2t_logits) + loss(stu_out.t2i_logits, tea_out.t2i_logits))
+                cal_res[loss_name] = loss(stu_out.i2t_logits, tea_out.i2t_logits)
             elif loss_name == 'fine_grain':
                 cal_res[loss_name] = loss(stu_out.visual_output.last_layer_output,
                                           stu_out.text_output.last_layer_output)
