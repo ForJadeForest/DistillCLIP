@@ -22,14 +22,15 @@ model:
         repeated_times: 2
         use_transform: True
     teacher_load_args_list:
-      blip:
-        name: 'blip_feature_extractor'
-        model_type: 'base'
-        is_eval: True
+#      blip:
+#        name: 'blip_feature_extractor'
+#        model_type: 'base'
+#        is_eval: True
       clip:
         name: 'clip'
         model_type: 'ViT-B-32'
         is_eval: True
+    gather_feature: True
 
 #    load_path:
 #      image: '/data/share/pyz/Dis_CLIP/final/image/wp_single/174-val_acc0.243-loss0.13381.ckpt'
@@ -39,29 +40,25 @@ model:
     loss_control_para:
       loss_calculator_args:
         clip:
-          loss_name: [ 'hard_label', 'soft_label' ]
+          loss_name: [ 'hard_label', 'soft_label', 'out_cos', 'out_l1' ]
           loss_scale:
             soft_label: 0.1
-            hard_label: 0.01
+            hard_label: 0.1
           loss_init_args:
             soft_label:
-              temperature: 4
-        blip:
-          loss_name: [ 'hard_label', 'soft_label' ]
-          loss_scale:
-            soft_label: 0.1
-            hard_label: 0.01
-          loss_init_args:
-#            out_l1:
-#              dim_map: [512, 256]
-#            out_cos:
-#              dim_map: [512, 256]
-            soft_label:
-              temperature: 4
+              temperature: 1
+#        blip:
+#          loss_name: [ 'soft_label', 'hard_label' ]
+#          loss_scale:
+#            soft_label: 0.1
+#            hard_label: 0.1
+#          loss_init_args:
+#            soft_label:
+#              temperature: 1
       weight_method: "mean"
 
-    warm_steps: 3000
-    total_steps: 142400
+    warm_steps: 5000
+    total_steps: 340000
     weight_decay: 1.0e-3
     lr: 1e-4
 
@@ -78,7 +75,7 @@ data:
       num_workers: 6
       cc3m_shards: /data/pyz/data/cc/train_cc3m/{00000..00331}.tar
       need_text_processor: False
-      batch_size: 450
+      batch_size: 400
 
     dataset_file: cc3m_train_dataset
     function_name: get_cc3m_dataset
@@ -118,12 +115,12 @@ trainer:
   enable_progress_bar: True
   check_val_every_n_epoch: 1
 #  precision: bf16
-  precision: 16
+  precision: 32
   logger:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
       save_dir: '/data/pyz/result/MultiTeacher'
-      name: 'Label-Baseline'
+      name: 'Label-Baseline-32-precision'
       project: 'MultiTeacher'
       log_model: false
       group: clip
@@ -170,4 +167,4 @@ trainer:
         auto_insert_metric_name: false
     - class_path: IterableDatasetProgressBar
       init_args:
-        total_length: 1424
+        total_length: 1700
