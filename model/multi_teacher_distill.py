@@ -40,7 +40,7 @@ class MultiTeacherDistillModule(pl.LightningModule):
     def __init__(self, image_student: nn.Module, text_student: nn.Module, teacher_load_args_list: Dict[str, Dict],
                  loss_control_para: Dict, warm_steps, total_steps, weight_decay, lr: float,
                  validation_method: Dict[str, BascValMetric], teacher_logits_scale=None,
-                 norm=False, freeze_embed: bool = False,
+                 norm=False, freeze_embed: bool = False, gather_feature=False,
                  unfreeze_epoch: int = None, load_path: Dict = None, freeze_prefix: List = None):
         """
 
@@ -129,9 +129,10 @@ class MultiTeacherDistillModule(pl.LightningModule):
         image, text = inputs
         student_outs: CLIPOutput = self.student(text, image, self.need_return_para)
 
-        teacher_outs = {}
-        for teacher in self.teacher_dict:
-            teacher_outs[teacher] = self.teacher_dict[teacher](text, image)
+        with torch.no_grad():
+            teacher_outs = {}
+            for teacher in self.teacher_dict:
+                teacher_outs[teacher] = self.teacher_dict[teacher](text, image)
 
         return student_outs, teacher_outs
 
@@ -145,7 +146,6 @@ class MultiTeacherDistillModule(pl.LightningModule):
         self.log(f'{data_info["section"]}/{data_info["prefix"]}', data_info['value'], sync_dist=True,
                  add_dataloader_idx=False)
 
-
     def gather_feature_in_dist(self, clip_out: CLIPOutput, sync_grads):
         text_gather_output = self.all_gather(clip_out.text_output.last_representation, sync_grads=sync_grads)
         visual_gather_output = self.all_gather(clip_out.visual_output.last_representation, sync_grads=sync_grads)
@@ -156,7 +156,7 @@ class MultiTeacherDistillModule(pl.LightningModule):
         return clip_out
 
     def post_process_feature(self, student_outs, teacher_outs):
-        if dist.is_initialized():
+        if dist.is_initialized() and self.hparams.gather_feature:
             student_outs = self.gather_feature_in_dist(student_outs, True)
             for teacher in self.teacher_dict:
                 teacher_outs[teacher] = self.gather_feature_in_dist(teacher_outs[teacher], False)
@@ -225,7 +225,7 @@ class MultiTeacherDistillModule(pl.LightningModule):
     def log_info(self, section, loss, cal_res, batch_size):
         self.log(f"{section}/", loss, batch_size=batch_size, sync_dist=True)
         for loss_name, loss_res in cal_res.items():
-            self.log(f"{section}/{loss_name}", loss_res, batch_size=batch_size, sync_dist=True)
+            self.log(f"{section}/{loss_name}", loss_res, batch_size=batch_size, sync_dist=True, prog_bar=True)
 
     def configure_optimizers(self):
         opt_para = filter(lambda p: p.requires_grad, self.parameters())
@@ -239,7 +239,6 @@ class MultiTeacherDistillModule(pl.LightningModule):
             "optimizer": optimizer,
             "lr_scheduler": {"scheduler": scheduler, "interval": "step"},
         }
-        # return [optimizer], [scheduler]
 
     def unfreeze_embed(self):
         for n, p in self.student.named_parameters():
