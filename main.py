@@ -15,6 +15,7 @@ device_num = int(os.getenv('DEVICE_NUM', 4))
 
 torch.set_float32_matmul_precision('high')
 
+
 class IterableDatasetProgressBar(TQDMProgressBar):
     def __init__(self, total_length: int, *args, **kwargs):
         super().__init__(*args, **kwargs)
