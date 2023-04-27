@@ -1,3 +1,4 @@
+import torch.nn.functional as f
 from typing import Optional
 
 from torch import nn
@@ -40,21 +41,14 @@ class CLIPModel(nn.Module):
         image_output = self.encode_image(image, control_output)
         text_output = self.encode_text(text, control_output)
         if not self.only_last_rep:
-            image_feature = image_output.last_representation / image_output.last_representation.norm(dim=1,
-                                                                                                     keepdim=True)
-            text_feature = text_output.last_representation / text_output.last_representation.norm(dim=1, keepdim=True)
-            if self.only_rep:
-                return CLIPOutput(visual_output=image_output,
-                                  text_output=text_output)
+            image_output.last_representation = f.normalize(image_output.last_representation, p=2, dim=-1)
+            text_output.last_representation = f.normalize(text_output.last_representation, p=2, dim=-1)
 
-            logits = image_feature @ text_feature.t()
-            return CLIPOutput(visual_output=image_output,
-                              text_output=text_output,
-                              i2t_logits=logits,
-                              t2i_logits=logits.T)
+            return CLIPOutput(visual_output=image_output, text_output=text_output)
         else:
-            image_feature = image_output / image_output.norm(dim=1, keepdim=True)
-            text_feature = text_output / text_output.norm(dim=1, keepdim=True)
+            image_feature = f.normalize(image_output, p=2, dim=-1)
+            text_feature = f.normalize(text_output, p=2, dim=-1)
+
             logits = image_feature @ text_feature.t()
             return image_feature, text_feature, logits
 

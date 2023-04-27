@@ -30,12 +30,8 @@ class MultiModalBaseModel(nn.Module):
     def forward(self, text, image):
         text_features = self.encode_text(text)
         image_features = self.encode_image(image)
-        i2t_logits = image_features.last_representation @ text_features.last_representation.t()
-        t2i_logits = text_features.last_representation @ image_features.last_representation.t()
 
         return MultiModalOutput(
             text_output=text_features,
-            visual_output=image_features,
-            i2t_logits=i2t_logits,
-            t2i_logits=t2i_logits
+            visual_output=image_features
         )
