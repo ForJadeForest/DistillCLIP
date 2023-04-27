@@ -2,9 +2,11 @@ from dataclasses import dataclass
 from typing import Dict, List, Union, Optional
 
 import torch
+import numpy as np
 from torch import nn
 from .loss_component import *
 from .component.output import ControlOutput, CLIPOutput, VisionTransformerOutput, TextTransformerOutput
+from .loss_component.utils import get_logits
 
 LOSSNAME = ['out_l1', 'out_ce', 'out_kl', 'out_cos', 'embedding_mse', 'attention_score_mse',
             'attention_probs_mse', 'hidden_rep_mse', 'attention_probs_kl', 'last_value_map_kl',
@@ -13,9 +15,12 @@ LOSSNAME = ['out_l1', 'out_ce', 'out_kl', 'out_cos', 'embedding_mse', 'attention
 
 IMAGE_TEXT_LOSS = ['hard_label', 'soft_label', 'logits_mse', 'fine_grain', 'SR']
 
+NEED_SCALE = ['hard_label', 'soft_label']
+
 
 class LossCalculator(nn.Module):
-    def __init__(self, loss_name: List, loss_scale: dict = None, loss_init_args: Optional[Dict] = None,
+    def __init__(self, loss_name: List, temperature=0.07, t_learnable=True,
+                 loss_scale: dict = None, loss_init_args: Optional[Dict] = None,
                  percent=None):
         super().__init__()
         self.loss_name = loss_name
@@ -52,9 +57,18 @@ class LossCalculator(nn.Module):
                 self.loss_init_args['vit_kd']['high_layers_num'] = 1
 
         self.loss = self._init_loss()
-
+        if set(NEED_SCALE) & set(loss_name):
+            self._logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / temperature), requires_grad=t_learnable)
         print(self.percent)
         print(self.loss_scale)
+
+    def get_logit_scale(self):
+        logit_scale = self._logit_scale.detach()
+
+        return {
+            "logit_scale": logit_scale.exp(),
+            "logit_scale_reciprocal": 1 / logit_scale.exp(),
+        }
 
     def _init_loss(self):
         losses = nn.ModuleDict()
@@ -143,23 +157,24 @@ class LossCalculator(nn.Module):
         for k, v in text_loss_dict.items():
             cal_res['text_' + k] = v
 
-        for loss_name in self.loss_name:
-            loss = self.loss[loss_name]
-            if loss_name == 'hard_label':
-                cal_res[loss_name] = 0.5 * (loss(stu_out.i2t_logits) + loss(stu_out.t2i_logits))
-            elif loss_name == 'soft_label':
-                logits_kl_loss = \
-                    0.5 * (loss(stu_out.i2t_logits, tea_out.i2t_logits)
-                           + loss(stu_out.t2i_logits, tea_out.t2i_logits))
-                cal_res[loss_name] = logits_kl_loss
-            elif loss_name == 'logits_mse':
-                cal_res[loss_name] = loss(stu_out.i2t_logits, tea_out.i2t_logits)
-            elif loss_name == 'fine_grain':
-                cal_res[loss_name] = loss(stu_out.visual_output.last_layer_output,
-                                          stu_out.text_output.last_layer_output)
-            elif loss_name == 'SR':
-                cal_res[loss_name] = 0.5 * (loss(stu_out.i2t_logits, tea_out.i2t_logits)
-                                            + loss(stu_out.t2i_logits, tea_out.t2i_logits))
+        if set(self.loss_name) & set(IMAGE_TEXT_LOSS):
+            stu_logits_per_image, stu_logits_per_text = get_logits(stu_out, self._logit_scale)
+            with torch.no_grad():
+                tea_logits_per_image, tea_logits_per_text = get_logits(tea_out, self._logit_scale)
+            for loss_name in self.loss_name:
+                loss = self.loss[loss_name]
+                if loss_name == 'hard_label':
+                    cal_res[loss_name] = loss(stu_logits_per_image, stu_logits_per_text)
+                elif loss_name == 'soft_label':
+                    cal_res[loss_name] = loss(stu_logits_per_image, stu_logits_per_text,
+                                              tea_logits_per_image, tea_logits_per_text)
+                elif loss_name == 'logits_mse':
+                    cal_res[loss_name] = loss(stu_logits_per_image, tea_logits_per_image)
+                elif loss_name == 'fine_grain':
+                    cal_res[loss_name] = loss(stu_out.visual_output.last_layer_output,
+                                              stu_out.text_output.last_layer_output)
+                elif loss_name == 'SR':
+                    cal_res[loss_name] = loss(stu_logits_per_image, tea_logits_per_image)
 
         loss = 0.5 * (image_loss + text_loss)
         for (loss_name, scale) in self.loss_scale.items():
@@ -280,6 +295,7 @@ class MultiTeacherLossCalculator(nn.Module):
                 if v:
                     setattr(output_control, attr, v)
         return output_control
+
 
 @dataclass
 class TotalLoss:

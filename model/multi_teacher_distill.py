@@ -75,8 +75,6 @@ class MultiTeacherDistillModule(pl.LightningModule):
         for p in self.teacher_dict.parameters():
             p.requires_grad = False
 
-        self.teacher_loss_dict = {}
-        self.need_return_para = {}
         self.loss_calculator = MultiTeacherLossCalculator(**loss_control_para)
         self.need_return_para = self.loss_calculator.get_control_output()
 
@@ -102,10 +100,6 @@ class MultiTeacherDistillModule(pl.LightningModule):
 
         for k, v in self.stu_val_method_metric.items():
             v.set_model_name('student')
-        self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07), requires_grad=True)
-        self.teacher_logits_scale = None
-        if teacher_logits_scale:
-            self.teacher_logits_scale = teacher_logits_scale
 
     def on_train_start(self):
         self.logger_begin()
@@ -161,31 +155,22 @@ class MultiTeacherDistillModule(pl.LightningModule):
             for teacher in self.teacher_dict:
                 teacher_outs[teacher] = self.gather_feature_in_dist(teacher_outs[teacher], False)
 
-        student_outs.i2t_logits = self.logit_scale * student_outs.visual_output.last_representation @ \
-                                  student_outs.text_output.last_representation.t()
-        student_outs.t2i_logits = student_outs.i2t_logits.t()
-        for teacher in self.teacher_dict:
-            scale = self.logit_scale.detach().exp()
-            if self.teacher_logits_scale:
-                scale = self.teacher_logits_scale
-            teacher_outs[teacher].i2t_logits = scale * teacher_outs[teacher].visual_output.last_representation @ \
-                                               teacher_outs[teacher].text_output.last_representation.t()
-            teacher_outs[teacher].t2i_logits = teacher_outs[teacher].i2t_logits.t()
-        # return student_outs, teacher_outs
+        return student_outs, teacher_outs
 
     def training_step(self, inputs, batch_idx):
         self.teacher_dict.eval()
         student_outs, teacher_outs = self.forward(inputs)
-        self.post_process_feature(student_outs, teacher_outs)
+        student_outs, teacher_outs = self.post_process_feature(student_outs, teacher_outs)
 
         loss, teacher_loss, teacher_res = self.loss_calculator(student_outs, teacher_outs)
         for t_n in teacher_loss:
             self.log_info(f'train_{t_n}_loss', teacher_loss[t_n], teacher_res[t_n], batch_size=len(inputs))
-
+            temperature = self.loss_calculator.multi_loss_calculator[t_n].get_logit_scale()
+            single_teacher_temperature = {}
+            for k, v in temperature.items():
+                single_teacher_temperature[t_n + '_' + k] = v
+            self.log_dict(temperature)
         self.log('train_loss', loss, batch_size=len(inputs), sync_dist=True)
-        self.log('logit_scale', self.logit_scale, batch_size=len(inputs), sync_dist=True)
-        self.log('logit_scale_exp', self.logit_scale.exp(), batch_size=len(inputs), sync_dist=True)
-        self.log('logit_scale_reciprocal', 1 / self.logit_scale.exp(), batch_size=len(inputs), sync_dist=True)
         return loss
 
     def validation_step(self, batch, batch_idx, dataloader_idx):

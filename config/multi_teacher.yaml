@@ -38,15 +38,16 @@ model:
 
 
     loss_control_para:
+
       loss_calculator_args:
+
         clip:
-          loss_name: [ 'hard_label', 'soft_label', 'out_cos', 'out_l1' ]
+          t_learnable: False
+          loss_name: [ 'out_cos', 'out_l1', 'hard_label', 'soft_label' ]
           loss_scale:
             soft_label: 0.1
+            out_l1: 20
             hard_label: 0.1
-          loss_init_args:
-            soft_label:
-              temperature: 1
 #        blip:
 #          loss_name: [ 'soft_label', 'hard_label' ]
 #          loss_scale:
@@ -58,7 +59,7 @@ model:
       weight_method: "mean"
 
     warm_steps: 5000
-    total_steps: 340000
+    total_steps: 17000
     weight_decay: 1.0e-3
     lr: 1e-4
 
@@ -67,6 +68,7 @@ model:
         class_path: MscocoValAccuracy
       flickr8k_val:
         class_path: Flickr8kHumanRating
+
 
 data:
   class_path: IterableDataModule
@@ -105,7 +107,7 @@ data:
 
 trainer:
   num_sanity_val_steps: 0
-#  detect_anomaly: True
+  detect_anomaly: True
   strategy: 'ddp'
   default_root_dir: '/data/pyz/result/MultiTeacher'
   accumulate_grad_batches: 1
@@ -115,12 +117,12 @@ trainer:
   enable_progress_bar: True
   check_val_every_n_epoch: 1
 #  precision: bf16
-  precision: 32
+  precision: 16
   logger:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
       save_dir: '/data/pyz/result/MultiTeacher'
-      name: 'Label-Baseline-32-precision'
+      name: 'Label-Baseline'
       project: 'MultiTeacher'
       log_model: false
       group: clip
