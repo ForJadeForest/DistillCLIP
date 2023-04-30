@@ -33,8 +33,8 @@ model:
     gather_feature: True
 
 #    load_path:
-#      image: '/data/share/pyz/Dis_CLIP/final/image/wp_single/174-val_acc0.243-loss0.13381.ckpt'
-#      text: '/data/share/pyz/Dis_CLIP/final/text/wp_single/131-val_acc0.300-loss0.03917.ckpt'
+#      image: '/data/share/pyz/final/image/ws_no_smd/174-val_acc0.243-loss0.13381.ckpt'
+#      text: '/data/share/pyz/final/text/ws_text_no_smd/131-val_acc0.300-loss0.03917.ckpt'
 
 
     loss_control_para:
@@ -43,10 +43,10 @@ model:
 
         clip:
           t_learnable: False
-          loss_name: [ 'out_cos', 'out_l1', 'hard_label', 'soft_label' ]
+          loss_name: [ 'out_cos', 'out_l1', 'soft_label', 'hard_label' ]
+          need_norm: False
           loss_scale:
             soft_label: 0.1
-            out_l1: 20
             hard_label: 0.1
 #        blip:
 #          loss_name: [ 'soft_label', 'hard_label' ]
@@ -59,7 +59,7 @@ model:
       weight_method: "mean"
 
     warm_steps: 5000
-    total_steps: 17000
+    total_steps: 180000
     weight_decay: 1.0e-3
     lr: 1e-4
 
@@ -74,7 +74,7 @@ data:
   class_path: IterableDataModule
   init_args:
     dataset_para:
-      num_workers: 6
+      num_workers: 12
       cc3m_shards: /data/pyz/data/cc/train_cc3m/{00000..00331}.tar
       need_text_processor: False
       batch_size: 400
@@ -113,7 +113,7 @@ trainer:
   accumulate_grad_batches: 1
   accelerator: 'gpu'
   max_epochs: 100
-  log_every_n_steps: 15
+  log_every_n_steps: 50
   enable_progress_bar: True
   check_val_every_n_epoch: 1
 #  precision: bf16
@@ -122,7 +122,7 @@ trainer:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
       save_dir: '/data/pyz/result/MultiTeacher'
-      name: 'Label-Baseline'
+      name: 'Label-Baseline-no-norm'
       project: 'MultiTeacher'
       log_model: false
       group: clip
@@ -169,4 +169,4 @@ trainer:
         auto_insert_metric_name: false
     - class_path: IterableDatasetProgressBar
       init_args:
-        total_length: 1700
+        total_length: 1800

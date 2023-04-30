@@ -9,7 +9,7 @@ model:
         in_chans: 3
         out_dim: 512
         embed_dim: 768
-        depth: 4
+        depth: 6
         num_heads: 24
         mlp_ratio: 4.0
         qkv_bias: True
@@ -22,8 +22,8 @@ model:
         repeated_times: 2
         use_transform: True
     loss_control_para:
-      loss_name: [ 'out_l1', 'out_cos', 'SR' ]
-      temperature: 2
+      loss_name: [ 'out_l1', 'out_cos', 'hard_label', 'soft_label' ]
+    gather_feature: True
     download_root: '/data/pyz/.cache'
     warm_steps: 15
     total_steps: 500
