@@ -15,7 +15,6 @@ class CLIPModel(nn.Module):
         self.is_student = is_student
         self.norm = norm
         self.only_last_rep = only_last_rep
-        self.only_rep = only_rep
 
     def encode_image(self, image, control_output: ControlOutput = None):
         if control_output is None:
@@ -41,9 +40,6 @@ class CLIPModel(nn.Module):
         image_output = self.encode_image(image, control_output)
         text_output = self.encode_text(text, control_output)
         if not self.only_last_rep:
-            image_output.last_representation = f.normalize(image_output.last_representation, p=2, dim=-1)
-            text_output.last_representation = f.normalize(text_output.last_representation, p=2, dim=-1)
-
             return CLIPOutput(visual_output=image_output, text_output=text_output)
         else:
             image_feature = f.normalize(image_output, p=2, dim=-1)
