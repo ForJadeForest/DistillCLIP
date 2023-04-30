@@ -182,10 +182,15 @@ def teacher_load(teacher_name: str, download_root, model_type, need_layers=None,
 
 
 def load_multi_teacher(device, teacher_load_args_list):
-    from model.component.multimodal.base_multimodal_model import MultiModalBaseModel
+    from model.component.multimodal.clip_multimodal import CLIPMultiModal
+    from model.component.multimodal.blip_multimodal import BLIPMultiModal
+    model_name_map = {
+        'blip': BLIPMultiModal,
+        'clip': CLIPMultiModal
+    }
     from torch import nn
     model_dict = nn.ModuleDict()
     for k, args in teacher_load_args_list.items():
-        model = MultiModalBaseModel(device, **args)
+        model = model_name_map[k](device, **args)
         model_dict[k] = model
     return model_dict
