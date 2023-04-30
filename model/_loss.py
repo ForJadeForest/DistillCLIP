@@ -4,6 +4,7 @@ from typing import Dict, List, Union, Optional
 import torch
 import numpy as np
 from torch import nn
+from torch.nn import functional as f
 from .loss_component import *
 from .component.output import ControlOutput, CLIPOutput, VisionTransformerOutput, TextTransformerOutput
 from .loss_component.utils import get_logits
@@ -21,7 +22,7 @@ NEED_SCALE = ['hard_label', 'soft_label']
 class LossCalculator(nn.Module):
     def __init__(self, loss_name: List, temperature=0.07, t_learnable=True,
                  loss_scale: dict = None, loss_init_args: Optional[Dict] = None,
-                 percent=None):
+                 percent=None, need_norm=False):
         super().__init__()
         self.loss_name = loss_name
         self.loss_scale = {}
@@ -57,12 +58,17 @@ class LossCalculator(nn.Module):
                 self.loss_init_args['vit_kd']['high_layers_num'] = 1
 
         self.loss = self._init_loss()
+        self._logit_scale = None
+        self._need_norm = need_norm
         if set(NEED_SCALE) & set(loss_name):
             self._logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / temperature), requires_grad=t_learnable)
         print(self.percent)
         print(self.loss_scale)
 
     def get_logit_scale(self):
+        if self._logit_scale is None:
+            return {'logits_scale': 0.}
+
         logit_scale = self._logit_scale.detach()
 
         return {
@@ -186,6 +192,9 @@ class LossCalculator(nn.Module):
     def cal_one_tower_loss(self,
                            stu_out: Union[VisionTransformerOutput, TextTransformerOutput],
                            tea_out: Union[VisionTransformerOutput, TextTransformerOutput]):
+        if self._need_norm:
+            stu_out.last_representation = f.normalize(stu_out.last_representation, dim=-1)
+            tea_out.last_representation = f.normalize(tea_out.last_representation, dim=-1)
         cal_res = {}
         for loss_name in self.loss:
             loss = self.loss[loss_name]
