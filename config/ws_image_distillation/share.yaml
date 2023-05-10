@@ -1,0 +1,118 @@
+model:
+  class_path: DistillModel
+  init_args:
+    student_encoder:
+      class_path: model.component.weight_share_model.RepeatVisionTransformer
+      init_args:
+        img_size: 224
+        patch_size: 32
+        in_chans: 3
+        out_dim: 512
+        embed_dim: 768
+        depth: 6
+        num_heads: 24
+        mlp_ratio: 4.0
+        qkv_bias: True
+        qk_scale: null
+        drop_rate: 0.
+        attn_drop_rate: 0.
+        drop_path_rate: 0.
+        hybrid_backbone: null
+        rpe_config: null
+        repeated_times: 2
+        use_transform: True
+    norm: False
+    loss_control_para:
+#LOSSNAME = ['out_l1', 'out_ce', 'out_kl', 'out_cos', 'embedding_mse', 'attention_score_mse',
+      #            'attention_probs_mse', 'hidden_rep_mse', 'attention_probs_kl', 'last_value_map_kl',
+      #            'vit_kd',
+      #            'hard_label', 'soft_label', 'fine_grain', 'logits_mse']
+
+      loss_name: [ 'out_cos', 'out_l1']
+      need_norm: False
+
+    freeze_embed: false
+    teacher_name: ViT-B/32
+    download_root: '/data/pyz/.cache'
+    teacher_need_layers: [ 0, 1, 10, 11 ]
+    model_type: 'image'
+    warm_steps: 5
+    total_steps: 100
+    weight_decay: 1.0e-2
+    lr: 1.0e-3
+
+
+
+
+data:
+  class_path: MainDataModule
+  init_args:
+    num_workers: 6
+    dataset: 'combine_image_dataset'
+    dataset_name: 'CombineImageDataset'
+    train_batch_size: 1024
+    val_batch_size: 1250
+    prepare_para:
+      overwrite: False
+      raw_data_dir: '/home/pyz32/data_tmp'
+    dataset_para:
+      cache_dir: '/data/pyz/.cache'
+      combine_dataset_path: '/home/pyz32/data_tmp/combine_dataset/'
+      image_use: [ 'coco', 'imagenet' ]
+      teacher_name: 'ViT-B/32'
+
+
+
+
+
+
+trainer:
+  num_sanity_val_steps: 0
+  accumulate_grad_batches: 1
+  accelerator: 'gpu'
+  strategy: 'ddp'
+  max_epochs: 100
+  precision: 16
+  #  limit_train_batches: 1
+  log_every_n_steps: 100
+  enable_progress_bar: True
+  check_val_every_n_epoch: 1
+
+  logger:
+    class_path: pytorch_lightning.loggers.wandb.WandbLogger
+    init_args:
+      dir: '/data/pyz/result/Dis_CLIP'
+      name: 'baseline-weight share'
+      project: 'ImageDistillation'
+      log_model: false
+      group: weight_share
+      # the covered tags should be same length with the tags in share.yaml
+  #      tags: ['baseline', 'weight share']
+  #      mode: 'online'
+
+  callbacks:
+    - class_path: LearningRateMonitor
+    - class_path: EarlyStopping
+      init_args:
+        monitor: 'val_loss/loss'
+        patience: 10
+
+    - class_path: ModelSummary
+      init_args:
+        max_depth: 2
+    - class_path: ModelCheckpoint
+      init_args:
+        filename: '{epoch}-val_acc{val_stu_acc/stu_acc_top1:.3f}-loss{val_loss/loss:.5f}'
+        monitor: 'val_stu_acc/stu_acc_top1'
+        save_last: True
+        save_top_k: 2
+        mode: 'max'
+        auto_insert_metric_name: false
+    - class_path: ModelCheckpoint
+      init_args:
+        filename: '{epoch}-val_acc{val_stu_acc/stu_acc_top1:.3f}-loss{val_loss/loss:.5f}'
+        monitor: 'val_loss/loss'
+        save_last: True
+        save_top_k: 2
+        mode: 'min'
+        auto_insert_metric_name: false
