@@ -67,7 +67,6 @@ class CombineImageDataset(Dataset):
         """
         super(CombineImageDataset, self).__init__()
 
-
         self.train = train
         self.img_mean = IMAGE_MEAN
         self.img_std = IMAGE_STD
@@ -80,6 +79,7 @@ class CombineImageDataset(Dataset):
             self.train_image_file_path = Path(combine_dataset_path)
 
             def filter_dataset(x):
+                x = str(x)
                 res = False
                 for name in image_use:
                     prefix = IMAGE_PREFIX[name]
@@ -92,7 +92,8 @@ class CombineImageDataset(Dataset):
                 for i in image_use:
                     assert i in IMAGE_DATASET_NAME, f'the {i} dataset name is not exists in {IMAGE_DATASET_NAME}'
                 self.path_list = filter(filter_dataset, self.train_image_file_path.iterdir())
-            # self.path_list = [path for path in self.train_image_file_path.iterdir() if filter_dataset(path.name)]
+            self.path_list = [path for path in self.train_image_file_path.iterdir() if filter_dataset(path.name)]
+
     def __len__(self):
         return len(self.path_list)
 
