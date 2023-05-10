@@ -150,6 +150,8 @@ class LossCalculator(nn.Module):
                 need_para.attention_probs_mse = True
             elif n == 'last_value_map_kl':
                 need_para.need_value_map = True
+            elif n == 'vit_kd':
+                need_para.need_rep = True
 
         return need_para
 
@@ -219,12 +221,12 @@ class LossCalculator(nn.Module):
             elif loss_name == 'last_value_map_kl':
                 cal_res[loss_name] = loss(stu_out.value_map, tea_out.value_map)
             elif loss_name == 'vit_kd':
-                assert self.vit_kd_para['low_layers_num'] + self.vit_kd_para['high_layers_num'] <= len(
-                    stu_out.representations)
-                stu_low_rep = torch.stack(stu_out.representations[:self.vit_kd_para['low_layers_num']], dim=1)
-                tea_low_rep = torch.stack(tea_out.representations[:self.vit_kd_para['low_layers_num']], dim=1)
-                stu_high_rep = torch.stack(stu_out.representations[-self.vit_kd_para['high_layers_num']:], dim=1)
-                tea_high_rep = torch.stack(tea_out.representations[-self.vit_kd_para['high_layers_num']:], dim=1)
+                assert self.loss_init_args['vit_kd']['low_layers_num'] + \
+                       self.loss_init_args['vit_kd']['high_layers_num'] <= len(stu_out.representations)
+                stu_low_rep = torch.stack(stu_out.representations[:self.loss_init_args['vit_kd']['low_layers_num']], dim=1)
+                tea_low_rep = torch.stack(tea_out.representations[:self.loss_init_args['vit_kd']['low_layers_num']], dim=1)
+                stu_high_rep = torch.stack(stu_out.representations[-self.loss_init_args['vit_kd']['high_layers_num']:], dim=1)
+                tea_high_rep = torch.stack(tea_out.representations[-self.loss_init_args['vit_kd']['high_layers_num']:], dim=1)
 
                 pred_s = [stu_low_rep, stu_high_rep]
                 pred_t = [tea_low_rep, tea_high_rep]
