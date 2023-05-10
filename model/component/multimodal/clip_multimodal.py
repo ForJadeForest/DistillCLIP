@@ -24,6 +24,6 @@ class CLIPMultiModal(MultiModalBaseModel):
     @torch.no_grad()
     def encode_text(self, text):
         if isinstance(text, list):
-            text = self.model.tokenizer(text)
+            text = self.model.tokenizer(text).to(self.model.device)
         text_feature = self.model.encode_text(text)
         return TextTransformerOutput(last_representation=text_feature)

@@ -1,5 +1,5 @@
 from model.component.clip_model import CLIPModel
-from data.component.cc3m_train_dataset import get_cc3m_dataset
+from data.component.cc3m_webdataset import get_cc3m_dataset
 from test.utils.load_clip_model.default_model import CLIPModelLoadConfig
 from test.utils.load_clip_model.get_model import load_version
 from utils.load_model import load_model
