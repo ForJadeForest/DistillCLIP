@@ -1,0 +1,168 @@
+model:
+  class_path: MultiTeacherDistillModule
+  init_args:
+    image_student:
+      class_path: model.component.weight_share_model.RepeatVisionTransformer
+      init_args:
+        img_size: 224
+        patch_size: 32
+        in_chans: 3
+        out_dim: 512
+        embed_dim: 768
+        depth: 6
+        num_heads: 24
+        mlp_ratio: 4.0
+        qkv_bias: True
+        repeated_times: 2
+        use_transform: True
+    text_student:
+      class_path: model.component.weight_share_model.RepeatTextTransformer
+      init_args:
+        depth: 4
+        repeated_times: 2
+        use_transform: True
+    teacher_load_args_list:
+#      blip:
+#        name: 'blip_feature_extractor'
+#        model_type: 'base'
+#        is_eval: True
+      clip:
+        name: 'clip'
+        model_type: 'ViT-B-32'
+        is_eval: True
+    gather_feature: True
+
+#    load_path:
+#      image: '/data/share/pyz/final/image/ws_no_smd/174-val_acc0.243-loss0.13381.ckpt'
+#      text: '/data/share/pyz/final/text/ws_text_no_smd/131-val_acc0.300-loss0.03917.ckpt'
+
+
+    loss_control_para:
+      loss_calculator_args:
+        clip:
+          t_learnable: False
+          loss_name: [ 'out_cos', 'out_l1', 'soft_label', 'hard_label' ]
+          need_norm: False
+          loss_scale:
+            soft_label: 0.1
+            hard_label: 0.1
+#        blip:
+#          loss_name: [ 'soft_label', 'hard_label' ]
+#          loss_scale:
+#            soft_label: 0.1
+#            hard_label: 0.1
+#          loss_init_args:
+#            soft_label:
+#              temperature: 1
+      weight_method: "mean"
+
+    warm_steps: 1800
+    total_steps: 360000
+    weight_decay: 1.0e-3
+    lr: 1e-3
+
+    validation_method:
+      mscoco_val:
+        class_path: MscocoValAccuracy
+      flickr8k_val:
+        class_path: Flickr8kHumanRating
+
+
+data:
+  class_path: MainDataModule
+  init_args:
+    init_dataset_args:
+      cc3m:
+        is_train: True
+        dataset_file: cc3m_dataset
+        dataset_name: CC3mDataset
+        dataset_args:
+          image_folder: 'Set the path'
+          caption_json_path: 'Set the path'
+
+      mscoco_val:
+        is_train: False
+        dataset_file: ms_coco
+        dataset_name: COCODataset
+        dataset_args:
+          need_type: 'all'
+          root_path: '/home/pyz32/data_tmp/mscoco/'
+          annotation_path: '/home/pyz32/data_tmp/mscoco/annotations'
+          need_text_processor: False
+
+      flickr8k_val:
+        is_train: False
+        dataset_file: flickr8k_dataset
+        dataset_name: Flickr8kDataset
+        dataset_args:
+          image_directory: '/data/pyz/data/flickr8k'
+          input_json_path: '/data/pyz/data/flickr8k/flickr8k.json'
+          need_text_processor: False
+    num_workers: 8
+    train_batch_size: 512
+    val_batch_size: 512
+
+
+
+trainer:
+  num_sanity_val_steps: 0
+#  detect_anomaly: True
+  strategy: 'ddp'
+  default_root_dir: '/data/pyz/result/MultiTeacher'
+  accumulate_grad_batches: 1
+  accelerator: 'gpu'
+  max_epochs: 200
+  log_every_n_steps: 50
+  enable_progress_bar: True
+  check_val_every_n_epoch: 1
+#  precision: bf16
+  precision: 16
+  logger:
+    class_path: pytorch_lightning.loggers.wandb.WandbLogger
+    init_args:
+      save_dir: '/data/pyz/result/MultiTeacher'
+      name: 'clip-cc'
+      project: 'MultiTeacher'
+      log_model: false
+      group: clip
+
+
+  callbacks:
+    - class_path: LearningRateMonitor
+      init_args:
+        logging_interval: step
+    - class_path: ModelSummary
+      init_args:
+        max_depth: 2
+    - class_path: ModelCheckpoint
+      init_args:
+        filename: 'max-CLIPScore{epoch}-CLIPScore{val-student/clip_score-human_rating-tau_c:.3f}-loss{val-student/ref_clip_score-human_rating-tau_c:.3f}-i2t_acc{val-student/i2t-acc_top-1:.3f}-t2i_acc{val-student/t2i-acc_top-1:.3f}'
+        monitor: 'val-student/clip_score-human_rating-tau_c'
+        save_last: True
+        save_top_k: 2
+        mode: 'max'
+        auto_insert_metric_name: false
+    - class_path: ModelCheckpoint
+      init_args:
+        filename: 'max-RefCLIPScore-{epoch}-CLIPScore{val-student/clip_score-human_rating-tau_c:.3f}-RefCLIPScore{val-student/ref_clip_score-human_rating-tau_c:.3f}-i2t_acc{val-student/i2t-acc_top-1:.3f}-t2i_acc{val-student/t2i-acc_top-1:.3f}'
+        monitor: 'val-student/ref_clip_score-human_rating-tau_c'
+        save_last: True
+        save_top_k: 2
+        mode: 'max'
+        auto_insert_metric_name: false
+    - class_path: ModelCheckpoint
+      init_args:
+        filename: 'max-i2t_acc-{epoch}-CLIPScore{val-student/clip_score-human_rating-tau_c:.3f}-RefCLIPScore{val-student/ref_clip_score-human_rating-tau_c:.3f}-i2t_acc{val-student/i2t-acc_top-1:.3f}-t2i_acc{val-student/t2i-acc_top-1:.3f}'
+        monitor: 'val-student/i2t-acc_top-1'
+        save_last: True
+        save_top_k: 2
+        mode: 'max'
+        auto_insert_metric_name: false
+    - class_path: ModelCheckpoint
+      init_args:
+        filename: 'max-t2i_acc-{epoch}-CLIPScore{val-student/clip_score-human_rating-tau_c:.3f}-RefCLIPScore{val-student/ref_clip_score-human_rating-tau_c:.3f}-i2t_acc{val-student/i2t-acc_top-1:.3f}-t2i_acc{val-student/t2i-acc_top-1:.3f}'
+        monitor: 'val-student/t2i-acc_top-1'
+        save_last: True
+        save_top_k: 2
+        mode: 'max'
+        auto_insert_metric_name: false
