@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from model.component.output import MultiModalOutput
-from lavis.models import load_model
+from lavis.models import load_model, CLIP
 
 
 class MultiModalBaseModel(nn.Module):
