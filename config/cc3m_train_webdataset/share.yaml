@@ -10,7 +10,7 @@ model:
         out_dim: 512
         embed_dim: 768
         depth: 6
-        num_heads: 12
+        num_heads: 24
         mlp_ratio: 4.0
         qkv_bias: True
         repeated_times: 2
@@ -41,22 +41,23 @@ model:
     loss_control_para:
       loss_calculator_args:
         clip:
-          t_learnable: False
-          loss_name: [ 'soft_label', 'SR']
+          t_learnable: True
+          loss_name: [ 'soft_label', 'SR' ]
           need_norm: False
           loss_scale:
             soft_label: 0.1
             SR: 1
         blip:
+          t_learnable: True
           loss_name: [ 'soft_label', 'SR' ]
           loss_scale:
             soft_label: 0.1
-            SR: 1
+            SR: 0.1
           need_norm: False
       weight_method: "mean"
 
-    warm_steps: 1800
-    total_steps: 360000
+    warm_steps: 5600
+    total_steps: 560000
     weight_decay: 1.0e-3
     lr: 1e-3
 
@@ -68,17 +69,17 @@ model:
 
 
 data:
-  class_path: MainDataModule
+  class_path: IterableDataModule
   init_args:
-    init_dataset_args:
-      cc3m:
-        is_train: True
-        dataset_file: cc3m_dataset
-        dataset_name: CC3mDataset
-        dataset_args:
-          image_folder: 'Set the path'
-          caption_json_path: 'Set the path'
+    dataset_para:
+      cc3m_shards: /data/share/pyz/data/cc/train_cc3m/{00000..00331}.tar
+      batch_size: 512
+      num_workers: 0
+      need_text_processor: False
 
+    dataset_file: cc3m_webdataset
+    function_name: get_cc3m_dataset
+    val_dataset_init_args:
       mscoco_val:
         is_train: False
         dataset_file: ms_coco
@@ -97,16 +98,16 @@ data:
           image_directory: '/data/share/pyz/data/flickr8k'
           input_json_path: '/data/share/pyz/data/flickr8k/flickr8k.json'
           need_text_processor: False
-    num_workers: 8
-    train_batch_size: 512
+
     val_batch_size: 512
+    val_num_workers: 0
 
 
 
 trainer:
   num_sanity_val_steps: 0
 #  detect_anomaly: True
-  strategy: 'ddp'
+#  strategy: 'ddp'
   default_root_dir: '/data/pyz/result/MultiTeacher'
   accumulate_grad_batches: 1
   accelerator: 'gpu'

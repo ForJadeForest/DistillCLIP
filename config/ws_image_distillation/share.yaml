@@ -23,11 +23,6 @@ model:
         use_transform: True
     norm: False
     loss_control_para:
-#LOSSNAME = ['out_l1', 'out_ce', 'out_kl', 'out_cos', 'embedding_mse', 'attention_score_mse',
-      #            'attention_probs_mse', 'hidden_rep_mse', 'attention_probs_kl', 'last_value_map_kl',
-      #            'vit_kd',
-      #            'hard_label', 'soft_label', 'fine_grain', 'logits_mse']
-
       loss_name: [ 'out_cos', 'out_l1']
       need_norm: False
 
@@ -36,12 +31,10 @@ model:
     download_root: '/data/pyz/.cache'
     teacher_need_layers: [ 0, 1, 10, 11 ]
     model_type: 'image'
-    warm_steps: 5
-    total_steps: 100
+    warm_steps: 10000
+    total_steps: 313000
     weight_decay: 1.0e-2
     lr: 1.0e-3
-
-
 
 
 data:
@@ -53,17 +46,13 @@ data:
     train_batch_size: 1024
     val_batch_size: 1250
     prepare_para:
-      overwrite: False
-      raw_data_dir: '/home/pyz32/data_tmp'
+      overwrite: True
+      raw_data_dir: '/home/pyz32/data_tmp/'
     dataset_para:
       cache_dir: '/data/pyz/.cache'
       combine_dataset_path: '/home/pyz32/data_tmp/combine_dataset/'
-      image_use: [ 'coco', 'imagenet' ]
+      image_use: [ 'imagenet' ]
       teacher_name: 'ViT-B/32'
-
-
-
-
 
 
 trainer:
@@ -71,7 +60,7 @@ trainer:
   accumulate_grad_batches: 1
   accelerator: 'gpu'
   strategy: 'ddp'
-  max_epochs: 100
+  max_epochs: 1000
   precision: 16
   #  limit_train_batches: 1
   log_every_n_steps: 100
@@ -82,8 +71,8 @@ trainer:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
       dir: '/data/pyz/result/Dis_CLIP'
-      name: 'baseline-weight share'
-      project: 'ImageDistillation'
+      name: 'image-ws-more-epoch'
+      project: 'L-CLIPDistillation'
       log_model: false
       group: weight_share
       # the covered tags should be same length with the tags in share.yaml
