@@ -7,7 +7,7 @@ import torch
 from pytorch_lightning.cli import LightningCLI
 from pytorch_lightning.accelerators import find_usable_cuda_devices
 import os
-
+# os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 # os.environ['JSONARGPARSE_DEBUG'] = 'true'
 # os.environ['TORCH_DISTRIBUTED_DEBUG'] = 'INFO'
 
