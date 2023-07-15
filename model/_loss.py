@@ -20,7 +20,7 @@ NEED_SCALE = ['hard_label', 'soft_label']
 
 
 class LossCalculator(nn.Module):
-    def __init__(self, loss_name: List, temperature=0.07, t_learnable=True,
+    def __init__(self, loss_name: List, temperature=0.07, t_learnable=True, clamp=4.6051,
                  loss_scale: dict = None, loss_init_args: Optional[Dict] = None,
                  percent=None, need_norm=False):
         super().__init__()
@@ -62,6 +62,7 @@ class LossCalculator(nn.Module):
         self._need_norm = need_norm
         if set(NEED_SCALE) & set(loss_name):
             self._logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / temperature), requires_grad=t_learnable)
+            self._clamp = clamp
         print(self.percent)
         print(self.loss_scale)
 
@@ -245,6 +246,8 @@ class LossCalculator(nn.Module):
     def forward(self, stu_out: Union[CLIPOutput, VisionTransformerOutput, TextTransformerOutput],
                 tea_out: Union[CLIPOutput, VisionTransformerOutput, TextTransformerOutput],
                 model_type: str):
+        if self._logit_scale:
+            self._logit_scale.data = torch.clamp(self._logit_scale.data, 0, self._clamp)
         if model_type == 'all':
             return self.cal_tow_tower_loss(stu_out, tea_out)
         else:
