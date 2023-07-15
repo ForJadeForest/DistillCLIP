@@ -36,7 +36,8 @@ class MultiDataloaderMainDataModule(pl.LightningDataModule):
                  init_dataset_args,
                  num_workers=8,
                  train_batch_size=128,
-                 val_batch_size=1250):
+                 val_batch_size=1250,
+                 val_num_workers=2):
         """
          dataset_para: The dataset parameters
          dataset: The *.py file name of the dataset class
@@ -46,6 +47,7 @@ class MultiDataloaderMainDataModule(pl.LightningDataModule):
         self.num_workers = num_workers
         self.train_batch_size = train_batch_size
         self.val_batch_size = val_batch_size
+        self.val_num_workers = val_num_workers
 
         self.data_module_list = []
         self.prepare_function_list = []
@@ -107,7 +109,7 @@ class MultiDataloaderMainDataModule(pl.LightningDataModule):
         for n, dataset in self.val_dataset_dict.items():
             dataloader_dict[n] = DataLoader(dataset,
                                             batch_size=self.val_batch_size,
-                                            num_workers=self.num_workers,
+                                            num_workers=self.val_num_workers,
                                             shuffle=False,
                                             pin_memory=True)
         return CombinedLoader(iterables=dataloader_dict, mode='sequential')
