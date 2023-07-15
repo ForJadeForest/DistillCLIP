@@ -165,7 +165,10 @@ class DistillModel(pl.LightningModule):
             num_warmup_steps=self.hparams.warm_steps,
             num_training_steps=self.hparams.total_steps
         )
-        return [optimizer], [scheduler]
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {"scheduler": scheduler, "interval": "step"},
+        }
 
     def log_diag_score(self, logits, section, prefix):
         softmax_logits = nn.functional.softmax(logits, dim=1)
