@@ -26,11 +26,11 @@ class COCODataset(datasets.CocoCaptions):
             transforms.Normalize(self.img_mean, self.img_std)
         ])
         if train:
-            root = os.path.join(root_path, 'train2017')
-            annotation_file = os.path.join(annotation_path, 'captions_train2017.json')
+            root = os.path.join(root_path, 'train2014')
+            annotation_file = os.path.join(annotation_path, 'captions_train2014.json')
         else:
-            root = os.path.join(root_path, 'val2017')
-            annotation_file = os.path.join(annotation_path, 'captions_val2017.json')
+            root = os.path.join(root_path, 'val2014')
+            annotation_file = os.path.join(annotation_path, 'captions_val2014.json')
         super(COCODataset, self).__init__(root, annotation_file, self.trans)
 
     def __getitem__(self, item):
