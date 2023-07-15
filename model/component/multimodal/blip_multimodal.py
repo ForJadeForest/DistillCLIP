@@ -18,8 +18,8 @@ class BLIPMultiModal(MultiModalBaseModel):
 
     @torch.no_grad()
     def encode_image(self, image):
-        image_embeds = self.model.visual_encoder.forward_feature(image)
-        image_features = self.model.vision_proj(image_embeds)
+        image_embeds = self.model.visual_encoder.forward_features(image)
+        image_features = self.model.vision_proj(image_embeds[:, 0, :])
         return VisionTransformerOutput(last_representation=image_features)
 
     @torch.no_grad()
@@ -34,5 +34,5 @@ class BLIPMultiModal(MultiModalBaseModel):
         )
         text_embeds = text_output.last_hidden_state
 
-        text_features = self.model.text_proj(text_embeds)
+        text_features = self.model.text_proj(text_embeds[:, 0, :])
         return TextTransformerOutput(last_representation=text_features)
