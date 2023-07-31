@@ -30,7 +30,8 @@ model:
     download_root: '/data/pyz/.cache'
     teacher_need_layers: [ 0, 1, 10, 11 ]
     model_type: 'image'
-    warm_steps: 0.1
+    warm_steps: 0.05
+
     weight_decay: 1.0e-2
     lr: 1.0e-3
 
@@ -38,51 +39,49 @@ model:
 data:
   class_path: MainDataModule
   init_args:
-    num_workers: 6
+    num_workers: 4
     dataset: 'combine_image_dataset'
     dataset_name: 'CombineImageDataset'
     train_batch_size: 1024
-    val_batch_size: 1250
+    val_batch_size: 625
     prepare_para:
-      overwrite: True
-      raw_data_dir: '/home/pyz32/data_tmp/'
+      overwrite: False
+      raw_data_dir: '/data/share/pyz/data/'
     dataset_para:
       cache_dir: '/data/pyz/.cache'
       combine_dataset_path: '/home/pyz32/data_tmp/combine_dataset/'
-      image_use: [ 'imagenet',  ]
+      image_use: [ 'imagenet', 'mscoco' ]
       teacher_name: 'ViT-B/32'
 
 
 trainer:
+#  fast_dev_run: True
+#  limit_train_batches: 10
   num_sanity_val_steps: 0
   accumulate_grad_batches: 1
   accelerator: 'gpu'
-  strategy: 'ddp'
-  max_epochs: 1000
-  precision: 16
-  #  limit_train_batches: 1
+  strategy: 'ddp_find_unused_parameters_false'
+  max_epochs: 500
+  default_root_dir: '/data/pyz/result/L-CLIP/ws_image_dis'
+
   log_every_n_steps: 100
   enable_progress_bar: True
   check_val_every_n_epoch: 1
-
   logger:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
-      dir: '/data/pyz/result/Dis_CLIP'
-      name: 'image-ws-more-epoch'
+      save_dir: '/data/pyz/result/L-CLIP/ws_image_dis'
+      name: 'image-ws-freeze-emb'
       project: 'L-CLIPDistillation'
       log_model: false
-      group: weight_share
-      # the covered tags should be same length with the tags in share.yaml
-  #      tags: ['baseline', 'weight share']
-  #      mode: 'online'
+      group: image_single
 
   callbacks:
     - class_path: LearningRateMonitor
-    - class_path: EarlyStopping
-      init_args:
-        monitor: 'val_loss/loss'
-        patience: 10
+#    - class_path: EarlyStopping
+#      init_args:
+#        monitor: 'val_loss/loss'
+#        patience: 50
 
     - class_path: ModelSummary
       init_args:

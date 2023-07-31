@@ -2,35 +2,24 @@ model:
   class_path: DistillModel
   init_args:
     student_encoder:
-      class_path: model.component.weight_share_model.RepeatVisionTransformer
+      class_path: model.component.weight_share_model.RepeatTextTransformer
       init_args:
-        img_size: 224
-        patch_size: 32
-        in_chans: 3
-        out_dim: 512
-        embed_dim: 768
-        depth: 6
-        num_heads: 24
-        mlp_ratio: 4.0
-        qkv_bias: True
-        qk_scale: null
-        drop_rate: 0.
-        attn_drop_rate: 0.
-        drop_path_rate: 0.
-        hybrid_backbone: null
-        rpe_config: null
+        depth: 4
         repeated_times: 2
         use_transform: True
+        compression_embedding: True
+        embedding_compression_dim: 256
     loss_control_para:
       loss_name: [ 'out_cos', 'out_l1']
       need_norm: False
 
-    freeze_embed: true
+    freeze_embed: false
     teacher_name: ViT-B/32
     download_root: '/data/pyz/.cache'
     teacher_need_layers: [ 0, 1, 10, 11 ]
-    model_type: 'image'
+    model_type: 'text'
     warm_steps: 0.1
+
     weight_decay: 1.0e-2
     lr: 1.0e-3
 
@@ -38,18 +27,18 @@ model:
 data:
   class_path: MainDataModule
   init_args:
-    num_workers: 6
-    dataset: 'combine_image_dataset'
-    dataset_name: 'CombineImageDataset'
+    num_workers: 12
+    dataset: 'combine_text_dataset'
+    dataset_name: 'CombineTextDataset'
     train_batch_size: 1024
-    val_batch_size: 1250
+    val_batch_size: 625
     prepare_para:
-      overwrite: True
-      raw_data_dir: '/home/pyz32/data_tmp/'
+      overwrite: False
+      raw_data_dir: '/data/share/pyz/data/'
+      text_use: [ 'cc', 'coco' ]
     dataset_para:
       cache_dir: '/data/pyz/.cache'
-      combine_dataset_path: '/home/pyz32/data_tmp/combine_dataset/'
-      image_use: [ 'imagenet',  ]
+
       teacher_name: 'ViT-B/32'
 
 
@@ -57,32 +46,29 @@ trainer:
   num_sanity_val_steps: 0
   accumulate_grad_batches: 1
   accelerator: 'gpu'
-  strategy: 'ddp'
-  max_epochs: 1000
-  precision: 16
-  #  limit_train_batches: 1
+  strategy: 'ddp_find_unused_parameters_false'
+  max_epochs: 300
+  default_root_dir: '/data/pyz/result/L-CLIP/ws_text_dis'
+
+
   log_every_n_steps: 100
   enable_progress_bar: True
   check_val_every_n_epoch: 1
-
   logger:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
-      dir: '/data/pyz/result/Dis_CLIP'
-      name: 'image-ws-more-epoch'
+      save_dir: '/data/pyz/result/L-CLIP/ws_text_dis'
+      name: 'text-ws-compression_emb'
       project: 'L-CLIPDistillation'
       log_model: false
-      group: weight_share
-      # the covered tags should be same length with the tags in share.yaml
-  #      tags: ['baseline', 'weight share']
-  #      mode: 'online'
+      group: text_single
 
   callbacks:
     - class_path: LearningRateMonitor
-    - class_path: EarlyStopping
-      init_args:
-        monitor: 'val_loss/loss'
-        patience: 10
+#    - class_path: EarlyStopping
+#      init_args:
+#        monitor: 'val_loss/loss'
+#        patience: 40
 
     - class_path: ModelSummary
       init_args:
