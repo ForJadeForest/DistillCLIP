@@ -36,7 +36,7 @@ def load_weight(image_student, text_student, load_path):
 
 class DualDistillModel(LightningModule):
     def __init__(self, image_student: nn.Module, text_student: nn.Module,
-                 loss_control_para: Dict, warm_steps, total_steps, weight_decay, lr: float,
+                 loss_control_para: Dict, warm_steps, weight_decay, lr: float,
                  validation_method: Dict[str, BascValMetric],
                  download_root: str, norm=False, teacher_name: str = 'ViT-B/32', freeze_embed: bool = False,
                  unfreeze_epoch: int = None, load_path: Dict = None, teacher_need_layers: List = None,
@@ -46,7 +46,6 @@ class DualDistillModel(LightningModule):
         :param text_student: Student Text encoder
         :param loss_control_para: To control which loss you want to use
         :param warm_steps: The Cos_lr_scheduler warm steps. It's the number of epoch.
-        :param total_steps: The total_epoch of training
         :param weight_decay: the weight_decay for lr
         :param lr: the learning rate
         :param download_root: The download path of CLIP Teacher model file
@@ -146,7 +145,12 @@ class DualDistillModel(LightningModule):
         self.log(f'{data_info["section"]}/{data_info["prefix"]}', data_info['value'], sync_dist=True,
                  add_dataloader_idx=False)
 
-    def validation_step(self, batch, batch_idx, dataloader_idx):
+    def validation_step(self, batch, batch_idx, dataloader_idx=0):
+        if dataloader_idx == 0:
+            student_outs, teacher_outs = self.forward(batch)
+            loss, cal_res = self.loss_control(student_outs, teacher_outs, 'all')
+            self.log_info('val_loss', loss, cal_res, batch_size=len(batch[0]))
+
         method = self.stu_val_method_metric[dataloader_idx]
         step_res = method.validation_step(batch, self.student)
         for k, data_info in step_res.items():
@@ -155,13 +159,13 @@ class DualDistillModel(LightningModule):
 
         method = self.tea_val_method_metric[dataloader_idx]
         step_res = method.validation_step(batch, self.teacher)
-        teacher_outs = self.tea_val_method_metric[dataloader_idx].model_step_output
-        loss, cal_res = self.loss_control(student_outs, teacher_outs, 'all')
-
-        self.log_info('val_loss', loss, cal_res, batch_size=len(batch[0]))
-
         if self.current_epoch != 0:
             return
+
+        if dataloader_idx == 0:
+            teacher_outs = self.tea_val_method_metric[dataloader_idx].model_step_output
+            loss, cal_res = self.loss_control(student_outs, teacher_outs, 'all')
+            self.log_info('val_loss', loss, cal_res, batch_size=len(batch[0]))
 
         for k, data_info in step_res.items():
             self.log_data(data_info)
@@ -190,12 +194,23 @@ class DualDistillModel(LightningModule):
     def configure_optimizers(self):
         opt_para = filter(lambda p: p.requires_grad, self.student.parameters())
         optimizer = optim.AdamW(opt_para, lr=self.hparams.lr, weight_decay=self.hparams.weight_decay)
+
+        step_batches = self.trainer.estimated_stepping_batches
+        if isinstance(self.hparams.warm_steps, float):
+            warm_steps = self.hparams.warm_steps * step_batches
+        elif isinstance(self.hparams.warm_steps, int):
+            warm_steps = self.hparams.warm_steps
+        else:
+            raise ValueError(f'the warm_steps should be int or float, but got {type(self.hparams.warm_steps)}')
         scheduler = transformers.get_cosine_schedule_with_warmup(
             optimizer,
-            num_warmup_steps=self.hparams.warm_steps,
-            num_training_steps=self.hparams.total_steps
+            num_warmup_steps=warm_steps,
+            num_training_steps=step_batches
         )
-        return [optimizer], [scheduler]
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {"scheduler": scheduler, "interval": "step"},
+        }
 
     def unfreeze_embed(self):
         for n, p in self.student.named_parameters():

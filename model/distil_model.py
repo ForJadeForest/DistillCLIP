@@ -20,8 +20,7 @@ class DistillModel(pl.LightningModule):
     def __init__(self, student_encoder: torch.nn.Module,
                  loss_control_para: Dict, download_root: str, teacher_name: str = 'ViT-B/32',
                  freeze_embed: bool = False, teacher_need_layers: List = None, model_type: str = 'image',
-                 warm_steps=10, total_steps=200, weight_decay=1e-3, lr: float = 1e-3, norm: bool = False,
-                 unfreeze_epoch=None):
+                 warm_steps=10, weight_decay=1e-3, lr: float = 1e-3, unfreeze_epoch=None):
         """
         :param student_encoder: Student encoder, it can be a text encoder or image encoder
         :param teacher_name: The CLIP Teacher model name
@@ -34,7 +33,6 @@ class DistillModel(pl.LightningModule):
         :param total_steps: The total_epoch of training
         :param weight_decay: the weight_decay for lr
         :param lr: the learning rate
-        :param norm: use the final output with l2 norm to calculate the loss
         :param unfreeze_epoch: if is None, the freezed embedding will never unfreeze,
                                else, after the unfreeze_epoch, the embedding will unfreeze.
                                Only the freeze_embed is True will take effect
@@ -80,13 +78,9 @@ class DistillModel(pl.LightningModule):
             self.logger.log_hyperparams(self.hparams, {"hp/stu_acc_top1": 0, "hp/stu_acc_top10": 0})
 
     def forward(self, inputs):
-
         student_outs = self.student(inputs, self.need_return_para)
         with torch.no_grad():
             teacher_outs = self.teacher(inputs, self.need_return_para)
-        if self.hparams.norm:
-            student_outs.last_representation /= student_outs.last_representation.norm(dim=-1, keepdim=True)
-            teacher_outs.last_representation /= teacher_outs.last_representation.norm(dim=-1, keepdim=True)
         return student_outs, teacher_outs
 
     def on_train_epoch_start(self) -> None:
@@ -160,10 +154,17 @@ class DistillModel(pl.LightningModule):
         opt_para = filter(lambda p: p.requires_grad, self.student.parameters())
         optimizer = optim.AdamW(opt_para, lr=self.hparams.lr, weight_decay=self.hparams.weight_decay)
         # optimizer = optim.SGD(self.parameters(), lr=self.hparams.lr, weight_decay=self.hparams.weight_decay)
+        step_batches = self.trainer.estimated_stepping_batches
+        if isinstance(self.hparams.warm_steps, float):
+            warm_steps = self.hparams.warm_steps * step_batches
+        elif isinstance(self.hparams.warm_steps, int):
+            warm_steps = self.hparams.warm_steps
+        else:
+            raise ValueError(f'the warm_steps should be int or float, but got {type(self.hparams.warm_steps)}')
         scheduler = transformers.get_cosine_schedule_with_warmup(
             optimizer,
-            num_warmup_steps=self.hparams.warm_steps,
-            num_training_steps=self.hparams.total_steps
+            num_warmup_steps=warm_steps,
+            num_training_steps=step_batches
         )
         return {
             "optimizer": optimizer,
