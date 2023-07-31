@@ -114,10 +114,7 @@ class LossCalculator(nn.Module):
             elif n == 'hard_label':
                 loss_function = HardLabel()
             elif n == 'soft_label':
-                if init_args:
-                    loss_function = SoftLabel(**init_args)
-                else:
-                    loss_function = SoftLabel()
+                loss_function = SoftLabel()
             elif n == 'vit_kd':
                 loss_function = ViTKDLoss(**init_args)
             elif n == 'logits_mse':
