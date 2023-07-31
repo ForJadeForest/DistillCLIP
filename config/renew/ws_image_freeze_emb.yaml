@@ -71,7 +71,7 @@ trainer:
     class_path: pytorch_lightning.loggers.wandb.WandbLogger
     init_args:
       save_dir: '/data/pyz/result/L-CLIP/ws_image_dis'
-      name: 'image-ws-baseline'
+      name: 'image-ws-freeze-emb'
       project: 'L-CLIPDistillation'
       log_model: false
       group: image_single
