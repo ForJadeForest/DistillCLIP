@@ -16,7 +16,7 @@ def prepare(prepare_args):
     """
     generate the cache file for text encoder
     :param prepare_args: a Dict.
-        Need contain raw_data_dir: the mscoco2017 folder path
+        Need contain raw_data_dir: the mscoco2014 folder path
                      cache_dir: the cache dir
                      teacher_name: the teacher name of clip model
                      overwrite: whether to overwrite the cache file
@@ -35,15 +35,16 @@ def prepare(prepare_args):
     if overwrite or not train_cache_path.exists():
         logging.info('overwrite/no exist the Train data cache file, begin process...')
         raw_text = []
-        coco2017_file = raw_data_dir / 'mscoco' / 'annotations' / 'captions_train2017.json'
+        coco2014_file = raw_data_dir / 'mscoco' / 'annotations' / 'captions_train2014.json'
         cc_file = raw_data_dir / 'cc' / 'train_cc3m.tsv'
         if 'cc' in text_use:
-            logging.info(f'read coco2017 text data: {str(coco2017_file)}')
+            logging.info(f'read cc text data: {str(cc_file)}')
             with cc_file.open('r', encoding='utf8') as f:
                 for content in f.readlines():
                     raw_text.append(content.split('\t')[0])
         if 'coco' in text_use:
-            with coco2017_file.open('r', encoding='utf8') as f:
+            logging.info(f'read coco2014 text data: {str(coco2014_file)}')
+            with coco2014_file.open('r', encoding='utf8') as f:
                 res = json.load(f)
                 for annotation in res['annotations']:
                     raw_text.append(annotation['caption'])
@@ -51,7 +52,10 @@ def prepare(prepare_args):
         logging.info('All data: {} Begin tokenizing...'.format(len(raw_text)))
         tokenize_text = []
         for text in tqdm(raw_text):
-            tokenize_text.append(tokenize(text, truncate=True).squeeze())
+            try:
+                tokenize_text.append(tokenize(text).squeeze())
+            except RuntimeError:
+                continue
 
         tokenize_text = torch.stack(tokenize_text)
         torch.save(tokenize_text, train_cache_path)
@@ -76,7 +80,7 @@ def prepare(prepare_args):
             caption = id2caption.get(id, None)
             if caption:
                 captions.append(caption)
-                tokenized_sentence.append(tokenize(caption, truncate=True).squeeze())
+                tokenized_sentence.append(tokenize(caption).squeeze())
                 path_list.append(val_image_file_list_path / file_name)
         image_rep = encode_images(path_list, teacher_name)
         torch.save([captions, tokenized_sentence, path_list, image_rep], val_cache_path)
