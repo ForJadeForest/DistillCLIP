@@ -6,7 +6,7 @@ from data.component.utils import IMAGE_MEAN, IMAGE_STD
 
 
 class COCODataset(datasets.CocoCaptions):
-    def __init__(self, root_path, annotation_path, need_type='all', need_text_processor=True,train=True):
+    def __init__(self, root_path, annotation_path, need_type='all', need_text_processor=True, train=True, version=2014):
         from clip import tokenize
         self.need_type = need_type
         self.train = train
@@ -26,17 +26,17 @@ class COCODataset(datasets.CocoCaptions):
             transforms.Normalize(self.img_mean, self.img_std)
         ])
         if train:
-            root = os.path.join(root_path, 'train2014')
-            annotation_file = os.path.join(annotation_path, 'captions_train2014.json')
+            root = os.path.join(root_path, f'train{version}')
+            annotation_file = os.path.join(annotation_path, f'captions_train{version}.json')
         else:
-            root = os.path.join(root_path, 'val2014')
-            annotation_file = os.path.join(annotation_path, 'captions_val2014.json')
+            root = os.path.join(root_path, f'val{version}')
+            annotation_file = os.path.join(annotation_path, f'captions_val{version}.json')
         super(COCODataset, self).__init__(root, annotation_file, self.trans)
 
     def __getitem__(self, item):
         image, caption = super(COCODataset, self).__getitem__(item)
         if self.need_text_processor:
-            caption = self.tokenizer(caption[0], truncate=False)[0]
+            caption = self.tokenizer(caption[0])[0]
         else:
             caption = caption[0]
         if self.need_type == 'all' or not self.train:
