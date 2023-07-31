@@ -18,7 +18,7 @@ def prepare(prepare_args):
     """
     Generation the cache data
     :param prepare_args: a Dict.
-        Need contain raw_data_dir: the mscoco2017 folder path
+        Need contain raw_data_dir: the mscoco2014 folder path
                      cache_dir: the cache dir
                      teacher_name: the teacher name of clip model
                      overwrite: whether to overwrite the cache file
@@ -58,7 +58,7 @@ def prepare(prepare_args):
 class CombineImageDataset(Dataset):
     def __init__(self, combine_dataset_path, train=True, image_use=None, cache_dir='./.cache', teacher_name='ViT-B/32'):
         """
-        Combine Image Dataset: contain mscoco2017, imagenet1M
+        Combine Image Dataset: contain mscoco2014, imagenet1M
         :param combine_dataset_path: the combine image folder path
         :param train:
         :param image_use: a list, what data should you use.
