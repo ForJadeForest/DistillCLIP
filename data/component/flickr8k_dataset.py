@@ -32,8 +32,8 @@ class Flickr8kDataset(Dataset):
     def __getitem__(self, item):
         ref = self.refs[item]
         if self.need_text_processor:
-            ref = tokenize([self.prefix + r for r in ref], truncate=True)
-            candidate = tokenize(self.prefix + self.candidates[item], truncate=True).squeeze()
+            ref = tokenize([self.prefix + r for r in ref])
+            candidate = tokenize(self.prefix + self.candidates[item]).squeeze()
         else:
             ref = [self.prefix + r for r in ref]
             candidate = self.prefix + self.candidates[item]
